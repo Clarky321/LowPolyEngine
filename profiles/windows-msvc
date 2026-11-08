@@ -1,0 +1,14 @@
+# Host/build profile for Windows + MSVC (Visual Studio 2026, MSVC 19.5x).
+# build_type is passed on the command line (-s build_type=Debug|Release)
+# so one profile serves every configuration.
+[settings]
+os=Windows
+arch=x86_64
+compiler=msvc
+compiler.version=195
+compiler.cppstd=20
+compiler.runtime=dynamic
+build_type=Release
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Visual Studio 18 2026

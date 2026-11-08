@@ -1,29 +1,43 @@
-# Low-poly engine — Claude Code starter docs
+# LowPolyEngine
 
-This bundle contains the initial architecture plan and instruction files for a C++20/Lua low-poly 3D engine.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M0 — foundation** (build system and tests). See `docs/ENGINE_PLAN.md` for the roadmap.
 
-## Included
+## Building on Windows
 
-- `CLAUDE.md` — Claude Code entry point. Imports `AGENTS.md` using `@AGENTS.md`.
-- `AGENTS.md` — shared project engineering rules.
-- `.claude/skills/engine-dev/SKILL.md` — the `/engine-dev` skill workflow.
-- `docs/ENGINE_PLAN.md` — product scope, architecture, world generation plan and milestones.
-- `docs/TECH_STACK.md` — technology comparison and recommended stack.
-- `docs/PROJECT_STRUCTURE.md` — proposed repository tree and module boundaries.
-- `docs/TESTING_AND_CI.md` — quality gates, test layers, Docker and GitHub Actions approach.
-- `docs/references/REPOSITORY_REVIEW.md` — notes on Raven, ThinMatrix examples and VoxelCore.
-- `docs/adr/0001-initial-technology-stack.md` — proposed first architecture decision record.
+### Requirements
 
-## How to use
+| Tool | Version used | Notes |
+|---|---|---|
+| Visual Studio 2026 (MSVC 19.5x) | 18.x | "Desktop development with C++" workload. Ships CMake, Ninja, clang-format and clang-tidy. |
+| CMake | ≥ 3.25 | The one bundled with Visual Studio works. |
+| Python | 3.10+ | Only to run Conan. |
+| Conan | 2.x | Installed into a local `.venv`, see below. |
 
-1. Copy the contents of this directory into the root of a new Git repository.
-2. Read `docs/ENGINE_PLAN.md` and confirm the scope/decisions before asking Claude Code to implement anything.
-3. Start Claude Code from the repository root so it loads `CLAUDE.md`.
-4. Ask Claude to review the plan and produce a small M0 implementation checklist; do not ask it to implement every milestone in one pass.
-5. Use `/engine-dev` for implementation/debugging tasks once Claude Code recognizes the skill.
+### First-time setup
 
-The proposed profiles, presets and scripts are future repository files. The skill explicitly tells Claude to inspect actual filenames rather than assume they exist.
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install conan
+```
 
-## Important
+### Build and test (Debug)
 
-This bundle contains plans and instruction files, not an implemented engine. Raven integration, the Conan dependency graph, CI workflow and all runtime systems still need to be built and verified in the target repository.
+```powershell
+.venv\Scripts\conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --build=missing -of build/windows-msvc-debug/conan
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug
+ctest --preset windows-msvc-debug
+```
+
+For Release, replace `Debug` with `Release` and `windows-msvc-debug` with `windows-msvc-release`. Conan must run before CMake: it generates the toolchain file the preset points to.
+
+Options: `-DLPE_BUILD_TESTS=OFF` skips tests; `-DLPE_WARNINGS_AS_ERRORS=ON` turns warnings into errors.
+
+## Repository layout
+
+- `engine/` — engine library (`engine` CMake target).
+- `tests/` — headless Catch2 unit tests registered with CTest.
+- `cmake/` — shared CMake modules (warning policy).
+- `profiles/` — Conan profiles.
+- `docs/` — plan, tech stack, structure, testing strategy, ADRs.
+- `CLAUDE.md`, `AGENTS.md`, `.claude/skills/engine-dev/` — instructions for AI-assisted development.

@@ -47,16 +47,16 @@ Do not build abstractions “for later” without a current use case.
 
 ## 5. Build and validate
 
-Use the actual scripts/presets present in the repository. Expected workflow once scaffolded:
+Use the actual scripts/presets present in the repository. Current workflow (see `README.md`):
 
 ```powershell
-# Install the locked dependency graph for the selected profile.
-conan install . -pr:h=profiles/windows-msvc -pr:b=default --build=missing
+# Install dependencies; each preset reads the toolchain from build/<preset>/conan/.
+.venv\Scripts\conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --build=missing -of build/windows-msvc-debug/conan
 
-# Configure/build with the generated Conan toolchain/presets.
+# Configure/build/test with the repository presets.
 cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
-ctest --preset windows-msvc-debug --output-on-failure
+ctest --preset windows-msvc-debug
 ```
 
 If those profile or preset names do not exist yet, inspect the actual files and use the real names; do not fabricate success. Prefer `scripts/windows/build.bat debug` and `scripts/windows/test.bat debug` once those wrappers have been implemented.
