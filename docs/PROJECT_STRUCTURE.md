@@ -1,0 +1,137 @@
+# Proposed repository structure
+
+The structure deliberately groups code by domain. Avoid generic top-level folders such as `object`, `logic`, `interfaces` and `lowpoly`: these names do not establish clear ownership. “Low-poly” is a visual direction spanning the renderer, materials and world generator, not necessarily a separate subsystem.
+
+```text
+lowpoly-engine/
+├── CLAUDE.md
+├── AGENTS.md
+├── .claude/
+│   └── skills/
+│       └── engine-dev/
+│           └── SKILL.md
+├── CMakeLists.txt
+├── CMakePresets.json
+├── conanfile.py
+├── conan.lock
+├── profiles/
+│   ├── windows-msvc
+│   └── linux-clang
+├── cmake/
+│   ├── CompilerWarnings.cmake
+│   ├── ProjectOptions.cmake
+│   └── Dependencies.cmake
+├── engine/
+│   ├── CMakeLists.txt
+│   ├── include/engine/
+│   │   ├── core/             # Application, Clock, Log, Event, Result
+│   │   ├── platform/         # Engine-facing window/input interfaces
+│   │   ├── render/           # RHI-facing types and renderer interfaces
+│   │   ├── scene/            # Entity, components, world, prefab, document
+│   │   ├── assets/           # Asset IDs, handles, registry interfaces
+│   │   ├── worldgen/         # Generator settings and pure generation API
+│   │   ├── scripting/        # Script runtime facade
+│   │   └── camera/           # Camera and camera-controller types
+│   └── src/
+│       ├── core/
+│       ├── platform/sdl3/
+│       ├── render/
+│       │   ├── rhi/
+│       │   └── opengl/
+│       ├── scene/
+│       ├── assets/
+│       ├── worldgen/
+│       │   ├── noise/
+│       │   ├── island/
+│       │   ├── biome/
+│       │   ├── water/
+│       │   └── clouds/
+│       ├── scripting/lua/
+│       └── camera/
+├── editor/
+│   ├── CMakeLists.txt
+│   ├── include/editor/
+│   │   ├── application/
+│   │   ├── document/
+│   │   ├── commands/         # Editing commands and undo/redo
+│   │   ├── selection/
+│   │   └── panels/
+│   └── src/
+│       ├── application/
+│       ├── ui/imgui/
+│       ├── viewport/
+│       ├── panels/
+│       ├── gizmos/
+│       └── project/
+├── sandbox/
+│   └── island-preview/       # First end-to-end executable/sample
+├── assets/
+│   ├── shaders/
+│   ├── materials/
+│   ├── palettes/
+│   ├── textures/
+│   ├── models/
+│   ├── worlds/
+│   └── test-fixtures/
+├── tests/
+│   ├── unit/
+│   │   ├── core/
+│   │   ├── worldgen/
+│   │   ├── scene/
+│   │   └── scripting/
+│   ├── integration/
+│   └── rendering/            # Optional GPU-dependent tier
+├── scripts/
+│   ├── python/
+│   └── windows/
+│       ├── build.bat
+│       ├── test.bat
+│       ├── run-editor.bat
+│       └── clean.bat
+├── tools/                    # Offline asset/shader utilities, if needed
+├── third_party/
+│   └── licenses/
+├── docs/
+│   ├── ENGINE_PLAN.md
+│   ├── TECH_STACK.md
+│   ├── PROJECT_STRUCTURE.md
+│   ├── TESTING_AND_CI.md
+│   ├── references/
+│   └── adr/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── release.yml
+├── Dockerfile
+├── .gitignore
+└── README.md
+```
+
+## Dependency direction
+
+A useful first-pass dependency direction is:
+
+```text
+Editor ───────────────┐
+                      v
+                 Engine public API
+                      |
+        ┌─────────────┼──────────────┐
+        v             v              v
+      Scene         Assets        WorldGen
+        |             |              |
+        └─────────────┴──────┬───────┘
+                             v
+                       Renderer API
+                             |
+                        OpenGL backend
+
+Platform (SDL3) supplies window/input/context services.
+Scripting (Lua) uses selected Engine APIs; it does not reach into renderer internals.
+```
+
+This is a dependency guide, not a command to create one shared library per box. Early on, `engine` can be one CMake library with internal folders/namespaces. Split targets when build times, ownership or dependency boundaries justify it.
+
+## What not to create initially
+
+Do not create separate `audio`, `animation`, `physics`, `network`, `object`, `logic`, `interfaces` or `devtools` modules simply because those words appear in a long-term roadmap. Add them when the first feature requires them. Keep tests close to the corresponding domain. Editor-only code must not be required by a packaged runtime.
