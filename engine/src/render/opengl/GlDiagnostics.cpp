@@ -82,8 +82,14 @@ void GLAD_API_PTR onDebugMessage(GLenum /*source*/, GLenum type, GLuint id, GLen
         return;
     }
     const std::string_view text(message, length > 0 ? static_cast<std::size_t>(length) : 0U);
-    const auto level =
-        type == GL_DEBUG_TYPE_ERROR ? core::LogLevel::Error : core::LogLevel::Warning;
+    // Performance notes (e.g. "pixel transfer is synchronized" on every frame
+    // capture) are expected costs, not problems.
+    auto level = core::LogLevel::Warning;
+    if (type == GL_DEBUG_TYPE_ERROR) {
+        level = core::LogLevel::Error;
+    } else if (type == GL_DEBUG_TYPE_PERFORMANCE) {
+        level = core::LogLevel::Debug;
+    }
     core::log(level, "render", "GL debug ({}, {}, id {}): {}", debugTypeName(type),
               debugSeverityName(severity), id, text);
 }

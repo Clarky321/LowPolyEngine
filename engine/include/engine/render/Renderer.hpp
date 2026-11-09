@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/Image.hpp"
 #include "engine/core/Result.hpp"
 #include "engine/platform/GlContext.hpp"
 
@@ -49,6 +50,10 @@ public:
 
     // Checks the OpenGL error flag. Call once per frame after drawing.
     void endFrame();
+
+    // Reads back the current frame (call after endFrame, before the buffers are
+    // swapped). Fails if no frame was started yet.
+    [[nodiscard]] core::Result<core::Image> captureFrame();
 
     // OpenGL errors detected so far (setup and frames).
     [[nodiscard]] std::uint32_t errorCount() const noexcept;

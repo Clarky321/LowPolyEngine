@@ -19,6 +19,7 @@ lpe_set_project_warnings(lpe_unit_tests)
 catch_discover_tests(lpe_unit_tests)
 
 add_executable(lpe_integration_tests
+    integration/application_test.cpp
     integration/platform_test.cpp
 )
 target_link_libraries(lpe_integration_tests PRIVATE engine Catch2::Catch2WithMain)

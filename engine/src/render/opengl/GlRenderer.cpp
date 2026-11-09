@@ -6,6 +6,7 @@
 #include "engine/core/Log.hpp"
 #include "engine/render/Renderer.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <string>
@@ -106,6 +107,9 @@ struct Renderer::Impl {
     GlVertexArray triangleLayout;
     bool debugOutputEnabled = false;
     std::uint32_t errorCount = 0;
+    // Size passed to the last beginFrame(); 0 before the first frame.
+    int frameWidth = 0;
+    int frameHeight = 0;
 };
 
 core::Result<Renderer> Renderer::create(const RendererDesc& desc)
@@ -166,6 +170,8 @@ Renderer& Renderer::operator=(Renderer&& other) noexcept = default;
 
 void Renderer::beginFrame(int framebufferWidth, int framebufferHeight, const Color& clearColor)
 {
+    impl_->frameWidth = framebufferWidth;
+    impl_->frameHeight = framebufferHeight;
     glViewport(0, 0, framebufferWidth, framebufferHeight);
     glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -182,6 +188,39 @@ void Renderer::drawTestTriangle()
 void Renderer::endFrame()
 {
     impl_->errorCount += opengl::checkGlErrors("frame");
+}
+
+core::Result<core::Image> Renderer::captureFrame()
+{
+    const int width = impl_->frameWidth;
+    const int height = impl_->frameHeight;
+    if (width <= 0 || height <= 0) {
+        return core::Error{"captureFrame: no frame has been rendered yet"};
+    }
+
+    constexpr std::size_t kChannels = 3;
+    const auto rowBytes = static_cast<std::size_t>(width) * kChannels;
+    core::Image image{width, height, {}};
+    image.pixels.resize(rowBytes * static_cast<std::size_t>(height));
+
+    // Rows are tightly packed in core::Image; the default pack alignment is 4.
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, image.pixels.data());
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    if (const auto errors = opengl::checkGlErrors("captureFrame"); errors > 0) {
+        impl_->errorCount += errors;
+        return core::Error{"captureFrame: glReadPixels failed"};
+    }
+
+    // OpenGL returns the bottom row first; core::Image stores the top row first.
+    for (std::size_t top = 0, bottom = static_cast<std::size_t>(height) - 1; top < bottom;
+         ++top, --bottom) {
+        std::swap_ranges(image.pixels.begin() + static_cast<std::ptrdiff_t>(top * rowBytes),
+                         image.pixels.begin() + static_cast<std::ptrdiff_t>((top + 1) * rowBytes),
+                         image.pixels.begin() + static_cast<std::ptrdiff_t>(bottom * rowBytes));
+    }
+    return image;
 }
 
 std::uint32_t Renderer::errorCount() const noexcept

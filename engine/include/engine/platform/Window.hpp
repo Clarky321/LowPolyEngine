@@ -51,6 +51,9 @@ public:
     // Current drawable size in pixels, e.g. for the render viewport.
     [[nodiscard]] PixelSize pixelSize() const;
 
+    // True while the window is minimized; nothing it renders is visible then.
+    [[nodiscard]] bool isMinimized() const;
+
 private:
     // Hides the platform-specific handle so no SDL type appears in this header (ADR 0002).
     struct Impl;

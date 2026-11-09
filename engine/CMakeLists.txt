@@ -4,6 +4,7 @@ find_package(SDL3 REQUIRED CONFIG)
 find_package(stb REQUIRED CONFIG)
 
 add_library(engine STATIC
+    src/app/Application.cpp
     src/core/FileSystem.cpp
     src/core/FrameClock.cpp
     src/core/Image.cpp

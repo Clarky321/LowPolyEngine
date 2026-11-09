@@ -1,13 +1,12 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
-// M0.5 scope: OpenGL 4.5 core context and a test triangle.
+// M1 scope: engine loop, input, free-fly camera and a static test scene.
 
+#include "engine/app/Application.hpp"
+#include "engine/core/Log.hpp"
 #include "engine/core/Version.hpp"
-#include "engine/platform/GlContext.hpp"
-#include "engine/platform/Platform.hpp"
-#include "engine/platform/Window.hpp"
-#include "engine/render/Renderer.hpp"
 
 #include <charconv>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <optional>
@@ -25,24 +24,31 @@ constexpr bool kDebugBuild = true;
 // Placeholder sky tone until the scene has real lighting.
 constexpr engine::render::Color kClearColor{0.53F, 0.74F, 0.86F, 1.0F};
 
+// Frames rendered before a --screenshot is taken when --frames is not given.
+// Long enough for the frame statistics to fill their first window.
+constexpr std::uint64_t kDefaultScreenshotFrames = 120;
+
 // Process exit codes, so smoke tests can tell failures apart.
-constexpr int kExitUsage = 2;
 constexpr int kExitStartupFailed = 1;
+constexpr int kExitUsage = 2;
 constexpr int kExitGlErrors = 3;
+constexpr int kExitScreenshotFailed = 4;
 
 struct Options {
     // Stop after this many frames (smoke tests); empty means run until closed.
-    std::optional<int> maxFrames;
+    std::optional<std::uint64_t> maxFrames;
     // Relative to the working directory; scripts/windows/run.bat and the CTest
     // tests start the program from the repository root.
     std::filesystem::path assetDirectory = "assets";
+    // Save the last frame as PNG and exit.
+    std::optional<std::filesystem::path> screenshotPath;
 };
 
-std::optional<int> parsePositiveInt(std::string_view text)
+std::optional<std::uint64_t> parsePositiveInt(std::string_view text)
 {
-    int value = 0;
+    std::uint64_t value = 0;
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-    if (error != std::errc{} || end != text.data() + text.size() || value <= 0) {
+    if (error != std::errc{} || end != text.data() + text.size() || value == 0) {
         return std::nullopt;
     }
     return value;
@@ -61,18 +67,44 @@ std::optional<Options> parseOptions(int argc, char** argv)
             }
         } else if (arg == "--assets" && hasValue) {
             options.assetDirectory = argv[++i];
+        } else if (arg == "--screenshot" && hasValue) {
+            options.screenshotPath = std::filesystem::path(argv[++i]);
         } else {
             return std::nullopt;
         }
     }
+    if (options.screenshotPath && !options.maxFrames) {
+        options.maxFrames = kDefaultScreenshotFrames;
+    }
     return options;
 }
 
-int fail(const engine::core::Error& error)
-{
-    std::fprintf(stderr, "error: %s\n", error.message.c_str());
-    return kExitStartupFailed;
-}
+class IslandPreview final : public engine::app::Application {
+public:
+    explicit IslandPreview(const Options& options) : options_(options) {}
+
+    std::optional<engine::core::Error> start(engine::app::AppContext& /*context*/) override
+    {
+        return std::nullopt;
+    }
+
+    void update(engine::app::AppContext& context, const engine::core::FrameTime& time) override
+    {
+        // The last frame of a --screenshot run is saved.
+        if (options_.screenshotPath && options_.maxFrames &&
+            time.frameIndex + 1 == *options_.maxFrames) {
+            context.requestScreenshot(*options_.screenshotPath);
+        }
+    }
+
+    void render(engine::app::AppContext& context) override
+    {
+        context.renderer().drawTestTriangle();
+    }
+
+private:
+    Options options_;
+};
 
 } // namespace
 
@@ -80,60 +112,33 @@ int main(int argc, char** argv)
 {
     const auto options = parseOptions(argc, argv);
     if (!options) {
-        std::fprintf(stderr, "usage: island-preview [--frames N] [--assets DIR]\n");
+        std::fprintf(stderr,
+                     "usage: island-preview [--frames N] [--assets DIR] [--screenshot FILE.png]\n");
         return kExitUsage;
     }
 
-    // Declaration order is the required lifetime order: each object is
-    // destroyed before the one it depends on (platform > window > context > renderer).
-    auto platform = engine::platform::Platform::initialize();
-    if (!platform) {
-        return fail(platform.error());
-    }
-
-    const engine::platform::WindowDesc windowDesc{
-        .title = "LowPolyEngine " + engine::core::toString(engine::core::engineVersion()) +
-                 " - Island Preview",
-        .openGl = true,
+    const engine::app::ApplicationDesc desc{
+        .window = {.title = "LowPolyEngine " +
+                            engine::core::toString(engine::core::engineVersion()) +
+                            " - Island Preview"},
+        .context = {.debug = kDebugBuild},
+        .assetDirectory = options->assetDirectory,
+        .clearColor = kClearColor,
+        .maxFrames = options->maxFrames,
     };
-    auto window = engine::platform::Window::create(platform.value(), windowDesc);
-    if (!window) {
-        return fail(window.error());
-    }
 
-    auto context = engine::platform::GlContext::create(
-        window.value(), engine::platform::GlContextDesc{.debug = kDebugBuild});
-    if (!context) {
-        return fail(context.error());
+    IslandPreview app(*options);
+    const auto result = engine::app::run(app, desc);
+    if (!result) {
+        engine::core::logError("app", "{}", result.error().message);
+        return kExitStartupFailed;
     }
-    if (!context.value().vsyncEnabled()) {
-        std::fprintf(stderr, "warning: vsync is not available; the frame rate is not limited\n");
-    }
-
-    auto renderer = engine::render::Renderer::create({
-        .glProcLoader = context.value().procLoader(),
-        .shaderDirectory = options->assetDirectory / "shaders",
-        .debugOutput = kDebugBuild,
-    });
-    if (!renderer) {
-        return fail(renderer.error());
-    }
-
-    for (int frame = 0; !options->maxFrames || frame < *options->maxFrames; ++frame) {
-        if (platform.value().pollEvents().quitRequested) {
-            break;
-        }
-        const auto size = window.value().pixelSize();
-        renderer.value().beginFrame(size.width, size.height, kClearColor);
-        renderer.value().drawTestTriangle();
-        renderer.value().endFrame();
-        // With vsync this waits for the display refresh and paces the loop.
-        context.value().swapBuffers();
-    }
-
-    if (const auto errors = renderer.value().errorCount(); errors > 0) {
-        std::fprintf(stderr, "error: %u OpenGL error(s) occurred\n", errors);
+    if (const auto errors = result.value().openGlErrors; errors > 0) {
+        engine::core::logError("app", "{} OpenGL error(s) occurred", errors);
         return kExitGlErrors;
+    }
+    if (result.value().failedScreenshots > 0) {
+        return kExitScreenshotFailed;
     }
     return 0;
 }

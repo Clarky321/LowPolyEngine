@@ -3,6 +3,19 @@
 # Tests run from the repository root so island-preview finds assets/.
 
 set(fixtures "${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+# Files written by GPU tests (screenshots); inside the build tree, never in the sources.
+set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
+
+# Engine-level GPU tests (Catch2): application loop, renderer, frame capture.
+add_executable(lpe_gpu_tests
+    application_gpu_test.cpp
+)
+target_link_libraries(lpe_gpu_tests PRIVATE engine Catch2::Catch2WithMain)
+lpe_set_project_warnings(lpe_gpu_tests)
+catch_discover_tests(lpe_gpu_tests
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    PROPERTIES LABELS "gpu"
+)
 
 function(lpe_add_gpu_test name)
     add_test(NAME ${name} COMMAND ${ARGN})
@@ -14,6 +27,12 @@ endfunction()
 
 # Context, shaders, buffers and frames run without any OpenGL error (exit code 0).
 lpe_add_gpu_test(island_preview_render_smoke island-preview --frames 30)
+
+# The --screenshot path used for docs/screenshots works end to end.
+lpe_add_gpu_test(island_preview_screenshot
+    island-preview --frames 5 --screenshot "${gpu_output}/island-preview.png")
+set_tests_properties(island_preview_screenshot PROPERTIES
+    PASS_REGULAR_EXPRESSION "saved screenshot '[^']*island-preview\\.png' \\([0-9]+x[0-9]+\\)")
 
 # Shader problems must be reported with the file name and the driver's log.
 lpe_add_gpu_test(island_preview_shader_compile_error
