@@ -9,6 +9,7 @@ set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
 # Engine-level GPU tests (Catch2): application loop, renderer, frame capture.
 add_executable(lpe_gpu_tests
     application_gpu_test.cpp
+    renderer_gpu_test.cpp
 )
 target_link_libraries(lpe_gpu_tests PRIVATE engine Catch2::Catch2WithMain)
 lpe_set_project_warnings(lpe_gpu_tests)
@@ -38,7 +39,7 @@ set_tests_properties(island_preview_screenshot PROPERTIES
 lpe_add_gpu_test(island_preview_shader_compile_error
     island-preview --frames 1 --assets "${fixtures}/compile-error")
 set_tests_properties(island_preview_shader_compile_error PROPERTIES
-    PASS_REGULAR_EXPRESSION "failed to compile shader '[^']*triangle\\.vert'")
+    PASS_REGULAR_EXPRESSION "failed to compile shader '[^']*mesh\\.vert'")
 
 lpe_add_gpu_test(island_preview_shader_link_error
     island-preview --frames 1 --assets "${fixtures}/link-error")
@@ -48,4 +49,11 @@ set_tests_properties(island_preview_shader_link_error PROPERTIES
 lpe_add_gpu_test(island_preview_missing_shader
     island-preview --frames 1 --assets "${fixtures}/does-not-exist")
 set_tests_properties(island_preview_missing_shader PROPERTIES
-    PASS_REGULAR_EXPRESSION "cannot open file '[^']*triangle\\.vert'")
+    PASS_REGULAR_EXPRESSION "cannot open file '[^']*mesh\\.vert'")
+
+# A shader that compiles and links but lacks what the renderer needs is named
+# with the missing variable, instead of rendering a silently empty frame.
+lpe_add_gpu_test(island_preview_shader_missing_uniform
+    island-preview --frames 1 --assets "${fixtures}/missing-uniform")
+set_tests_properties(island_preview_shader_missing_uniform PROPERTIES
+    PASS_REGULAR_EXPRESSION "uniform mat4 'uModelViewProjection' is missing or unused")

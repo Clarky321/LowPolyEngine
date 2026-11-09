@@ -1,13 +1,16 @@
+#include "../HandlePool.hpp"
 #include "GlDiagnostics.hpp"
 #include "GlHandle.hpp"
+#include "GlMesh.hpp"
 #include "GlShaderProgram.hpp"
 
 #include "engine/core/FileSystem.hpp"
 #include "engine/core/Log.hpp"
 #include "engine/render/Renderer.hpp"
 
+#include <glm/gtc/type_ptr.hpp>
+
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -16,33 +19,26 @@ namespace engine::render {
 
 namespace {
 
-using opengl::GlBuffer;
+using opengl::GlMesh;
 using opengl::GlShaderProgram;
-using opengl::GlVertexArray;
 
 constexpr int kRequiredGlMajor = 4;
 constexpr int kRequiredGlMinor = 5;
 
-struct ColoredVertex {
-    std::array<float, 3> position;
-    std::array<float, 3> color;
+// Names the renderer expects in assets/shaders/mesh.vert.
+constexpr const char* kMeshVertexShader = "mesh.vert";
+constexpr const char* kMeshFragmentShader = "mesh.frag";
+constexpr const char* kMvpUniform = "uModelViewProjection";
+constexpr const char* kPositionAttribute = "aPosition";
+constexpr const char* kColorAttribute = "aColor";
+
+struct LoadedProgram {
+    GlShaderProgram program;
+    std::string description;
 };
 
-// Attribute locations; must match layout(location = ...) in assets/shaders/triangle.vert.
-constexpr GLuint kPositionLocation = 0;
-constexpr GLuint kColorLocation = 1;
-// Single vertex buffer binding point used by the triangle's vertex array.
-constexpr GLuint kVertexBufferBinding = 0;
-
-// Bring-up geometry in normalized device coordinates, counter-clockwise.
-constexpr std::array<ColoredVertex, 3> kTestTriangle{{
-    {{-0.6F, -0.5F, 0.0F}, {0.95F, 0.45F, 0.25F}},
-    {{0.6F, -0.5F, 0.0F}, {0.30F, 0.75F, 0.45F}},
-    {{0.0F, 0.6F, 0.0F}, {0.30F, 0.55F, 0.90F}},
-}};
-
-core::Result<GlShaderProgram> loadProgram(const std::filesystem::path& directory,
-                                          const char* vertexFile, const char* fragmentFile)
+core::Result<LoadedProgram> loadProgram(const std::filesystem::path& directory,
+                                        const char* vertexFile, const char* fragmentFile)
 {
     const auto vertexPath = directory / vertexFile;
     const auto fragmentPath = directory / fragmentFile;
@@ -56,39 +52,56 @@ core::Result<GlShaderProgram> loadProgram(const std::filesystem::path& directory
     }
     const std::string vertexName = core::toUtf8(vertexPath);
     const std::string fragmentName = core::toUtf8(fragmentPath);
-    return GlShaderProgram::create({vertexName, vertexCode.value()},
-                                   {fragmentName, fragmentCode.value()});
+    auto program = GlShaderProgram::create({vertexName, vertexCode.value()},
+                                           {fragmentName, fragmentCode.value()});
+    if (!program) {
+        return program.error();
+    }
+    return LoadedProgram{std::move(program).value(),
+                         "'" + vertexName + "' + '" + fragmentName + "'"};
 }
 
-// Uses direct state access (core in 4.5): objects are set up by name without
-// binding them, so setup code cannot disturb unrelated GL state.
-GlVertexArray createColoredVertexLayout(const GlBuffer& vertices)
+// The mesh program must expose the interface GlMesh and drawMesh rely on.
+// Catches renamed or unused (optimized away) variables with a clear message
+// instead of a silently black or empty frame.
+std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, GLint& mvpLocation)
 {
-    GLuint name = 0;
-    glCreateVertexArrays(1, &name);
-    GlVertexArray layout{name};
+    const GLuint program = loaded.program.name();
+    const auto requireAttribute = [&](const char* name,
+                                      GLuint location) -> std::optional<core::Error> {
+        const GLint actual = glGetAttribLocation(program, name);
+        if (actual != static_cast<GLint>(location)) {
+            return core::Error{"shader program " + loaded.description + ": vertex input '" + name +
+                               "' must be active at location " + std::to_string(location) +
+                               (actual < 0 ? " (missing or unused)"
+                                           : " (found at " + std::to_string(actual) + ")")};
+        }
+        return std::nullopt;
+    };
+    if (auto error = requireAttribute(kPositionAttribute, opengl::kPositionLocation)) {
+        return error;
+    }
+    if (auto error = requireAttribute(kColorAttribute, opengl::kColorLocation)) {
+        return error;
+    }
+    mvpLocation = glGetUniformLocation(program, kMvpUniform);
+    if (mvpLocation < 0) {
+        return core::Error{"shader program " + loaded.description + ": uniform mat4 '" +
+                           kMvpUniform + "' is missing or unused"};
+    }
+    return std::nullopt;
+}
 
-    glVertexArrayVertexBuffer(layout.get(), kVertexBufferBinding, vertices.get(), 0,
-                              static_cast<GLsizei>(sizeof(ColoredVertex)));
-
-    glEnableVertexArrayAttrib(layout.get(), kPositionLocation);
-    glVertexArrayAttribFormat(layout.get(), kPositionLocation, 3, GL_FLOAT, GL_FALSE,
-                              static_cast<GLuint>(offsetof(ColoredVertex, position)));
-    glVertexArrayAttribBinding(layout.get(), kPositionLocation, kVertexBufferBinding);
-
-    glEnableVertexArrayAttrib(layout.get(), kColorLocation);
-    glVertexArrayAttribFormat(layout.get(), kColorLocation, 3, GL_FLOAT, GL_FALSE,
-                              static_cast<GLuint>(offsetof(ColoredVertex, color)));
-    glVertexArrayAttribBinding(layout.get(), kColorLocation, kVertexBufferBinding);
-    return layout;
+detail::PoolHandle toPoolHandle(MeshHandle handle) noexcept
+{
+    return detail::PoolHandle{handle.index, handle.generation};
 }
 
 } // namespace
 
 struct Renderer::Impl {
-    Impl(GlShaderProgram program, GlBuffer vertices, GlVertexArray layout, bool debugOutput)
-        : triangleProgram(std::move(program)), triangleVertices(std::move(vertices)),
-          triangleLayout(std::move(layout)), debugOutputEnabled(debugOutput)
+    Impl(GlShaderProgram program, GLint mvp, bool debugOutput)
+        : meshProgram(std::move(program)), mvpLocation(mvp), debugOutputEnabled(debugOutput)
     {
     }
 
@@ -102,14 +115,18 @@ struct Renderer::Impl {
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
 
-    GlShaderProgram triangleProgram;
-    GlBuffer triangleVertices;
-    GlVertexArray triangleLayout;
+    GlShaderProgram meshProgram;
+    GLint mvpLocation = -1;
+    detail::HandlePool<GlMesh> meshes;
     bool debugOutputEnabled = false;
     std::uint32_t errorCount = 0;
+    bool invalidDrawLogged = false;
     // Size passed to the last beginFrame(); 0 before the first frame.
     int frameWidth = 0;
     int frameHeight = 0;
+    math::Mat4 viewProjection{1.0F};
+    RenderStats currentFrame;
+    RenderStats lastFrame;
 };
 
 core::Result<Renderer> Renderer::create(const RendererDesc& desc)
@@ -137,27 +154,31 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
         core::logWarning("render",
                          "debug output requested, but the context is not a debug context");
     }
-
-    auto program = loadProgram(desc.shaderDirectory, "triangle.vert", "triangle.frag");
-    if (!program) {
+    const auto failSetup = [debugOutput](core::Error error) {
         if (debugOutput) {
             opengl::disableDebugOutput();
         }
-        return program.error();
+        return error;
+    };
+
+    auto loaded = loadProgram(desc.shaderDirectory, kMeshVertexShader, kMeshFragmentShader);
+    if (!loaded) {
+        return failSetup(loaded.error());
+    }
+    GLint mvpLocation = -1;
+    if (auto error = checkMeshInterface(loaded.value(), mvpLocation)) {
+        return failSetup(std::move(*error));
     }
 
-    GLuint bufferName = 0;
-    glCreateBuffers(1, &bufferName);
-    GlBuffer vertices{bufferName};
-    // Immutable storage: the triangle never changes after upload.
-    glNamedBufferStorage(vertices.get(), static_cast<GLsizeiptr>(sizeof(kTestTriangle)),
-                         kTestTriangle.data(), 0);
-    GlVertexArray layout = createColoredVertexLayout(vertices);
+    // Fixed pipeline state for the forward renderer. Front faces are
+    // counter-clockwise (MeshData convention); back faces are never visible on
+    // closed low-poly meshes and are skipped.
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+    glDepthFunc(GL_LESS);
 
-    glEnable(GL_DEPTH_TEST);
-
-    auto impl = std::make_unique<Impl>(std::move(program).value(), std::move(vertices),
-                                       std::move(layout), debugOutput);
+    auto impl = std::make_unique<Impl>(std::move(loaded).value().program, mvpLocation, debugOutput);
     impl->errorCount += opengl::checkGlErrors("renderer setup");
     return Renderer{std::move(impl)};
 }
@@ -168,26 +189,108 @@ Renderer::~Renderer() = default;
 Renderer::Renderer(Renderer&& other) noexcept = default;
 Renderer& Renderer::operator=(Renderer&& other) noexcept = default;
 
+core::Result<MeshHandle> Renderer::createMesh(const geometry::MeshData& mesh)
+{
+    if (auto error = geometry::validate(mesh)) {
+        return core::Error{"createMesh: " + error->message};
+    }
+    auto glMesh = GlMesh::create(mesh);
+    if (!glMesh) {
+        return core::Error{"createMesh: " + glMesh.error().message};
+    }
+    const detail::PoolHandle handle = impl_->meshes.insert(std::move(glMesh).value());
+    return MeshHandle{handle.index, handle.generation};
+}
+
+std::optional<core::Error> Renderer::updateMesh(MeshHandle handle, const geometry::MeshData& mesh)
+{
+    GlMesh* glMesh = impl_->meshes.find(toPoolHandle(handle));
+    if (glMesh == nullptr) {
+        return core::Error{"updateMesh: invalid or destroyed mesh handle"};
+    }
+    if (auto error = geometry::validate(mesh)) {
+        return core::Error{"updateMesh: " + error->message};
+    }
+    if (auto error = glMesh->update(mesh)) {
+        return core::Error{"updateMesh: " + error->message};
+    }
+    return std::nullopt;
+}
+
+void Renderer::destroyMesh(MeshHandle handle) noexcept
+{
+    (void)impl_->meshes.erase(toPoolHandle(handle));
+}
+
+bool Renderer::isValid(MeshHandle handle) const noexcept
+{
+    return impl_->meshes.find(toPoolHandle(handle)) != nullptr;
+}
+
 void Renderer::beginFrame(int framebufferWidth, int framebufferHeight, const Color& clearColor)
 {
     impl_->frameWidth = framebufferWidth;
     impl_->frameHeight = framebufferHeight;
+    impl_->currentFrame = RenderStats{};
     glViewport(0, 0, framebufferWidth, framebufferHeight);
+
+    // glClear respects the depth write mask, so restore it before clearing.
+    setView(ViewDesc{});
     glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    impl_->meshProgram.use();
 }
 
-void Renderer::drawTestTriangle()
+void Renderer::setView(const ViewDesc& view)
 {
-    impl_->triangleProgram.use();
-    glBindVertexArray(impl_->triangleLayout.get());
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(kTestTriangle.size()));
-    glBindVertexArray(0);
+    impl_->viewProjection = view.projection * view.view;
+
+    if (view.depth == DepthMode::TestAndWrite) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+    }
+
+    if (view.blend == BlendMode::Alpha) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+        glDisable(GL_BLEND);
+    }
+}
+
+void Renderer::drawMesh(MeshHandle handle, const math::Mat4& model)
+{
+    const GlMesh* glMesh = impl_->meshes.find(toPoolHandle(handle));
+    if (glMesh == nullptr) {
+        ++impl_->errorCount;
+        // Usually happens every frame once it happens; one message is enough.
+        if (!impl_->invalidDrawLogged) {
+            impl_->invalidDrawLogged = true;
+            core::logError("render",
+                           "drawMesh: invalid or destroyed mesh handle (index {}, "
+                           "generation {}); further invalid draws are only counted",
+                           handle.index, handle.generation);
+        }
+        return;
+    }
+
+    const math::Mat4 modelViewProjection = impl_->viewProjection * model;
+    glProgramUniformMatrix4fv(impl_->meshProgram.name(), impl_->mvpLocation, 1, GL_FALSE,
+                              glm::value_ptr(modelViewProjection));
+    glMesh->draw();
+
+    ++impl_->currentFrame.drawCalls;
+    impl_->currentFrame.triangles += glMesh->indexCount() / 3;
 }
 
 void Renderer::endFrame()
 {
+    glBindVertexArray(0);
     impl_->errorCount += opengl::checkGlErrors("frame");
+    impl_->lastFrame = impl_->currentFrame;
 }
 
 core::Result<core::Image> Renderer::captureFrame()
@@ -226,6 +329,11 @@ core::Result<core::Image> Renderer::captureFrame()
 std::uint32_t Renderer::errorCount() const noexcept
 {
     return impl_->errorCount;
+}
+
+const RenderStats& Renderer::lastFrameStats() const noexcept
+{
+    return impl_->lastFrame;
 }
 
 } // namespace engine::render

@@ -12,10 +12,14 @@ add_executable(lpe_unit_tests
     unit/core/log_test.cpp
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
+    unit/geometry/mesh_data_test.cpp
     unit/platform/input_state_test.cpp
     unit/platform/window_desc_test.cpp
+    unit/render/handle_pool_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
+# GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.
+target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 lpe_set_project_warnings(lpe_unit_tests)
 catch_discover_tests(lpe_unit_tests)
 

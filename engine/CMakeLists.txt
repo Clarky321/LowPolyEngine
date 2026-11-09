@@ -1,6 +1,7 @@
 # The engine starts as one static library with internal folders per domain
 # (docs/PROJECT_STRUCTURE.md). Split it only when boundaries justify it.
 find_package(SDL3 REQUIRED CONFIG)
+find_package(glm REQUIRED CONFIG)
 find_package(stb REQUIRED CONFIG)
 
 add_library(engine STATIC
@@ -10,6 +11,7 @@ add_library(engine STATIC
     src/core/Image.cpp
     src/core/Log.cpp
     src/core/Version.cpp
+    src/geometry/MeshData.cpp
     src/platform/Input.cpp
     src/platform/WindowDesc.cpp
     src/platform/sdl3/Sdl3GlContext.cpp
@@ -17,6 +19,7 @@ add_library(engine STATIC
     src/platform/sdl3/Sdl3Platform.cpp
     src/platform/sdl3/Sdl3Window.cpp
     src/render/opengl/GlDiagnostics.cpp
+    src/render/opengl/GlMesh.cpp
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
 )
@@ -34,6 +37,11 @@ target_link_libraries(engine PRIVATE
     SDL3::SDL3
     glad
     stb::stb
+)
+
+# PUBLIC: engine/core/Math.hpp aliases GLM types in public headers (ADR 0007).
+target_link_libraries(engine PUBLIC
+    glm::glm
 )
 
 # The project() version is the single source of truth for the engine version.

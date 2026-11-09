@@ -80,13 +80,59 @@ std::optional<Options> parseOptions(int argc, char** argv)
     return options;
 }
 
+using engine::geometry::MeshData;
+
+// Bring-up geometry in normalized device coordinates (identity view), counter-clockwise.
+MeshData makeTriangle()
+{
+    MeshData mesh;
+    mesh.positions = {{-0.6F, -0.5F, 0.0F}, {0.6F, -0.5F, 0.0F}, {0.0F, 0.6F, 0.0F}};
+    mesh.colors = {
+        {0.95F, 0.45F, 0.25F, 1.0F}, {0.30F, 0.75F, 0.45F, 1.0F}, {0.30F, 0.55F, 0.90F, 1.0F}};
+    mesh.indices = {0, 1, 2};
+    return mesh;
+}
+
+// Indexed quad (4 shared vertices, 2 triangles) farther away than the triangle
+// (larger NDC depth). It is drawn after the triangle, so only the depth test
+// keeps it behind.
+MeshData makeBackdropQuad()
+{
+    MeshData mesh;
+    mesh.positions = {
+        {-0.15F, -0.75F, 0.5F}, {0.9F, -0.75F, 0.5F}, {0.9F, 0.25F, 0.5F}, {-0.15F, 0.25F, 0.5F}};
+    mesh.colors = {{0.98F, 0.86F, 0.45F, 1.0F},
+                   {0.98F, 0.70F, 0.35F, 1.0F},
+                   {1.00F, 0.95F, 0.80F, 1.0F},
+                   {1.00F, 0.98F, 0.90F, 1.0F}};
+    mesh.indices = {0, 1, 2, 0, 2, 3};
+    return mesh;
+}
+
 class IslandPreview final : public engine::app::Application {
 public:
     explicit IslandPreview(const Options& options) : options_(options) {}
 
-    std::optional<engine::core::Error> start(engine::app::AppContext& /*context*/) override
+    std::optional<engine::core::Error> start(engine::app::AppContext& context) override
     {
+        auto& renderer = context.renderer();
+        auto triangle = renderer.createMesh(makeTriangle());
+        if (!triangle) {
+            return triangle.error();
+        }
+        triangle_ = triangle.value();
+        auto quad = renderer.createMesh(makeBackdropQuad());
+        if (!quad) {
+            return quad.error();
+        }
+        quad_ = quad.value();
         return std::nullopt;
+    }
+
+    void stop(engine::app::AppContext& context) override
+    {
+        context.renderer().destroyMesh(triangle_);
+        context.renderer().destroyMesh(quad_);
     }
 
     void update(engine::app::AppContext& context, const engine::core::FrameTime& time) override
@@ -113,11 +159,14 @@ public:
 
     void render(engine::app::AppContext& context) override
     {
-        context.renderer().drawTestTriangle();
+        context.renderer().drawMesh(triangle_);
+        context.renderer().drawMesh(quad_);
     }
 
 private:
     Options options_;
+    engine::render::MeshHandle triangle_;
+    engine::render::MeshHandle quad_;
 };
 
 } // namespace
