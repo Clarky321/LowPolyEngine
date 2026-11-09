@@ -6,6 +6,8 @@ find_package(Catch2 3 REQUIRED CONFIG)
 include(Catch)
 
 add_executable(lpe_unit_tests
+    unit/camera/camera_test.cpp
+    unit/camera/free_fly_controller_test.cpp
     unit/core/filesystem_test.cpp
     unit/core/frame_clock_test.cpp
     unit/core/image_test.cpp
@@ -13,6 +15,7 @@ add_executable(lpe_unit_tests
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
     unit/geometry/mesh_data_test.cpp
+    unit/geometry/primitives_test.cpp
     unit/platform/input_state_test.cpp
     unit/platform/window_desc_test.cpp
     unit/render/handle_pool_test.cpp

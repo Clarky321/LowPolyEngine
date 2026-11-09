@@ -6,12 +6,15 @@ find_package(stb REQUIRED CONFIG)
 
 add_library(engine STATIC
     src/app/Application.cpp
+    src/camera/Camera.cpp
+    src/camera/FreeFlyController.cpp
     src/core/FileSystem.cpp
     src/core/FrameClock.cpp
     src/core/Image.cpp
     src/core/Log.cpp
     src/core/Version.cpp
     src/geometry/MeshData.cpp
+    src/geometry/Primitives.cpp
     src/platform/Input.cpp
     src/platform/WindowDesc.cpp
     src/platform/sdl3/Sdl3GlContext.cpp

@@ -1,9 +1,19 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
 // M1 scope: engine loop, input, free-fly camera and a static test scene.
+//
+// Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
+// up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F12 saves a
+// screenshot to screenshots/, Escape quits.
+
+#include "TestScene.hpp"
 
 #include "engine/app/Application.hpp"
+#include "engine/camera/Camera.hpp"
+#include "engine/camera/FreeFlyController.hpp"
 #include "engine/core/Log.hpp"
 #include "engine/core/Version.hpp"
+
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <charconv>
 #include <cstdint>
@@ -13,6 +23,7 @@
 #include <optional>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace {
 
@@ -80,33 +91,15 @@ std::optional<Options> parseOptions(int argc, char** argv)
     return options;
 }
 
-using engine::geometry::MeshData;
-
-// Bring-up geometry in normalized device coordinates (identity view), counter-clockwise.
-MeshData makeTriangle()
+// Starting view: front-right of the pyramid, slightly above, looking at its tip,
+// so two of its faces and the ground perspective are visible.
+engine::camera::Camera initialCamera()
 {
-    MeshData mesh;
-    mesh.positions = {{-0.6F, -0.5F, 0.0F}, {0.6F, -0.5F, 0.0F}, {0.0F, 0.6F, 0.0F}};
-    mesh.colors = {
-        {0.95F, 0.45F, 0.25F, 1.0F}, {0.30F, 0.75F, 0.45F, 1.0F}, {0.30F, 0.55F, 0.90F, 1.0F}};
-    mesh.indices = {0, 1, 2};
-    return mesh;
-}
-
-// Indexed quad (4 shared vertices, 2 triangles) farther away than the triangle
-// (larger NDC depth). It is drawn after the triangle, so only the depth test
-// keeps it behind.
-MeshData makeBackdropQuad()
-{
-    MeshData mesh;
-    mesh.positions = {
-        {-0.15F, -0.75F, 0.5F}, {0.9F, -0.75F, 0.5F}, {0.9F, 0.25F, 0.5F}, {-0.15F, 0.25F, 0.5F}};
-    mesh.colors = {{0.98F, 0.86F, 0.45F, 1.0F},
-                   {0.98F, 0.70F, 0.35F, 1.0F},
-                   {1.00F, 0.95F, 0.80F, 1.0F},
-                   {1.00F, 0.98F, 0.90F, 1.0F}};
-    mesh.indices = {0, 1, 2, 0, 2, 3};
-    return mesh;
+    engine::camera::Camera camera;
+    camera.position = {11.0F, 7.5F, 22.0F};
+    camera.yawRadians = 0.4636F; // atan2(11, 22): towards the origin
+    camera.pitchRadians = -0.24F;
+    return camera;
 }
 
 class IslandPreview final : public engine::app::Application {
@@ -115,29 +108,33 @@ public:
 
     std::optional<engine::core::Error> start(engine::app::AppContext& context) override
     {
-        auto& renderer = context.renderer();
-        auto triangle = renderer.createMesh(makeTriangle());
-        if (!triangle) {
-            return triangle.error();
+        for (auto& object : island_preview::buildTestScene()) {
+            auto handle = context.renderer().createMesh(object.mesh);
+            if (!handle) {
+                return handle.error();
+            }
+            meshes_.push_back({handle.value(), object.position, object.spinRadiansPerSecond});
         }
-        triangle_ = triangle.value();
-        auto quad = renderer.createMesh(makeBackdropQuad());
-        if (!quad) {
-            return quad.error();
-        }
-        quad_ = quad.value();
+        engine::core::logInfo("app",
+                              "test scene: {} meshes; hold the right mouse button to look "
+                              "around, WASD to fly, Escape to quit",
+                              meshes_.size());
         return std::nullopt;
     }
 
     void stop(engine::app::AppContext& context) override
     {
-        context.renderer().destroyMesh(triangle_);
-        context.renderer().destroyMesh(quad_);
+        for (const auto& mesh : meshes_) {
+            context.renderer().destroyMesh(mesh.handle);
+        }
+        meshes_.clear();
+        context.window().setRelativeMouseMode(false);
     }
 
     void update(engine::app::AppContext& context, const engine::core::FrameTime& time) override
     {
         using engine::platform::Key;
+        using engine::platform::MouseButton;
         const auto& input = context.input();
         if (input.wasPressed(Key::Escape)) {
             context.requestQuit();
@@ -150,6 +147,17 @@ public:
                 std::format("screenshots/island-preview-{:06}.png", time.frameIndex));
         }
 
+        // Mouse look while the right button is held; the cursor is hidden and
+        // captured meanwhile, so it cannot leave the window mid-turn.
+        const bool wantMouseLook = input.isDown(MouseButton::Right);
+        if (wantMouseLook != mouseLook_) {
+            mouseLook_ = wantMouseLook;
+            context.window().setRelativeMouseMode(mouseLook_);
+        }
+        controller_.update(camera_, engine::camera::readFlyInput(input, mouseLook_),
+                           static_cast<float>(time.deltaSeconds));
+        sceneSeconds_ = static_cast<float>(time.elapsedSeconds);
+
         // The last frame of a --screenshot run is saved.
         if (options_.screenshotPath && options_.maxFrames &&
             time.frameIndex + 1 == *options_.maxFrames) {
@@ -159,14 +167,36 @@ public:
 
     void render(engine::app::AppContext& context) override
     {
-        context.renderer().drawMesh(triangle_);
-        context.renderer().drawMesh(quad_);
+        const auto size = context.framebufferSize();
+        auto& renderer = context.renderer();
+        renderer.setView({
+            .view = engine::camera::viewMatrix(camera_),
+            .projection = engine::camera::projectionMatrix(
+                camera_, engine::camera::aspectRatio(size.width, size.height)),
+        });
+        for (const auto& mesh : meshes_) {
+            engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, mesh.position);
+            if (mesh.spinRadiansPerSecond != 0.0F) {
+                model = glm::rotate(model, mesh.spinRadiansPerSecond * sceneSeconds_,
+                                    engine::camera::kWorldUp);
+            }
+            renderer.drawMesh(mesh.handle, model);
+        }
     }
 
 private:
+    struct SceneMesh {
+        engine::render::MeshHandle handle;
+        engine::math::Vec3 position{0.0F};
+        float spinRadiansPerSecond = 0.0F;
+    };
+
     Options options_;
-    engine::render::MeshHandle triangle_;
-    engine::render::MeshHandle quad_;
+    std::vector<SceneMesh> meshes_;
+    engine::camera::Camera camera_ = initialCamera();
+    engine::camera::FreeFlyController controller_;
+    bool mouseLook_ = false;
+    float sceneSeconds_ = 0.0F;
 };
 
 } // namespace
