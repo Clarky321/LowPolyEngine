@@ -25,10 +25,10 @@ The C++ standard library cannot encode images. The options are a small dependenc
 
 Use `stb_image_write` from the Conan package `stb/cci.20261021`.
 
-- It is compiled in exactly one engine source file, `engine/src/core/Image.cpp`, with `STB_IMAGE_WRITE_STATIC` (no exported symbols) and `STBI_WRITE_NO_STDIO`. Encoding goes to memory; `core::writeBinaryFile` writes the file, so Unicode paths and I/O errors are handled by project code.
+- The implementation is compiled once in its own target, `third_party/stb_image_write/` (a one-line C file), without project warning flags, like GLAD (ADR 0005). Compiling it inside a project source file failed the Linux GCC 13 Release build: `-Wnull-dereference` reports stb's unchecked `realloc` once `-O3` inlines it, even though the header is a system include. Only `engine/src/core/Image.cpp` includes the header, for declarations. `STBI_WRITE_NO_STDIO` is set on the target: encoding goes to memory, and `core::writeBinaryFile` writes the file, so Unicode paths and I/O errors are handled by project code.
 - The public API is project-owned: `core::Image` (RGB8, top row first), `core::encodePng`, `core::writePng`. No stb type appears in a header.
 - The renderer reads the back buffer with `Renderer::captureFrame()`; the application loop writes it to a PNG on request (`--screenshot PATH`, F12). This is the single capture mechanism for screenshots and GPU tests.
-- stb headers are external includes, so the project warning flags do not apply to them (as for SDL).
+- stb headers are external includes for project code, and the implementation is outside project targets, so project warning flags never apply to stb code.
 
 ## Consequences
 

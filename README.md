@@ -105,6 +105,7 @@ SDL needs X11 and OpenGL development packages (`libx11-dev`, `libgl-dev` and rel
 - `tests/` — Catch2/CTest tiers: `unit/` (headless), `integration/` (SDL dummy video driver, headless), `rendering/` (label `gpu`, real OpenGL, frame readback).
 - `docs/screenshots/` — captured screenshots per milestone, with how they were made.
 - `third_party/glad/` — generated OpenGL loader; regenerate with `scripts/python/generate_glad.py` (ADR 0005).
+- `third_party/stb_image_write/` — compiles the stb PNG writer (header from Conan) without project warning flags (ADR 0006).
 - `cmake/` — shared CMake modules (warning policy).
 - `profiles/` — Conan profiles.
 - `docs/` — plan, tech stack, structure, testing strategy, ADRs.

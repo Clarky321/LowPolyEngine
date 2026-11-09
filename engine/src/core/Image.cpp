@@ -7,11 +7,9 @@
 #include <string>
 #include <utility>
 
-// File output goes through writeBinaryFile (Unicode paths, error reporting),
-// so stb's own stdio code is not compiled.
-#define STBI_WRITE_NO_STDIO
-#define STB_IMAGE_WRITE_STATIC
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+// Declarations only; the implementation is compiled in third_party/stb_image_write/
+// without project warning flags. File output goes through writeBinaryFile
+// (Unicode paths, error reporting), so stb is built without its stdio code.
 #include <stb_image_write.h>
 
 namespace engine::core {
