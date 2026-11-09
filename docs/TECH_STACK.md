@@ -105,7 +105,8 @@ GLAD is generated API loader code; generated source may be vendored under a clea
 ## 7. Build, automation and repository tooling
 
 - `CMakeLists.txt`: targets and feature options; no machine-specific absolute paths.
-- `CMakePresets.json`: named configurations such as `windows-msvc-debug`, `windows-msvc-release`, `linux-clang-debug`.
+- `CMakePresets.json`: named configurations such as `windows-msvc-debug`, `windows-msvc-release`, `linux-gcc-debug`, `linux-gcc-release`.
+- `requirements-dev.txt`: pinned Python developer tools (Conan, clang-format, Ninja on Linux) for local work and CI.
 - `conanfile.py`: dependency requirements, generators and build options.
 - `conan.lock`: exact dependency graph once baseline is stable.
 - `profiles/`: Conan host/build profiles for supported compiler/platform combinations.

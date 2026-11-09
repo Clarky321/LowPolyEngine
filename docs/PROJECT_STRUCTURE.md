@@ -16,7 +16,8 @@ lowpoly-engine/
 ├── conan.lock
 ├── profiles/
 │   ├── windows-msvc
-│   └── linux-clang
+│   └── linux-gcc
+├── requirements-dev.txt      # pinned developer tools (Conan, clang-format, Ninja)
 ├── cmake/
 │   ├── CompilerWarnings.cmake
 │   ├── ProjectOptions.cmake

@@ -67,7 +67,7 @@ Do not turn on every analyzer for every compiler before the first build is stabl
 ### Pull request / push workflow
 
 1. Checkout with required submodules only if any have actually been adopted.
-2. Install the pinned CMake, Conan and compiler toolchain.
+2. Install the pinned developer tools (`requirements-dev.txt`: Conan, clang-format, Ninja on Linux). CMake and the compiler come from the pinned runner image.
 3. Select a Conan profile and install locked dependencies.
 4. Configure CMake using the documented preset.
 5. Build the engine, editor (where appropriate) and tests.
@@ -77,10 +77,12 @@ Do not turn on every analyzer for every compiler before the first build is stabl
 
 ### Initial matrix
 
+Implemented in `.github/workflows/ci.yml` (M0.3). Runner labels are explicit rather than `*-latest`, so an image change does not silently change the toolchain.
+
 | Runner | Compiler | Purpose |
 |---|---|---|
-| `windows-latest` | MSVC | Main developer platform; compile editor/runtime and run headless tests. |
-| `ubuntu-latest` | GCC or Clang | Portability and Linux build/test path. |
+| `windows-2025-vs2026` | MSVC 19.5x (VS 2026) | Main developer platform; Debug + Release, headless tests, format check. |
+| `ubuntu-24.04` | GCC 13 | Portability and Linux build/test path; Debug + Release. |
 | Optional Linux sanitizer job | Clang/GCC | ASan/UBSan and later TSAN where supported. |
 | Optional self-hosted GPU runner | Known GPU/driver | OpenGL shader/context/render smoke tests. |
 

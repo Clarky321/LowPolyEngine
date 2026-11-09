@@ -73,20 +73,31 @@ rem ---------------------------------------------------------------------------
 :find_conan
 rem Prefer the project-local virtual environment described in README.md.
 set "LPE_CONAN=%LPE_ROOT%\.venv\Scripts\conan.exe"
-if exist "%LPE_CONAN%" exit /b 0
+if exist "%LPE_CONAN%" goto :conan_found
 call :find_tool LPE_CONAN conan.exe ""
 if %errorlevel% neq 0 goto :conan_missing
 exit /b 0
 
+:conan_found
+echo using conan.exe: "%LPE_CONAN%"
+exit /b 0
+
 :conan_missing
-echo Install it locally: python -m venv .venv ^&^& .venv\Scripts\python -m pip install conan 1>&2
+echo Install it locally: python -m venv .venv ^&^& .venv\Scripts\python -m pip install -r requirements-dev.txt 1>&2
 exit /b 1
 
 
 rem ---------------------------------------------------------------------------
 :find_clang_format
+rem Prefer the version pinned in requirements-dev.txt; CI uses the same one.
+set "LPE_CLANG_FORMAT=%LPE_ROOT%\.venv\Scripts\clang-format.exe"
+if exist "%LPE_CLANG_FORMAT%" goto :clang_format_found
 call :find_tool LPE_CLANG_FORMAT clang-format.exe "VC\Tools\Llvm\x64\bin\clang-format.exe"
 exit /b %errorlevel%
+
+:clang_format_found
+echo using clang-format.exe: "%LPE_CLANG_FORMAT%"
+exit /b 0
 
 
 rem ---------------------------------------------------------------------------

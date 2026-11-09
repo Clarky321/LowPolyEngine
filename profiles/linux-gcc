@@ -1,0 +1,15 @@
+# Host/build profile for Linux + GCC 13 (Ubuntu 24.04 default compiler, used in CI).
+# build_type is passed on the command line (-s build_type=Debug|Release).
+[settings]
+os=Linux
+arch=x86_64
+compiler=gcc
+compiler.version=13
+compiler.libcxx=libstdc++11
+compiler.cppstd=20
+build_type=Release
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+# Name the exact compiler so a different default "gcc" on PATH is not picked up.
+tools.build:compiler_executables={"c": "gcc-13", "cpp": "g++-13"}
