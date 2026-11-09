@@ -113,6 +113,9 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
     if (!renderer) {
         return startupError("renderer", renderer.error());
     }
+    const auto& info = renderer.value().info();
+    core::logInfo("render", "{} on {} ({}), driver {}", info.api, info.device, info.vendor,
+                  info.driverVersion);
 
     platform::InputState input;
     LoopContext loop(window.value(), renderer.value(), input);

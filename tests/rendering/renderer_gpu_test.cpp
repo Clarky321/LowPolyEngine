@@ -4,6 +4,7 @@
 // Runs from the repository root (tests/rendering/CMakeLists.txt) so assets/ is found.
 
 #include "engine/core/Image.hpp"
+#include "engine/debug/TextMesh.hpp"
 #include "engine/geometry/MeshData.hpp"
 #include "engine/platform/GlContext.hpp"
 #include "engine/platform/Platform.hpp"
@@ -320,6 +321,38 @@ TEST_CASE("Destroyed and null handles are detected", "[render][gpu]")
     CHECK(near(pixelAt(image, 0.5F, 0.5F), kClearRgb));
     CHECK(renderer.errorCount() == 1);
     CHECK(renderer.lastFrameStats().drawCalls == 0);
+}
+
+TEST_CASE("Overlay meshes use pixel coordinates from the top-left corner", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    // A red rectangle over the top-left quarter of the framebuffer.
+    engine::debug::TextMeshBuilder overlay;
+    overlay.addRect({0.0F, 0.0F},
+                    {static_cast<float>(gpu.width) / 2.0F, static_cast<float>(gpu.height) / 2.0F},
+                    {1.0F, 0.0F, 0.0F, 1.0F});
+    const MeshHandle mesh = upload(*gpu.renderer, overlay.mesh());
+
+    const Image image = renderFrame(gpu, [&](Renderer& r) {
+        r.setView({.projection = engine::debug::overlayProjection(gpu.width, gpu.height),
+                   .depth = engine::render::DepthMode::Off,
+                   .blend = engine::render::BlendMode::Alpha});
+        r.drawMesh(mesh);
+    });
+    // Visible at all also proves the quads face the viewer after the y flip.
+    CHECK(near(pixelAt(image, 0.25F, 0.25F), kRed));
+    CHECK(near(pixelAt(image, 0.75F, 0.75F), kClearRgb));
+    CHECK(near(pixelAt(image, 0.25F, 0.75F), kClearRgb));
+}
+
+TEST_CASE("Renderer info names the API and the driver", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    const auto& info = gpu.renderer->info();
+    CHECK(info.api == "OpenGL 4.5 Core");
+    CHECK_FALSE(info.driverVersion.empty());
+    CHECK_FALSE(info.device.empty());
+    CHECK_FALSE(info.vendor.empty());
 }
 
 TEST_CASE("captureFrame fails before the first frame", "[render][gpu]")

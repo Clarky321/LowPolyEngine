@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace engine::render {
 
@@ -58,6 +59,17 @@ struct ViewDesc {
     math::Mat4 projection{1.0F};
     DepthMode depth = DepthMode::TestAndWrite;
     BlendMode blend = BlendMode::Opaque;
+};
+
+// What the renderer runs on, for diagnostics (logs, debug overlay).
+struct RendererInfo {
+    // Graphics API and version the renderer targets, e.g. "OpenGL 4.5 Core".
+    std::string api;
+    // Version string reported by the driver (may be newer than the target).
+    std::string driverVersion;
+    // GPU / renderer name and vendor as reported by the driver.
+    std::string device;
+    std::string vendor;
 };
 
 // Work submitted in one frame.
@@ -118,6 +130,8 @@ public:
 
     // Statistics of the last completed frame.
     [[nodiscard]] const RenderStats& lastFrameStats() const noexcept;
+
+    [[nodiscard]] const RendererInfo& info() const noexcept;
 
 private:
     struct Impl;

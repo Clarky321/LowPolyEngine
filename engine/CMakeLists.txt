@@ -13,6 +13,7 @@ add_library(engine STATIC
     src/core/Image.cpp
     src/core/Log.cpp
     src/core/Version.cpp
+    src/debug/TextMesh.cpp
     src/geometry/MeshData.cpp
     src/geometry/Primitives.cpp
     src/platform/Input.cpp

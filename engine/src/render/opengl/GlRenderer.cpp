@@ -97,6 +97,24 @@ detail::PoolHandle toPoolHandle(MeshHandle handle) noexcept
     return detail::PoolHandle{handle.index, handle.generation};
 }
 
+std::string glString(GLenum name)
+{
+    // glGetString returns null on error; the bytes are ASCII/UTF-8 text.
+    const GLubyte* text = glGetString(name);
+    return text != nullptr ? std::string(reinterpret_cast<const char*>(text)) : "(unknown)";
+}
+
+RendererInfo queryInfo()
+{
+    return RendererInfo{
+        .api = "OpenGL " + std::to_string(kRequiredGlMajor) + "." +
+               std::to_string(kRequiredGlMinor) + " Core",
+        .driverVersion = glString(GL_VERSION),
+        .device = glString(GL_RENDERER),
+        .vendor = glString(GL_VENDOR),
+    };
+}
+
 } // namespace
 
 struct Renderer::Impl {
@@ -117,6 +135,7 @@ struct Renderer::Impl {
 
     GlShaderProgram meshProgram;
     GLint mvpLocation = -1;
+    RendererInfo info = queryInfo();
     detail::HandlePool<GlMesh> meshes;
     bool debugOutputEnabled = false;
     std::uint32_t errorCount = 0;
@@ -334,6 +353,11 @@ std::uint32_t Renderer::errorCount() const noexcept
 const RenderStats& Renderer::lastFrameStats() const noexcept
 {
     return impl_->lastFrame;
+}
+
+const RendererInfo& Renderer::info() const noexcept
+{
+    return impl_->info;
 }
 
 } // namespace engine::render

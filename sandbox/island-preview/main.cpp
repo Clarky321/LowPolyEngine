@@ -2,9 +2,10 @@
 // M1 scope: engine loop, input, free-fly camera and a static test scene.
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
-// up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F12 saves a
-// screenshot to screenshots/, Escape quits.
+// up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
+// debug overlay, F12 saves a screenshot to screenshots/, Escape quits.
 
+#include "DebugOverlay.hpp"
 #include "TestScene.hpp"
 
 #include "engine/app/Application.hpp"
@@ -115,6 +116,12 @@ public:
             }
             meshes_.push_back({handle.value(), object.position, object.spinRadiansPerSecond});
         }
+        // Rebuilt every frame; starts empty.
+        auto overlay = context.renderer().createMesh(engine::geometry::MeshData{});
+        if (!overlay) {
+            return overlay.error();
+        }
+        overlay_ = overlay.value();
         engine::core::logInfo("app",
                               "test scene: {} meshes; hold the right mouse button to look "
                               "around, WASD to fly, Escape to quit",
@@ -128,6 +135,7 @@ public:
             context.renderer().destroyMesh(mesh.handle);
         }
         meshes_.clear();
+        context.renderer().destroyMesh(overlay_);
         context.window().setRelativeMouseMode(false);
     }
 
@@ -145,6 +153,9 @@ public:
             // the folder is ignored by Git.
             context.requestScreenshot(
                 std::format("screenshots/island-preview-{:06}.png", time.frameIndex));
+        }
+        if (input.wasPressed(Key::F1)) {
+            showOverlay_ = !showOverlay_;
         }
 
         // Mouse look while the right button is held; the cursor is hidden and
@@ -182,9 +193,40 @@ public:
             }
             renderer.drawMesh(mesh.handle, model);
         }
+
+        if (showOverlay_) {
+            renderOverlay(context);
+        }
     }
 
 private:
+    // Screen-space text on top of the scene: no depth test, alpha blending.
+    void renderOverlay(engine::app::AppContext& context)
+    {
+        auto& renderer = context.renderer();
+        const auto size = context.framebufferSize();
+        island_preview::buildOverlay(overlayText_, {
+                                                       .frame = context.frameStats(),
+                                                       .renderer = renderer.info(),
+                                                       .renderStats = renderer.lastFrameStats(),
+                                                       .framebuffer = size,
+                                                       .camera = camera_,
+                                                       .moveSpeed = controller_.moveSpeed(),
+                                                   });
+        if (auto error = renderer.updateMesh(overlay_, overlayText_.mesh())) {
+            // Not fatal: the scene still renders. Log once, then hide the overlay.
+            engine::core::logError("app", "debug overlay disabled: {}", error->message);
+            showOverlay_ = false;
+            return;
+        }
+        renderer.setView({
+            .projection = engine::debug::overlayProjection(size.width, size.height),
+            .depth = engine::render::DepthMode::Off,
+            .blend = engine::render::BlendMode::Alpha,
+        });
+        renderer.drawMesh(overlay_);
+    }
+
     struct SceneMesh {
         engine::render::MeshHandle handle;
         engine::math::Vec3 position{0.0F};
@@ -197,6 +239,9 @@ private:
     engine::camera::FreeFlyController controller_;
     bool mouseLook_ = false;
     float sceneSeconds_ = 0.0F;
+    engine::render::MeshHandle overlay_;
+    engine::debug::TextMeshBuilder overlayText_;
+    bool showOverlay_ = true;
 };
 
 } // namespace
