@@ -4,20 +4,31 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 using engine::render::detail::HandlePool;
 using engine::render::detail::PoolHandle;
+
+namespace {
+
+// Copy of the value behind a handle, or empty if the handle is invalid. Never
+// dereferences a null result (GCC's -Wnull-dereference checks that at -O3).
+std::optional<std::string> valueOf(const HandlePool<std::string>& pool, PoolHandle handle)
+{
+    const std::string* value = pool.find(handle);
+    return value != nullptr ? std::optional<std::string>(*value) : std::nullopt;
+}
+
+} // namespace
 
 TEST_CASE("Inserted values are found by their handle", "[render][handles]")
 {
     HandlePool<std::string> pool;
     const PoolHandle a = pool.insert("a");
     const PoolHandle b = pool.insert("b");
-    REQUIRE(pool.find(a) != nullptr);
-    REQUIRE(pool.find(b) != nullptr);
-    CHECK(*pool.find(a) == "a");
-    CHECK(*pool.find(b) == "b");
+    CHECK(valueOf(pool, a) == "a");
+    CHECK(valueOf(pool, b) == "b");
     CHECK(pool.size() == 2);
 }
 
@@ -42,8 +53,7 @@ TEST_CASE("Erased handles stay invalid when the slot is reused", "[render][handl
     CHECK(reused.index == old.index);
     CHECK(reused.generation != old.generation);
     CHECK(pool.find(old) == nullptr);
-    REQUIRE(pool.find(reused) != nullptr);
-    CHECK(*pool.find(reused) == "new");
+    CHECK(valueOf(pool, reused) == "new");
 }
 
 TEST_CASE("Out-of-range handles are rejected", "[render][handles]")
