@@ -181,6 +181,8 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** clean checkout builds with documented commands; CI is green; no hidden IDE-only steps.
 
+**Status:** done (2026-11-10). Delivered as M0.1–M0.5: CMake/Conan foundation, Windows scripts, CI (Windows MSVC + Linux GCC), SDL3 window, OpenGL 4.5 context with a test triangle. Decisions: ADR 0001–0005. GPU tests run locally, not in CI.
+
 ### M1 — Engine loop and camera
 
 - Application lifecycle, clock, input state, window resize handling and structured logging.

@@ -1,6 +1,6 @@
 # LowPolyEngine
 
-A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M0 — foundation** (build system and tests). See `docs/ENGINE_PLAN.md` for the roadmap.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M0 — foundation** is done (build, CI, SDL3 window, OpenGL 4.5 test triangle); next is **M1 — engine loop and camera**. See `docs/ENGINE_PLAN.md` for the roadmap.
 
 ## Building on Windows
 
