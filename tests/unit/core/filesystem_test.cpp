@@ -60,8 +60,11 @@ TEST_CASE("readTextFile reports a missing file with its path", "[core][filesyste
 
 TEST_CASE("readTextFile reports a directory as an error", "[core][filesystem]")
 {
+    // On Linux an ifstream opens directories; this once led to a huge
+    // allocation and std::bad_alloc instead of an error.
     const auto contents = engine::core::readTextFile(std::filesystem::temp_directory_path());
-    CHECK_FALSE(contents.hasValue());
+    REQUIRE_FALSE(contents.hasValue());
+    CHECK(contents.error().message.find("not a regular file") != std::string::npos);
 }
 
 TEST_CASE("toUtf8 keeps non-ASCII characters", "[core][filesystem]")
