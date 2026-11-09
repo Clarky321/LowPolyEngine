@@ -58,6 +58,12 @@ TEST_CASE("readTextFile reports a missing file with its path", "[core][filesyste
     CHECK(contents.error().message.find("lpe_does_not_exist.txt") != std::string::npos);
 }
 
+TEST_CASE("readTextFile reports a directory as an error", "[core][filesystem]")
+{
+    const auto contents = engine::core::readTextFile(std::filesystem::temp_directory_path());
+    CHECK_FALSE(contents.hasValue());
+}
+
 TEST_CASE("toUtf8 keeps non-ASCII characters", "[core][filesystem]")
 {
     // Expected bytes are spelled out so the test does not depend on how the

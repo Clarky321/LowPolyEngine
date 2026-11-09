@@ -1,19 +1,30 @@
 #include "engine/core/FileSystem.hpp"
 
+#include <cstddef>
 #include <fstream>
-#include <iterator>
+#include <ios>
 
 namespace engine::core {
 
 Result<std::string> readTextFile(const std::filesystem::path& path)
 {
-    std::ifstream file(path, std::ios::in | std::ios::binary);
+    // Opened at the end (ios::ate), so tellg() returns the file size. Reading
+    // with one read() call is simpler than istreambuf_iterator, whose inlined
+    // code also triggers a GCC 13 -Wnull-dereference false positive at -O3.
+    std::ifstream file(path, std::ios::in | std::ios::binary | std::ios::ate);
     if (!file) {
         return Error{"cannot open file '" + toUtf8(path) + "'"};
     }
 
-    std::string contents{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    if (file.bad()) {
+    const std::streamoff size = file.tellg();
+    if (size < 0) {
+        // E.g. a directory or a stream without a size.
+        return Error{"cannot determine the size of '" + toUtf8(path) + "'"};
+    }
+
+    std::string contents(static_cast<std::size_t>(size), '\0');
+    file.seekg(0, std::ios::beg);
+    if (!file.read(contents.data(), static_cast<std::streamsize>(size))) {
         return Error{"error while reading file '" + toUtf8(path) + "'"};
     }
     return contents;
