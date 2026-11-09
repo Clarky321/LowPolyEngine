@@ -118,14 +118,16 @@ Editor ───────────────┐
                       |
         ┌─────────────┼──────────────┐
         v             v              v
-      Scene         Assets        WorldGen
-        |             |              |
-        └─────────────┴──────┬───────┘
-                             v
-                       Renderer API
-                             |
-                        OpenGL backend
+      Scene         Assets        WorldGen (pure CPU: settings → MeshData/WorldData)
+        |             |
+        └──────┬──────┘
+               v
+         Renderer API  ← uploads MeshData produced by WorldGen
+               |
+          OpenGL backend
 
+WorldGen depends only on Core/math; it never includes renderer, SDL or ImGui
+headers, so it runs in headless tests (ADR 0003).
 Platform (SDL3) supplies window/input/context services.
 Scripting (Lua) uses selected Engine APIs; it does not reach into renderer internals.
 ```

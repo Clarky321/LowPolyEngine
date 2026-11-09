@@ -91,6 +91,10 @@ Define the minimum RHI surface needed by the actual first renderer. Do not defin
 - Mesh resolution or target triangle count.
 - Water level and cloud parameters.
 
+### Determinism
+
+PRNG, seed derivation, distributions and floating-point rules are fixed in [ADR 0003](adr/0003-deterministic-generation.md): SplitMix64 for seed mixing, PCG32 for random sequences, project-owned distributions, no `std::hash`/standard distributions. WorldGen is a pure CPU module that outputs mesh/world data; it does not depend on the renderer.
+
 ### Baseline algorithm (implement in stages)
 
 1. Derive an independent deterministic seed for each island using a stable hash of `(masterSeed, islandIndex, generatorVersion)`.
@@ -197,8 +201,8 @@ The engine editor should author characters as entities assembled from components
 
 - Deterministic seeded islands with distinct geometry and palettes.
 - Water surface and simple cloud clusters.
-- WorldGen UI controls and repeatable regeneration.
-- Save/load seed and generator parameters.
+- WorldGen UI controls and repeatable regeneration. Dear ImGui enters here as a development/debug UI in the sandbox; the full editor is M5.
+- Save/load seed and generator parameters as versioned JSON ([ADR 0004](adr/0004-serialization-format.md)).
 
 **Exit:** several visibly different islands are generated; same seed repeats; generation tests pass; free-fly camera works.
 
