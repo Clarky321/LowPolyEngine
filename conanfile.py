@@ -33,6 +33,8 @@ class LowPolyEngineConan(ConanFile):
     def requirements(self):
         # Window, events and the OpenGL context (ADR 0002).
         self.requires("sdl/3.4.16")
+        # PNG encoding for frame captures (stb_image_write; header-only, ADR 0006).
+        self.requires("stb/cci.20261021")
         # Unit tests only; never linked into the engine runtime.
         self.test_requires("catch2/3.16.1")
 

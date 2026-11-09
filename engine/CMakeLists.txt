@@ -1,10 +1,12 @@
 # The engine starts as one static library with internal folders per domain
 # (docs/PROJECT_STRUCTURE.md). Split it only when boundaries justify it.
 find_package(SDL3 REQUIRED CONFIG)
+find_package(stb REQUIRED CONFIG)
 
 add_library(engine STATIC
     src/core/FileSystem.cpp
     src/core/FrameClock.cpp
+    src/core/Image.cpp
     src/core/Log.cpp
     src/core/Version.cpp
     src/platform/WindowDesc.cpp
@@ -22,12 +24,13 @@ target_include_directories(engine PUBLIC
 
 target_compile_features(engine PUBLIC cxx_std_20)
 
-# PRIVATE: SDL is used only in src/platform/sdl3/ and GLAD only in
-# src/render/opengl/ (ADR 0002, ADR 0005). Public headers include neither;
-# consumers only get them as link dependencies.
+# PRIVATE: SDL is used only in src/platform/sdl3/, GLAD only in
+# src/render/opengl/ and stb only in src/core/Image.cpp (ADR 0002, 0005, 0006).
+# Public headers include none of them; consumers only get them as link dependencies.
 target_link_libraries(engine PRIVATE
     SDL3::SDL3
     glad
+    stb::stb
 )
 
 # The project() version is the single source of truth for the engine version.
