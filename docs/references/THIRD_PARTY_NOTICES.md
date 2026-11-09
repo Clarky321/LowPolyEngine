@@ -5,6 +5,9 @@ Every dependency added to `conanfile.py` or vendored under `third_party/` is lis
 | Package | Version | License | Kind | Used by | Added in |
 |---|---|---|---|---|---|
 | Catch2 | 3.16.1 | BSL-1.0 | test-only | `tests/` | M0.1 |
+| SDL3 (`sdl`) | 3.4.16, static | Zlib | runtime | `engine/src/platform/sdl3/` | M0.4 |
+
+SDL brings build-time tools from Conan Center: `cmake` (BSD-3-Clause) and, on Linux, `pkgconf` (ISC). On Linux it also uses system X11 and OpenGL packages (`xorg/system`, `opengl/system`); they are installed from the distribution, not redistributed. Only the video and OpenGL parts of SDL are enabled; see `conanfile.py`.
 
 ## Developer tools (not linked, not shipped)
 
@@ -18,4 +21,4 @@ Pinned in `requirements-dev.txt`, installed from PyPI into `.venv` locally and i
 
 ## Planned
 
-Decided in ADRs, not yet added: SDL3 3.4.16 (Zlib, ADR 0002), nlohmann_json 3.12.0 (MIT, ADR 0004).
+Decided in ADRs, not yet added: nlohmann_json 3.12.0 (MIT, ADR 0004).

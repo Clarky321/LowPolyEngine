@@ -97,10 +97,14 @@ jobs:
           path: ~/.conan2/p
           key: conan-linux-gcc-${{ matrix.config }}-${{ hashFiles('conanfile.py', 'profiles/linux-gcc', 'requirements-dev.txt') }}
 
+      # SDL needs X11/OpenGL development packages from the system (xorg/system,
+      # opengl/system); let Conan install them with apt on the runner.
       - name: Install dependencies (Conan)
         run: >-
           conan install . -pr:h=profiles/linux-gcc -pr:b=profiles/linux-gcc
           -s build_type=${{ matrix.build_type }} --build=missing
+          -c tools.system.package_manager:mode=install
+          -c tools.system.package_manager:sudo=True
           -of "build/$PRESET/conan"
 
       - name: Configure

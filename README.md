@@ -29,7 +29,7 @@ Thin wrappers in `scripts/windows/` run the same commands as below. Each takes `
 | `configure.bat [debug\|release]` | `conan install` + `cmake --preset` |
 | `build.bat [debug\|release]` | configure, then `cmake --build --preset` |
 | `test.bat [debug\|release]` | `ctest --preset` on an existing build |
-| `run.bat [debug\|release] [target]` | runs `build\<preset>\bin\<Config>\<target>.exe` from the repository root; default target `island-preview` (added in M0.4) |
+| `run.bat [debug\|release] [target]` | runs `build\<preset>\bin\<Config>\<target>.exe` from the repository root; default target `island-preview` |
 | `format-check.bat` | `clang-format --dry-run --Werror` on all C/C++ sources |
 | `clean.bat [debug\|release\|all]` | deletes `build\windows-msvc-*` only (default: all) |
 
@@ -62,14 +62,17 @@ cmake --build --preset linux-gcc-debug
 ctest --preset linux-gcc-debug
 ```
 
+SDL needs X11 and OpenGL development packages (`libx11-dev`, `libgl-dev` and related). Conan only checks for them by default; add `-c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True` to `conan install` to let it install them with apt (CI does this).
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: Windows MSVC (`windows-2025-vs2026` runner, through `scripts/windows/*.bat`) and Linux GCC 13 (`ubuntu-24.04`, the commands above), Debug and Release, with warnings as errors. The Windows Debug job also runs `format-check.bat`.
 
 ## Repository layout
 
-- `engine/` — engine library (`engine` CMake target).
-- `tests/` — headless Catch2 unit tests registered with CTest.
+- `engine/` — engine library (`engine` CMake target). SDL3 is used only in `engine/src/platform/sdl3/`.
+- `sandbox/island-preview/` — first executable: opens a window (`island-preview [--frames N]`).
+- `tests/` — headless Catch2 unit tests and the window smoke test (SDL dummy video driver), registered with CTest.
 - `cmake/` — shared CMake modules (warning policy).
 - `profiles/` — Conan profiles.
 - `docs/` — plan, tech stack, structure, testing strategy, ADRs.

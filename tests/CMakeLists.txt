@@ -2,7 +2,9 @@
 find_package(Catch2 3 REQUIRED CONFIG)
 
 add_executable(lpe_unit_tests
+    unit/core/result_test.cpp
     unit/core/smoke_test.cpp
+    unit/platform/window_desc_test.cpp
 )
 
 target_link_libraries(lpe_unit_tests PRIVATE

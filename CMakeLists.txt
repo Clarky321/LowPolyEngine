@@ -26,3 +26,6 @@ if(LPE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# After enable_testing(), so the sandbox can register its smoke test.
+add_subdirectory(sandbox/island-preview)
