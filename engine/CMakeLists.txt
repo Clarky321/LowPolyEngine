@@ -3,10 +3,15 @@
 find_package(SDL3 REQUIRED CONFIG)
 
 add_library(engine STATIC
+    src/core/FileSystem.cpp
     src/core/Version.cpp
     src/platform/WindowDesc.cpp
+    src/platform/sdl3/Sdl3GlContext.cpp
     src/platform/sdl3/Sdl3Platform.cpp
     src/platform/sdl3/Sdl3Window.cpp
+    src/render/opengl/GlDiagnostics.cpp
+    src/render/opengl/GlRenderer.cpp
+    src/render/opengl/GlShaderProgram.cpp
 )
 
 target_include_directories(engine PUBLIC
@@ -15,9 +20,13 @@ target_include_directories(engine PUBLIC
 
 target_compile_features(engine PUBLIC cxx_std_20)
 
-# PRIVATE: SDL is an implementation detail of src/platform/sdl3/ (ADR 0002).
-# Public headers never include it; consumers only get it as a link dependency.
-target_link_libraries(engine PRIVATE SDL3::SDL3)
+# PRIVATE: SDL is used only in src/platform/sdl3/ and GLAD only in
+# src/render/opengl/ (ADR 0002, ADR 0005). Public headers include neither;
+# consumers only get them as link dependencies.
+target_link_libraries(engine PRIVATE
+    SDL3::SDL3
+    glad
+)
 
 # The project() version is the single source of truth for the engine version.
 set_source_files_properties(src/core/Version.cpp PROPERTIES COMPILE_DEFINITIONS

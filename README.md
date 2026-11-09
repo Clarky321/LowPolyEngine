@@ -28,8 +28,8 @@ Thin wrappers in `scripts/windows/` run the same commands as below. Each takes `
 |---|---|
 | `configure.bat [debug\|release]` | `conan install` + `cmake --preset` |
 | `build.bat [debug\|release]` | configure, then `cmake --build --preset` |
-| `test.bat [debug\|release]` | `ctest --preset` on an existing build |
-| `run.bat [debug\|release] [target]` | runs `build\<preset>\bin\<Config>\<target>.exe` from the repository root; default target `island-preview` |
+| `test.bat [debug\|release] [gpu]` | `ctest --preset` on an existing build: headless tests, or with `gpu` only the rendering tests (need OpenGL 4.5) |
+| `run.bat [debug\|release] [target]` | runs `build\<preset>\bin\<Config>\<target>.exe` from the repository root; default target `island-preview` (window with a test triangle) |
 | `format-check.bat` | `clang-format --dry-run --Werror` on all C/C++ sources |
 | `clean.bat [debug\|release\|all]` | deletes `build\windows-msvc-*` only (default: all) |
 
@@ -66,13 +66,15 @@ SDL needs X11 and OpenGL development packages (`libx11-dev`, `libgl-dev` and rel
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request: Windows MSVC (`windows-2025-vs2026` runner, through `scripts/windows/*.bat`) and Linux GCC 13 (`ubuntu-24.04`, the commands above), Debug and Release, with warnings as errors. The Windows Debug job also runs `format-check.bat`.
+`.github/workflows/ci.yml` runs on every push and pull request: Windows MSVC (`windows-2025-vs2026` runner, through `scripts/windows/*.bat`) and Linux GCC 13 (`ubuntu-24.04`, the commands above), Debug and Release, with warnings as errors. The Windows Debug job also runs `format-check.bat`. CI runs the headless tiers only; the GPU tier (`test.bat <config> gpu` or the `*-gpu` test presets) is run locally.
 
 ## Repository layout
 
-- `engine/` — engine library (`engine` CMake target). SDL3 is used only in `engine/src/platform/sdl3/`.
-- `sandbox/island-preview/` — first executable: opens a window (`island-preview [--frames N]`).
-- `tests/` — headless Catch2 unit tests and the window smoke test (SDL dummy video driver), registered with CTest.
+- `engine/` — engine library (`engine` CMake target). SDL3 is used only in `engine/src/platform/sdl3/`, OpenGL/GLAD only in `engine/src/render/opengl/`.
+- `sandbox/island-preview/` — first executable: OpenGL 4.5 window with a test triangle (`island-preview [--frames N] [--assets DIR]`; `assets/` is found relative to the working directory).
+- `assets/shaders/` — GLSL sources loaded at runtime.
+- `tests/` — Catch2/CTest tiers: `unit/` (headless), `integration/` (SDL dummy video driver, headless), `rendering/` (label `gpu`, real OpenGL).
+- `third_party/glad/` — generated OpenGL loader; regenerate with `scripts/python/generate_glad.py` (ADR 0005).
 - `cmake/` — shared CMake modules (warning policy).
 - `profiles/` — Conan profiles.
 - `docs/` — plan, tech stack, structure, testing strategy, ADRs.

@@ -22,9 +22,11 @@ Initial high-value test groups:
 - Run a Lua script against a controlled engine facade.
 - Import a small fixture asset and verify metadata/geometry.
 - Generate a world from a fixed seed and verify a stable logical summary/hash.
-- Window smoke test (implemented, M0.4): `island-preview --frames 3` with `SDL_VIDEO_DRIVER=dummy`, which exercises platform init, window creation and the event loop without a display or GPU. Once the sandbox needs an OpenGL context (M0.5), context creation moves to the rendering tier.
+- Platform layer (implemented, `tests/integration/`): SDL init/shutdown, window creation and error paths, event polling, with `SDL_VIDEO_DRIVER=dummy` set by CTest — no display or GPU. Label `integration`; part of the default test presets and CI.
 
 ### Rendering tests — separate optional tier
+
+Implemented in `tests/rendering/` with CTest label `gpu`. The default test presets exclude the label; `ctest --preset <preset>-gpu` (or `scripts\windows\test.bat <config> gpu`) runs only this tier, so a failure is never mixed with the headless results. Current tests: `island-preview` renders 30 frames without OpenGL errors; broken-shader fixtures must produce compile, link and missing-file messages that name the shader file.
 
 - Create a graphics context in a known runner/environment.
 - Compile/link all required shaders.
