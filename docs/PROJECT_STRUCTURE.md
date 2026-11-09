@@ -25,17 +25,23 @@ lowpoly-engine/
 ├── engine/
 │   ├── CMakeLists.txt
 │   ├── include/engine/
-│   │   ├── core/             # Application, Clock, Log, Event, Result
+│   │   ├── app/              # Application lifecycle and frame loop (M1)
+│   │   ├── core/             # Clock, Log, Result, files, images, math aliases
 │   │   ├── platform/         # Engine-facing window/input interfaces
+│   │   ├── geometry/         # CPU MeshData and primitive builders (M1, ADR 0007)
 │   │   ├── render/           # RHI-facing types and renderer interfaces
 │   │   ├── scene/            # Entity, components, world, prefab, document
 │   │   ├── assets/           # Asset IDs, handles, registry interfaces
 │   │   ├── worldgen/         # Generator settings and pure generation API
 │   │   ├── scripting/        # Script runtime facade
-│   │   └── camera/           # Camera and camera-controller types
+│   │   ├── camera/           # Camera and camera-controller types
+│   │   └── debug/            # On-screen diagnostics (pixel-font text, M1)
 │   └── src/
+│       ├── app/
 │       ├── core/
 │       ├── platform/sdl3/
+│       ├── geometry/
+│       ├── debug/
 │       ├── render/
 │       │   ├── rhi/
 │       │   └── opengl/
@@ -130,11 +136,15 @@ Editor ───────────────┐
                |
           OpenGL backend
 
-WorldGen depends only on Core/math; it never includes renderer, SDL or ImGui
-headers, so it runs in headless tests (ADR 0003).
+WorldGen depends only on Core/math and Geometry (MeshData); it never includes
+renderer, SDL or ImGui headers, so it runs in headless tests (ADR 0003, 0007).
 Platform (SDL3) supplies window/input/context services.
+App (the frame loop) sits on top: it owns Platform, Window, context and Renderer.
+Core never depends on App, Platform or Renderer.
 Scripting (Lua) uses selected Engine APIs; it does not reach into renderer internals.
 ```
+
+`app/` is a folder of its own rather than part of `core/` (as first proposed) because the loop depends on the platform and renderer, while `core/` must stay free of them for WorldGen and headless tests.
 
 This is a dependency guide, not a command to create one shared library per box. Early on, `engine` can be one CMake library with internal folders/namespaces. Split targets when build times, ownership or dependency boundaries justify it.
 

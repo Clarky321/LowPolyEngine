@@ -11,7 +11,7 @@ _SDL_UNUSED_SUBSYSTEMS = (
     "gpu",
     "haptic",
     "hidapi",
-    "joystick",  # enable together with controller input (M1+)
+    "joystick",  # enable together with gamepad input (not part of M1)
     "power",
     "render",
     "sensor",

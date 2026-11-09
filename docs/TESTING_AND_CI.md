@@ -22,11 +22,16 @@ Initial high-value test groups:
 - Run a Lua script against a controlled engine facade.
 - Import a small fixture asset and verify metadata/geometry.
 - Generate a world from a fixed seed and verify a stable logical summary/hash.
-- Platform layer (implemented, `tests/integration/`): SDL init/shutdown, window creation and error paths, event polling, with `SDL_VIDEO_DRIVER=dummy` set by CTest — no display or GPU. Label `integration`; part of the default test presets and CI.
+- Platform layer (implemented, `tests/integration/`): SDL init/shutdown, window creation and error paths, event polling, keyboard/mouse/focus events pushed into SDL's queue and translated into `InputState`, application startup failure without a GL-capable driver — all with `SDL_VIDEO_DRIVER=dummy` set by CTest, no display or GPU. Label `integration`; part of the default test presets and CI.
 
 ### Rendering tests — separate optional tier
 
-Implemented in `tests/rendering/` with CTest label `gpu`. The default test presets exclude the label; `ctest --preset <preset>-gpu` (or `scripts\windows\test.bat <config> gpu`) runs only this tier, so a failure is never mixed with the headless results. Current tests: `island-preview` renders 30 frames without OpenGL errors; broken-shader fixtures must produce compile, link and missing-file messages that name the shader file.
+Implemented in `tests/rendering/` with CTest label `gpu`. The default test presets exclude the label; `ctest --preset <preset>-gpu` (or `scripts\windows\test.bat <config> gpu`) runs only this tier, so a failure is never mixed with the headless results. Current tests:
+
+- `lpe_gpu_tests` (Catch2): the application loop (callback order, quit, startup errors, screenshot files) and the renderer checked by reading back pixels with a small tolerance — clear color, vertex colors, back-face culling, depth order, model/view/projection order, alpha blending, mesh updates, stale handles, invalid mesh data, overlay pixel orientation.
+- `island-preview` smoke runs: 30 frames without OpenGL errors; `--screenshot` writes a PNG; broken-shader fixtures must produce compile, link, missing-file and missing-uniform messages that name the shader file or variable.
+
+Screenshots for documentation use the same capture path (`island-preview --screenshot FILE.png`, ADR 0006) and are stored per milestone in `docs/screenshots/`, with the command and commit recorded next to them.
 
 - Create a graphics context in a known runner/environment.
 - Compile/link all required shaders.
