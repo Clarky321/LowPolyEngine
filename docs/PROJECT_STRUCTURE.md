@@ -84,9 +84,12 @@ lowpoly-engine/
 ├── scripts/
 │   ├── python/
 │   └── windows/
+│       ├── _common.bat       # shared helpers (presets, tool lookup)
+│       ├── configure.bat
 │       ├── build.bat
 │       ├── test.bat
-│       ├── run-editor.bat
+│       ├── run.bat
+│       ├── format-check.bat
 │       └── clean.bat
 ├── tools/                    # Offline asset/shader utilities, if needed
 ├── third_party/

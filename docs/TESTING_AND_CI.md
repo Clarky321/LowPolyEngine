@@ -94,11 +94,14 @@ Use Docker for a pinned Linux build environment and headless tests. Keep the nor
 
 The `.bat` wrappers should be thin interfaces over the same build graph used in CI:
 
-- `build.bat debug` — Conan install + CMake configure + build.
-- `build.bat release` — release profile/configuration + build.
-- `test.bat debug` — run CTest and return its exit code.
-- `run-editor.bat` — launch the selected editor build.
-- `clean.bat` — remove only known generated build directories; ask before destructive cleanup outside them.
+Implemented in `scripts/windows/` (M0.2); shared preset mapping and tool lookup live in `_common.bat`:
+
+- `configure.bat debug|release` — Conan install + CMake configure.
+- `build.bat debug|release` — configure + build.
+- `test.bat debug|release` — run CTest and return its exit code. Test presets fail when no tests are found.
+- `run.bat debug|release [target]` — run a built executable from `build/<preset>/bin/<Config>/`.
+- `format-check.bat` — clang-format check without modifying files.
+- `clean.bat debug|release|all` — remove only known generated build directories.
 
 Use `setlocal`, quoted paths, `if errorlevel 1 exit /b %errorlevel%` (or an equivalent robust pattern) and avoid hard-coded absolute paths. Python can provide cross-platform orchestration later; Windows batch should not reimplement dependency resolution.
 

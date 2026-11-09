@@ -20,7 +20,22 @@ python -m venv .venv
 .venv\Scripts\python -m pip install conan
 ```
 
-### Build and test (Debug)
+### Build and test with the scripts
+
+Thin wrappers in `scripts/windows/` run the same commands as below. Each takes `debug` (default) or `release`; they work from any folder.
+
+| Script | Does |
+|---|---|
+| `configure.bat [debug\|release]` | `conan install` + `cmake --preset` |
+| `build.bat [debug\|release]` | configure, then `cmake --build --preset` |
+| `test.bat [debug\|release]` | `ctest --preset` on an existing build |
+| `run.bat [debug\|release] [target]` | runs `build\<preset>\bin\<Config>\<target>.exe` from the repository root; default target `island-preview` (added in M0.4) |
+| `format-check.bat` | `clang-format --dry-run --Werror` on all C/C++ sources |
+| `clean.bat [debug\|release\|all]` | deletes `build\windows-msvc-*` only (default: all) |
+
+Tools are taken from `PATH` first, then from the Visual Studio installation (CMake, clang-format). Conan is taken from `.venv` first.
+
+### Build and test manually (Debug)
 
 ```powershell
 .venv\Scripts\conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --build=missing -of build/windows-msvc-debug/conan

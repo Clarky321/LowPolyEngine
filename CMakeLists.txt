@@ -13,6 +13,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(LPE_BUILD_TESTS "Build the headless unit tests" ON)
 option(LPE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors in first-party code" OFF)
 
+# All executables of a configuration go to one folder (build/<preset>/bin/<Config>/
+# with Visual Studio) so scripts/windows/run.bat can find them by target name.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 
