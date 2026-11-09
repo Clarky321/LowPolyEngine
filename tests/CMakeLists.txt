@@ -7,6 +7,8 @@ include(Catch)
 
 add_executable(lpe_unit_tests
     unit/core/filesystem_test.cpp
+    unit/core/frame_clock_test.cpp
+    unit/core/log_test.cpp
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
     unit/platform/window_desc_test.cpp

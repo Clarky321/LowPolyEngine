@@ -3,11 +3,11 @@
 #include "GlShaderProgram.hpp"
 
 #include "engine/core/FileSystem.hpp"
+#include "engine/core/Log.hpp"
 #include "engine/render/Renderer.hpp"
 
 #include <array>
 #include <cstddef>
-#include <cstdio>
 #include <string>
 #include <utility>
 
@@ -130,8 +130,8 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
 
     const bool debugOutput = desc.debugOutput && opengl::enableDebugOutput();
     if (desc.debugOutput && !debugOutput) {
-        std::fprintf(stderr, "[render] debug output requested, but the context is not a "
-                             "debug context\n");
+        core::logWarning("render",
+                         "debug output requested, but the context is not a debug context");
     }
 
     auto program = loadProgram(desc.shaderDirectory, "triangle.vert", "triangle.frag");

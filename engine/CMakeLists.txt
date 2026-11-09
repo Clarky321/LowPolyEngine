@@ -4,6 +4,8 @@ find_package(SDL3 REQUIRED CONFIG)
 
 add_library(engine STATIC
     src/core/FileSystem.cpp
+    src/core/FrameClock.cpp
+    src/core/Log.cpp
     src/core/Version.cpp
     src/platform/WindowDesc.cpp
     src/platform/sdl3/Sdl3GlContext.cpp
