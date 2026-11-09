@@ -10,8 +10,10 @@ add_library(engine STATIC
     src/core/Image.cpp
     src/core/Log.cpp
     src/core/Version.cpp
+    src/platform/Input.cpp
     src/platform/WindowDesc.cpp
     src/platform/sdl3/Sdl3GlContext.cpp
+    src/platform/sdl3/Sdl3Input.cpp
     src/platform/sdl3/Sdl3Platform.cpp
     src/platform/sdl3/Sdl3Window.cpp
     src/render/opengl/GlDiagnostics.cpp

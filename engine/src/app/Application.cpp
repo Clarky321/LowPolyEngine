@@ -21,13 +21,15 @@ constexpr std::chrono::milliseconds kMinimizedPause{16};
 // The loop's implementation of AppContext. Lives on run()'s stack.
 class LoopContext final : public AppContext {
 public:
-    LoopContext(platform::Window& window, render::Renderer& renderer)
-        : window_(window), renderer_(renderer)
+    LoopContext(platform::Window& window, render::Renderer& renderer,
+                const platform::InputState& input)
+        : window_(window), renderer_(renderer), input_(input)
     {
     }
 
     platform::Window& window() noexcept override { return window_; }
     render::Renderer& renderer() noexcept override { return renderer_; }
+    const platform::InputState& input() const noexcept override { return input_; }
     platform::PixelSize framebufferSize() const noexcept override { return framebufferSize_; }
     const core::FrameStatsSnapshot& frameStats() const noexcept override { return frameStats_; }
 
@@ -48,6 +50,7 @@ public:
 private:
     platform::Window& window_;
     render::Renderer& renderer_;
+    const platform::InputState& input_;
     platform::PixelSize framebufferSize_;
     core::FrameStatsSnapshot frameStats_;
     std::optional<std::filesystem::path> screenshotPath_;
@@ -111,7 +114,8 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
         return startupError("renderer", renderer.error());
     }
 
-    LoopContext loop(window.value(), renderer.value());
+    platform::InputState input;
+    LoopContext loop(window.value(), renderer.value(), input);
     loop.setFramebufferSize(window.value().pixelSize());
     if (auto error = application.start(loop)) {
         return startupError("application start", *error);
@@ -123,7 +127,7 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
     platform::PixelSize lastSize = loop.framebufferSize();
 
     while (!desc.maxFrames || summary.renderedFrames < *desc.maxFrames) {
-        if (platform.value().pollEvents().quitRequested) {
+        if (platform.value().pollEvents(input).quitRequested) {
             break;
         }
 

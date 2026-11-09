@@ -1,3 +1,5 @@
+#include "Sdl3Input.hpp"
+
 #include "engine/platform/Platform.hpp"
 
 #include <SDL3/SDL.h>
@@ -59,8 +61,9 @@ void Platform::shutdown() noexcept
     }
 }
 
-PlatformEvents Platform::pollEvents()
+PlatformEvents Platform::pollEvents(InputState& input)
 {
+    input.beginFrame();
     PlatformEvents events;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -71,6 +74,7 @@ PlatformEvents Platform::pollEvents()
             events.quitRequested = true;
             break;
         default:
+            applyInputEvent(event, input);
             break;
         }
     }

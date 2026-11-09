@@ -20,7 +20,8 @@ TEST_CASE("Platform initializes and reports no quit without input", "[platform][
 {
     auto platform = Platform::initialize();
     REQUIRE(platform.hasValue());
-    CHECK_FALSE(platform.value().pollEvents().quitRequested);
+    engine::platform::InputState input;
+    CHECK_FALSE(platform.value().pollEvents(input).quitRequested);
 }
 
 TEST_CASE("A second Platform keeps working after the first one is destroyed",

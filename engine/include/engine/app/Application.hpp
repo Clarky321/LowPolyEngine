@@ -3,6 +3,7 @@
 #include "engine/core/FrameClock.hpp"
 #include "engine/core/Result.hpp"
 #include "engine/platform/GlContext.hpp"
+#include "engine/platform/Input.hpp"
 #include "engine/platform/Window.hpp"
 #include "engine/render/Renderer.hpp"
 
@@ -30,6 +31,8 @@ class AppContext {
 public:
     [[nodiscard]] virtual platform::Window& window() noexcept = 0;
     [[nodiscard]] virtual render::Renderer& renderer() noexcept = 0;
+    // Keyboard and mouse state of the current frame.
+    [[nodiscard]] virtual const platform::InputState& input() const noexcept = 0;
 
     // Size of the frame being rendered, in pixels.
     [[nodiscard]] virtual platform::PixelSize framebufferSize() const noexcept = 0;

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <optional>
 #include <string_view>
 #include <system_error>
@@ -90,6 +91,19 @@ public:
 
     void update(engine::app::AppContext& context, const engine::core::FrameTime& time) override
     {
+        using engine::platform::Key;
+        const auto& input = context.input();
+        if (input.wasPressed(Key::Escape)) {
+            context.requestQuit();
+            return;
+        }
+        if (input.wasPressed(Key::F12)) {
+            // Relative to the working directory (the repository root with run.bat);
+            // the folder is ignored by Git.
+            context.requestScreenshot(
+                std::format("screenshots/island-preview-{:06}.png", time.frameIndex));
+        }
+
         // The last frame of a --screenshot run is saved.
         if (options_.screenshotPath && options_.maxFrames &&
             time.frameIndex + 1 == *options_.maxFrames) {

@@ -12,6 +12,7 @@ add_executable(lpe_unit_tests
     unit/core/log_test.cpp
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
+    unit/platform/input_state_test.cpp
     unit/platform/window_desc_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
@@ -20,9 +21,12 @@ catch_discover_tests(lpe_unit_tests)
 
 add_executable(lpe_integration_tests
     integration/application_test.cpp
+    integration/input_events_test.cpp
     integration/platform_test.cpp
 )
-target_link_libraries(lpe_integration_tests PRIVATE engine Catch2::Catch2WithMain)
+# SDL directly: input tests push synthetic events into SDL's queue.
+find_package(SDL3 REQUIRED CONFIG)
+target_link_libraries(lpe_integration_tests PRIVATE engine SDL3::SDL3 Catch2::Catch2WithMain)
 lpe_set_project_warnings(lpe_integration_tests)
 catch_discover_tests(lpe_integration_tests
     PROPERTIES

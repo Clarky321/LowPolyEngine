@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/core/Result.hpp"
+#include "engine/platform/Input.hpp"
 
 namespace engine::platform {
 
@@ -25,8 +26,9 @@ public:
     Platform(const Platform&) = delete;
     Platform& operator=(const Platform&) = delete;
 
-    // Drains all pending OS events. Call once per frame.
-    [[nodiscard]] PlatformEvents pollEvents();
+    // Drains all pending OS events. Call once per frame: starts a new input
+    // frame (InputState::beginFrame) and applies keyboard, mouse and focus events.
+    [[nodiscard]] PlatformEvents pollEvents(InputState& input);
 
 private:
     Platform() = default;

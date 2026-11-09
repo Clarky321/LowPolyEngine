@@ -78,4 +78,9 @@ bool Window::isMinimized() const
     return (SDL_GetWindowFlags(impl_->handle.get()) & SDL_WINDOW_MINIMIZED) != 0;
 }
 
+bool Window::setRelativeMouseMode(bool enabled)
+{
+    return SDL_SetWindowRelativeMouseMode(impl_->handle.get(), enabled);
+}
+
 } // namespace engine::platform

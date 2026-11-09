@@ -54,6 +54,11 @@ public:
     // True while the window is minimized; nothing it renders is visible then.
     [[nodiscard]] bool isMinimized() const;
 
+    // Relative mouse mode hides the cursor and keeps it in the window, while
+    // mouse motion is still reported (e.g. for mouse look). Returns false if
+    // the platform refused the change.
+    bool setRelativeMouseMode(bool enabled);
+
 private:
     // Hides the platform-specific handle so no SDL type appears in this header (ADR 0002).
     struct Impl;
