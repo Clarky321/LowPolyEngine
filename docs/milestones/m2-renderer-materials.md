@@ -15,7 +15,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | ID | Title | Status |
 |---|---|---|
 | M2.1 | Optional normals and UVs in `MeshData` | done |
-| M2.2 | Flat normals and UVs for the primitives | planned |
+| M2.2 | Flat normals and UVs for the primitives | in progress |
 | M2.3 | Upload normals and UVs to the GPU | planned |
 | M2.4 | PNG decoding with stb_image | planned |
 | M2.5 | GPU textures behind handles | planned |
@@ -63,12 +63,15 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** the test-scene primitives carry what lighting and texturing need.
 
-**Scope:**
-- `makeBox`, `makePyramid` and `makeCheckerPlane` give each face one outward unit normal, copied to the face's own vertices.
-- UVs: every box face and the pyramid base map the unit square; pyramid sides map (0, 0), (1, 0), (0.5, 1); the checker plane uses one UV unit per cell, so a texture repeats per cell.
-- The debug text mesh stays without normals and UVs.
+**Scope** (decisions approved 2026-11-10):
+- `makeBox`, `makePyramid` and `makeCheckerPlane` always emit normals and UVs (no option to leave them out). Each face has one outward unit normal, copied to the face's own vertices.
+- Normals: the face axes for the box and the plane; for the pyramid sides the normalized cross product of the face edges, in a local function in `Primitives.cpp`. It computes in double, so very small or very large but finite sizes (1e-30, 1e30) still give unit normals instead of NaN.
+- UV orientation: seen from outside, U points right and V up on every face, so textures are never mirrored; on vertical faces (box sides, pyramid sides) V is world +Y. Box top: U = +X, V = -Z; box bottom and pyramid base (seen from below): U = +X, V = +Z.
+- UV extent: every box face maps the whole unit square, whatever its size (a texture stretches on long faces); pyramid sides map (0, 0), (1, 0) along the base edge and (0.5, 1) at the apex; the pyramid base maps the unit square; the checker plane uses one UV unit per cell (up to 1024), from (0, 0) at the (-X, +Z) corner, with colorA still at the (-X, -Z) corner.
+- The debug text mesh and the test scene stay unchanged (the scene's brightness factors remain until M2.8); the renderer still ignores normals and UVs until M2.3.
+- Public API unchanged; `Primitives.hpp` documents the normals and UVs. No ADR.
 
-**Out of scope:** GPU upload, a general normal-computation helper (needed first by M2.9).
+**Out of scope:** GPU upload, a general public normal-computation helper (needed first by M2.9).
 
 **Acceptance:** every normal has unit length, is perpendicular to its face and points to the side from which the face winds counter-clockwise; UVs are finite and in the documented ranges; vertex and index counts are unchanged; `validate()` passes.
 
