@@ -2,6 +2,8 @@
 # Its GPU smoke tests live in tests/rendering/.
 add_executable(island-preview
     main.cpp
+    DebugOverlay.cpp
+    TestScene.cpp
 )
 
 target_link_libraries(island-preview PRIVATE engine)

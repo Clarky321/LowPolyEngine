@@ -1,7 +1,6 @@
 #pragma once
 
-// OpenGL error reporting. Internal to the OpenGL backend.
-// Messages go to stderr until the engine has a logging system (M1).
+// OpenGL error reporting through the engine log. Internal to the OpenGL backend.
 
 #include <cstdint>
 

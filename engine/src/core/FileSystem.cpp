@@ -45,6 +45,31 @@ Result<std::string> readTextFile(const std::filesystem::path& path)
     return contents;
 }
 
+std::optional<Error> writeBinaryFile(const std::filesystem::path& path,
+                                     std::span<const std::uint8_t> bytes)
+{
+    std::error_code error;
+    if (const auto parent = path.parent_path(); !parent.empty()) {
+        std::filesystem::create_directories(parent, error);
+        if (error) {
+            return Error{"cannot create folder '" + toUtf8(parent) + "': " + error.message()};
+        }
+    }
+
+    std::ofstream file(path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!file) {
+        return Error{"cannot open file '" + toUtf8(path) + "' for writing"};
+    }
+    // char and std::uint8_t have the same size and representation.
+    file.write(reinterpret_cast<const char*>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
+    file.close();
+    if (!file) {
+        return Error{"error while writing file '" + toUtf8(path) + "'"};
+    }
+    return std::nullopt;
+}
+
 std::string toUtf8(const std::filesystem::path& path)
 {
     const std::u8string text = path.generic_u8string();

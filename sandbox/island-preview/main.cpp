@@ -1,18 +1,30 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
-// M0.5 scope: OpenGL 4.5 core context and a test triangle.
+// M1 scope: engine loop, input, free-fly camera and a static test scene.
+//
+// Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
+// up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
+// debug overlay, F12 saves a screenshot to screenshots/, Escape quits.
 
+#include "DebugOverlay.hpp"
+#include "TestScene.hpp"
+
+#include "engine/app/Application.hpp"
+#include "engine/camera/Camera.hpp"
+#include "engine/camera/FreeFlyController.hpp"
+#include "engine/core/Log.hpp"
 #include "engine/core/Version.hpp"
-#include "engine/platform/GlContext.hpp"
-#include "engine/platform/Platform.hpp"
-#include "engine/platform/Window.hpp"
-#include "engine/render/Renderer.hpp"
+
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <charconv>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <optional>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace {
 
@@ -25,24 +37,31 @@ constexpr bool kDebugBuild = true;
 // Placeholder sky tone until the scene has real lighting.
 constexpr engine::render::Color kClearColor{0.53F, 0.74F, 0.86F, 1.0F};
 
+// Frames rendered before a --screenshot is taken when --frames is not given.
+// Long enough for the frame statistics to fill their first window.
+constexpr std::uint64_t kDefaultScreenshotFrames = 120;
+
 // Process exit codes, so smoke tests can tell failures apart.
-constexpr int kExitUsage = 2;
 constexpr int kExitStartupFailed = 1;
+constexpr int kExitUsage = 2;
 constexpr int kExitGlErrors = 3;
+constexpr int kExitScreenshotFailed = 4;
 
 struct Options {
     // Stop after this many frames (smoke tests); empty means run until closed.
-    std::optional<int> maxFrames;
+    std::optional<std::uint64_t> maxFrames;
     // Relative to the working directory; scripts/windows/run.bat and the CTest
     // tests start the program from the repository root.
     std::filesystem::path assetDirectory = "assets";
+    // Save the last frame as PNG and exit.
+    std::optional<std::filesystem::path> screenshotPath;
 };
 
-std::optional<int> parsePositiveInt(std::string_view text)
+std::optional<std::uint64_t> parsePositiveInt(std::string_view text)
 {
-    int value = 0;
+    std::uint64_t value = 0;
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-    if (error != std::errc{} || end != text.data() + text.size() || value <= 0) {
+    if (error != std::errc{} || end != text.data() + text.size() || value == 0) {
         return std::nullopt;
     }
     return value;
@@ -61,18 +80,169 @@ std::optional<Options> parseOptions(int argc, char** argv)
             }
         } else if (arg == "--assets" && hasValue) {
             options.assetDirectory = argv[++i];
+        } else if (arg == "--screenshot" && hasValue) {
+            options.screenshotPath = std::filesystem::path(argv[++i]);
         } else {
             return std::nullopt;
         }
     }
+    if (options.screenshotPath && !options.maxFrames) {
+        options.maxFrames = kDefaultScreenshotFrames;
+    }
     return options;
 }
 
-int fail(const engine::core::Error& error)
+// Starting view: front-right of the pyramid, slightly above, looking at its tip,
+// so two of its faces and the ground perspective are visible.
+engine::camera::Camera initialCamera()
 {
-    std::fprintf(stderr, "error: %s\n", error.message.c_str());
-    return kExitStartupFailed;
+    engine::camera::Camera camera;
+    camera.position = {11.0F, 7.5F, 22.0F};
+    camera.yawRadians = 0.4636F; // atan2(11, 22): towards the origin
+    camera.pitchRadians = -0.24F;
+    return camera;
 }
+
+class IslandPreview final : public engine::app::Application {
+public:
+    explicit IslandPreview(const Options& options) : options_(options) {}
+
+    std::optional<engine::core::Error> start(engine::app::AppContext& context) override
+    {
+        for (auto& object : island_preview::buildTestScene()) {
+            auto handle = context.renderer().createMesh(object.mesh);
+            if (!handle) {
+                return handle.error();
+            }
+            meshes_.push_back({handle.value(), object.position, object.spinRadiansPerSecond});
+        }
+        // Rebuilt every frame; starts empty.
+        auto overlay = context.renderer().createMesh(engine::geometry::MeshData{});
+        if (!overlay) {
+            return overlay.error();
+        }
+        overlay_ = overlay.value();
+        engine::core::logInfo("app",
+                              "test scene: {} meshes; hold the right mouse button to look "
+                              "around, WASD to fly, Escape to quit",
+                              meshes_.size());
+        return std::nullopt;
+    }
+
+    void stop(engine::app::AppContext& context) override
+    {
+        for (const auto& mesh : meshes_) {
+            context.renderer().destroyMesh(mesh.handle);
+        }
+        meshes_.clear();
+        context.renderer().destroyMesh(overlay_);
+        context.window().setRelativeMouseMode(false);
+    }
+
+    void update(engine::app::AppContext& context, const engine::core::FrameTime& time) override
+    {
+        using engine::platform::Key;
+        using engine::platform::MouseButton;
+        const auto& input = context.input();
+        if (input.wasPressed(Key::Escape)) {
+            context.requestQuit();
+            return;
+        }
+        if (input.wasPressed(Key::F12)) {
+            // Relative to the working directory (the repository root with run.bat);
+            // the folder is ignored by Git.
+            context.requestScreenshot(
+                std::format("screenshots/island-preview-{:06}.png", time.frameIndex));
+        }
+        if (input.wasPressed(Key::F1)) {
+            showOverlay_ = !showOverlay_;
+        }
+
+        // Mouse look while the right button is held; the cursor is hidden and
+        // captured meanwhile, so it cannot leave the window mid-turn.
+        const bool wantMouseLook = input.isDown(MouseButton::Right);
+        if (wantMouseLook != mouseLook_) {
+            mouseLook_ = wantMouseLook;
+            context.window().setRelativeMouseMode(mouseLook_);
+        }
+        controller_.update(camera_, engine::camera::readFlyInput(input, mouseLook_),
+                           static_cast<float>(time.deltaSeconds));
+        sceneSeconds_ = static_cast<float>(time.elapsedSeconds);
+
+        // The last frame of a --screenshot run is saved.
+        if (options_.screenshotPath && options_.maxFrames &&
+            time.frameIndex + 1 == *options_.maxFrames) {
+            context.requestScreenshot(*options_.screenshotPath);
+        }
+    }
+
+    void render(engine::app::AppContext& context) override
+    {
+        const auto size = context.framebufferSize();
+        auto& renderer = context.renderer();
+        renderer.setView({
+            .view = engine::camera::viewMatrix(camera_),
+            .projection = engine::camera::projectionMatrix(
+                camera_, engine::camera::aspectRatio(size.width, size.height)),
+        });
+        for (const auto& mesh : meshes_) {
+            engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, mesh.position);
+            if (mesh.spinRadiansPerSecond != 0.0F) {
+                model = glm::rotate(model, mesh.spinRadiansPerSecond * sceneSeconds_,
+                                    engine::camera::kWorldUp);
+            }
+            renderer.drawMesh(mesh.handle, model);
+        }
+
+        if (showOverlay_) {
+            renderOverlay(context);
+        }
+    }
+
+private:
+    // Screen-space text on top of the scene: no depth test, alpha blending.
+    void renderOverlay(engine::app::AppContext& context)
+    {
+        auto& renderer = context.renderer();
+        const auto size = context.framebufferSize();
+        island_preview::buildOverlay(overlayText_, {
+                                                       .frame = context.frameStats(),
+                                                       .renderer = renderer.info(),
+                                                       .renderStats = renderer.lastFrameStats(),
+                                                       .framebuffer = size,
+                                                       .camera = camera_,
+                                                       .moveSpeed = controller_.moveSpeed(),
+                                                   });
+        if (auto error = renderer.updateMesh(overlay_, overlayText_.mesh())) {
+            // Not fatal: the scene still renders. Log once, then hide the overlay.
+            engine::core::logError("app", "debug overlay disabled: {}", error->message);
+            showOverlay_ = false;
+            return;
+        }
+        renderer.setView({
+            .projection = engine::debug::overlayProjection(size.width, size.height),
+            .depth = engine::render::DepthMode::Off,
+            .blend = engine::render::BlendMode::Alpha,
+        });
+        renderer.drawMesh(overlay_);
+    }
+
+    struct SceneMesh {
+        engine::render::MeshHandle handle;
+        engine::math::Vec3 position{0.0F};
+        float spinRadiansPerSecond = 0.0F;
+    };
+
+    Options options_;
+    std::vector<SceneMesh> meshes_;
+    engine::camera::Camera camera_ = initialCamera();
+    engine::camera::FreeFlyController controller_;
+    bool mouseLook_ = false;
+    float sceneSeconds_ = 0.0F;
+    engine::render::MeshHandle overlay_;
+    engine::debug::TextMeshBuilder overlayText_;
+    bool showOverlay_ = true;
+};
 
 } // namespace
 
@@ -80,60 +250,33 @@ int main(int argc, char** argv)
 {
     const auto options = parseOptions(argc, argv);
     if (!options) {
-        std::fprintf(stderr, "usage: island-preview [--frames N] [--assets DIR]\n");
+        std::fprintf(stderr,
+                     "usage: island-preview [--frames N] [--assets DIR] [--screenshot FILE.png]\n");
         return kExitUsage;
     }
 
-    // Declaration order is the required lifetime order: each object is
-    // destroyed before the one it depends on (platform > window > context > renderer).
-    auto platform = engine::platform::Platform::initialize();
-    if (!platform) {
-        return fail(platform.error());
-    }
-
-    const engine::platform::WindowDesc windowDesc{
-        .title = "LowPolyEngine " + engine::core::toString(engine::core::engineVersion()) +
-                 " - Island Preview",
-        .openGl = true,
+    const engine::app::ApplicationDesc desc{
+        .window = {.title = "LowPolyEngine " +
+                            engine::core::toString(engine::core::engineVersion()) +
+                            " - Island Preview"},
+        .context = {.debug = kDebugBuild},
+        .assetDirectory = options->assetDirectory,
+        .clearColor = kClearColor,
+        .maxFrames = options->maxFrames,
     };
-    auto window = engine::platform::Window::create(platform.value(), windowDesc);
-    if (!window) {
-        return fail(window.error());
-    }
 
-    auto context = engine::platform::GlContext::create(
-        window.value(), engine::platform::GlContextDesc{.debug = kDebugBuild});
-    if (!context) {
-        return fail(context.error());
+    IslandPreview app(*options);
+    const auto result = engine::app::run(app, desc);
+    if (!result) {
+        engine::core::logError("app", "{}", result.error().message);
+        return kExitStartupFailed;
     }
-    if (!context.value().vsyncEnabled()) {
-        std::fprintf(stderr, "warning: vsync is not available; the frame rate is not limited\n");
-    }
-
-    auto renderer = engine::render::Renderer::create({
-        .glProcLoader = context.value().procLoader(),
-        .shaderDirectory = options->assetDirectory / "shaders",
-        .debugOutput = kDebugBuild,
-    });
-    if (!renderer) {
-        return fail(renderer.error());
-    }
-
-    for (int frame = 0; !options->maxFrames || frame < *options->maxFrames; ++frame) {
-        if (platform.value().pollEvents().quitRequested) {
-            break;
-        }
-        const auto size = window.value().pixelSize();
-        renderer.value().beginFrame(size.width, size.height, kClearColor);
-        renderer.value().drawTestTriangle();
-        renderer.value().endFrame();
-        // With vsync this waits for the display refresh and paces the loop.
-        context.value().swapBuffers();
-    }
-
-    if (const auto errors = renderer.value().errorCount(); errors > 0) {
-        std::fprintf(stderr, "error: %u OpenGL error(s) occurred\n", errors);
+    if (const auto errors = result.value().openGlErrors; errors > 0) {
+        engine::core::logError("app", "{} OpenGL error(s) occurred", errors);
         return kExitGlErrors;
+    }
+    if (result.value().failedScreenshots > 0) {
+        return kExitScreenshotFailed;
     }
     return 0;
 }

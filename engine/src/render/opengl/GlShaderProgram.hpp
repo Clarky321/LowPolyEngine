@@ -23,6 +23,8 @@ public:
 
     void use() const;
 
+    [[nodiscard]] GLuint name() const noexcept { return program_.get(); }
+
 private:
     explicit GlShaderProgram(GlProgram program) noexcept;
 

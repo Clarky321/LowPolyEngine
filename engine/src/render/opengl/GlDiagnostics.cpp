@@ -1,9 +1,10 @@
 #include "GlDiagnostics.hpp"
 
+#include "engine/core/Log.hpp"
+
 #include <glad/gl.h>
 
 #include <cstddef>
-#include <cstdio>
 #include <string_view>
 
 namespace engine::render::opengl {
@@ -81,8 +82,16 @@ void GLAD_API_PTR onDebugMessage(GLenum /*source*/, GLenum type, GLuint id, GLen
         return;
     }
     const std::string_view text(message, length > 0 ? static_cast<std::size_t>(length) : 0U);
-    std::fprintf(stderr, "[render] GL debug (%s, %s, id %u): %.*s\n", debugTypeName(type),
-                 debugSeverityName(severity), id, static_cast<int>(text.size()), text.data());
+    // Performance notes (e.g. "pixel transfer is synchronized" on every frame
+    // capture) are expected costs, not problems.
+    auto level = core::LogLevel::Warning;
+    if (type == GL_DEBUG_TYPE_ERROR) {
+        level = core::LogLevel::Error;
+    } else if (type == GL_DEBUG_TYPE_PERFORMANCE) {
+        level = core::LogLevel::Debug;
+    }
+    core::log(level, "render", "GL debug ({}, {}, id {}): {}", debugTypeName(type),
+              debugSeverityName(severity), id, text);
 }
 
 } // namespace
@@ -114,8 +123,8 @@ std::uint32_t checkGlErrors(const char* where)
         if (error == GL_NO_ERROR) {
             break;
         }
-        std::fprintf(stderr, "[render] OpenGL error after %s: %s (0x%04X)\n", where,
-                     errorName(error), error);
+        core::logError("render", "OpenGL error after {}: {} (0x{:04X})", where, errorName(error),
+                       error);
         ++count;
     }
     return count;

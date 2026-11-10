@@ -11,7 +11,7 @@ _SDL_UNUSED_SUBSYSTEMS = (
     "gpu",
     "haptic",
     "hidapi",
-    "joystick",  # enable together with controller input (M1+)
+    "joystick",  # enable together with gamepad input (not part of M1)
     "power",
     "render",
     "sensor",
@@ -33,6 +33,10 @@ class LowPolyEngineConan(ConanFile):
     def requirements(self):
         # Window, events and the OpenGL context (ADR 0002).
         self.requires("sdl/3.4.16")
+        # Vector/matrix math behind engine::math (header-only, ADR 0007).
+        self.requires("glm/1.0.3")
+        # PNG encoding for frame captures (stb_image_write; header-only, ADR 0006).
+        self.requires("stb/cci.20261021")
         # Unit tests only; never linked into the engine runtime.
         self.test_requires("catch2/3.16.1")
 

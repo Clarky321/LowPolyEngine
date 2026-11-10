@@ -52,15 +52,15 @@ Official/reference links:
 
 | Library | Use | Decision |
 |---|---|---|
-| GLM | Vectors, matrices, quaternions | Adopt. Keep GLM types behind engine math aliases/facades if API independence becomes important. |
-| spdlog | Logging | Adopt. Initialize early; route engine/editor logs through one configurable logger. |
+| GLM | Vectors, matrices, quaternions | Adopted in M1 (`glm/1.0.3`, ADR 0007) behind `engine::math` aliases in `engine/core/Math.hpp`. |
+| spdlog | Logging | Candidate, not adopted. M1 routes all engine logs through `engine/core/Log.hpp` (levels, categories, `std::format`), which needs no dependency. Swap the implementation behind that header if sinks, files or async logging become necessary. |
 | GLAD 2 | OpenGL function loading | Adopt for OpenGL backend. Generate against the project's target API and pin generated source/metadata. |
 | EnTT | ECS | Candidate/adopt for initial scene runtime. Keep persistent IDs separate from transient EnTT entity handles. |
 | Dear ImGui | Editor UI | Adopt for first editor prototype. Use official SDL3 + OpenGL/Vulkan backends where applicable. |
 | Catch2 v3 | Unit/integration testing | Adopt with CTest. Use one main test framework. |
 | Lua 5.5.1 | Embedded scripts | Candidate baseline; validate Conan package and toolchain across target platforms. Lua official release list identifies 5.5.1 (3 Aug 2026) as current at research time. |
 | LuaBridge3 | C++ ↔ Lua bindings | Candidate. Prove compatibility with selected Lua 5.5.1 package; otherwise use a small project-owned wrapper around Lua C API. |
-| stb_image / tinyobjloader / meshoptimizer | Asset import/processing | Add only when the asset pipeline milestone needs them; verify licenses and current maintenance before selection. |
+| stb_image / tinyobjloader / meshoptimizer | Asset import/processing | Add only when the asset pipeline milestone needs them; verify licenses and current maintenance before selection. `stb_image_write` from the `stb` package is already used for frame captures (M1, ADR 0006). |
 | Tracy | Profiling | Optional later tool; add after there is meaningful runtime behavior to profile. |
 
 Lua release reference: <https://www.lua.org/versions.html>  

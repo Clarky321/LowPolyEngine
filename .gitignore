@@ -72,3 +72,6 @@ Testing/
 
 # Personal CMake presets
 CMakeUserPresets.json
+
+# Screenshots taken with F12 at runtime. Curated screenshots live in docs/screenshots/.
+/screenshots/

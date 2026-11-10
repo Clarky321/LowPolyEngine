@@ -191,9 +191,11 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** user can fly around a simple static test scene; camera/input math tests pass.
 
+**Status:** implemented (2026-11-10), delivered as M1.1–M1.7; Windows MSVC Debug/Release builds, headless and GPU tiers pass locally; Linux CI result pending. Additions beyond the original bullet list, because the exit criterion needed them: CPU-side `geometry::MeshData` with vertex/index buffer upload and generation-checked mesh handles (ADR 0007, originally listed under M2), frame capture to PNG for the screenshot workflow (ADR 0006), and a texture-free debug text overlay. Logging is a small project-owned `std::format` logger; spdlog was not needed. Screenshots: `docs/screenshots/m1/`.
+
 ### M2 — Low-poly renderer and materials
 
-- Mesh/material abstractions, vertex/index buffers, shader loading, vertex color and texture sampling.
+- Material abstraction, normals/UVs in `MeshData`, vertex color and texture sampling (mesh upload, index buffers and shader loading exist since M1).
 - Directional light and clear visual style.
 - Basic model/texture import proof.
 

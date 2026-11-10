@@ -6,19 +6,35 @@ find_package(Catch2 3 REQUIRED CONFIG)
 include(Catch)
 
 add_executable(lpe_unit_tests
+    unit/camera/camera_test.cpp
+    unit/camera/free_fly_controller_test.cpp
     unit/core/filesystem_test.cpp
+    unit/core/frame_clock_test.cpp
+    unit/core/image_test.cpp
+    unit/core/log_test.cpp
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
+    unit/debug/text_mesh_test.cpp
+    unit/geometry/mesh_data_test.cpp
+    unit/geometry/primitives_test.cpp
+    unit/platform/input_state_test.cpp
     unit/platform/window_desc_test.cpp
+    unit/render/handle_pool_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
+# GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.
+target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 lpe_set_project_warnings(lpe_unit_tests)
 catch_discover_tests(lpe_unit_tests)
 
 add_executable(lpe_integration_tests
+    integration/application_test.cpp
+    integration/input_events_test.cpp
     integration/platform_test.cpp
 )
-target_link_libraries(lpe_integration_tests PRIVATE engine Catch2::Catch2WithMain)
+# SDL directly: input tests push synthetic events into SDL's queue.
+find_package(SDL3 REQUIRED CONFIG)
+target_link_libraries(lpe_integration_tests PRIVATE engine SDL3::SDL3 Catch2::Catch2WithMain)
 lpe_set_project_warnings(lpe_integration_tests)
 catch_discover_tests(lpe_integration_tests
     PROPERTIES
