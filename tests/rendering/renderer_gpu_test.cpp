@@ -53,7 +53,12 @@ struct GpuRenderer {
     int height = 0;
 };
 
-GpuRenderer createRenderer()
+// Test-only shaders that show one vertex attribute as color (relative to the
+// repository root, where the GPU tests run).
+constexpr const char* kNormalAsColorShaders = "tests/rendering/fixtures/normal-as-color/shaders";
+constexpr const char* kUvAsColorShaders = "tests/rendering/fixtures/uv-as-color/shaders";
+
+GpuRenderer createRenderer(const char* shaderDirectory = "assets/shaders")
 {
     GpuRenderer gpu;
     auto platform = engine::platform::Platform::initialize();
@@ -74,7 +79,7 @@ GpuRenderer createRenderer()
     gpu.context.emplace(std::move(context).value());
 
     auto renderer = Renderer::create({.glProcLoader = gpu.context->procLoader(),
-                                      .shaderDirectory = "assets/shaders",
+                                      .shaderDirectory = shaderDirectory,
                                       .debugOutput = true});
     REQUIRE(renderer.hasValue());
     gpu.renderer.emplace(std::move(renderer).value());
@@ -156,6 +161,25 @@ MeshHandle upload(Renderer& renderer, const MeshData& mesh)
     REQUIRE(handle.hasValue());
     return handle.value();
 }
+
+// quad() with one normal on all corners and/or UVs covering the unit square:
+// (0, 0) at the bottom-left corner, U to the right, V up.
+MeshData attributedQuad(const Vec4& color, std::optional<Vec3> normal, bool withUvs,
+                        float halfSize = 1.0F)
+{
+    MeshData mesh = quad(0.0F, color, halfSize);
+    if (normal) {
+        mesh.normals.assign(4, *normal);
+    }
+    if (withUvs) {
+        mesh.uvs = {{0.0F, 0.0F}, {1.0F, 0.0F}, {1.0F, 1.0F}, {0.0F, 1.0F}};
+    }
+    return mesh;
+}
+
+// Expected colors of the normal-as-color shader (normal * 0.5 + 0.5).
+const Rgb kNoNormal{128, 128, 128};
+const Rgb kNormalTowardsViewer{128, 128, 255}; // (0, 0, 1)
 
 } // namespace
 
@@ -361,4 +385,92 @@ TEST_CASE("captureFrame fails before the first frame", "[render][gpu]")
     const auto image = gpu.renderer->captureFrame();
     REQUIRE_FALSE(image.hasValue());
     CHECK(image.error().message.find("no frame") != std::string::npos);
+}
+
+TEST_CASE("Normals and UVs do not change the default mesh shading", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    const Vec4 red{1.0F, 0.0F, 0.0F, 1.0F};
+    const MeshHandle plain = upload(*gpu.renderer, attributedQuad(red, std::nullopt, false));
+    const MeshHandle attributed =
+        upload(*gpu.renderer, attributedQuad(red, Vec3{0.0F, 0.0F, 1.0F}, true));
+
+    const Image plainImage = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(plain); });
+    const Image attributedImage = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(attributed); });
+    CHECK(near(pixelAt(plainImage, 0.5F, 0.5F), kRed));
+    INFO("attributed " << describe(pixelAt(attributedImage, 0.5F, 0.5F)));
+    CHECK(near(pixelAt(attributedImage, 0.5F, 0.5F), kRed));
+    CHECK(near(pixelAt(attributedImage, 0.1F, 0.9F), kRed));
+    CHECK(gpu.renderer->errorCount() == 0);
+}
+
+TEST_CASE("Normals reach the vertex shader; meshes without them read (0, 0, 0)", "[render][gpu]")
+{
+    auto gpu = createRenderer(kNormalAsColorShaders);
+    // (0, 0.6, 0.8) is unit length; shown as (0.5, 0.8, 0.9).
+    const Rgb expectedLeft{128, 204, 230};
+    const MeshHandle withNormals =
+        upload(*gpu.renderer, attributedQuad(Vec4{1.0F}, Vec3{0.0F, 0.6F, 0.8F}, false, 0.5F));
+    const MeshHandle withoutNormals =
+        upload(*gpu.renderer, attributedQuad(Vec4{1.0F}, std::nullopt, false, 0.5F));
+
+    // Side by side in one frame: the attribute is enabled per mesh.
+    const Image image = renderFrame(gpu, [&](Renderer& r) {
+        r.drawMesh(withNormals, glm::translate(Mat4{1.0F}, Vec3{-0.5F, 0.0F, 0.0F}));
+        r.drawMesh(withoutNormals, glm::translate(Mat4{1.0F}, Vec3{0.5F, 0.0F, 0.0F}));
+    });
+    INFO("left " << describe(pixelAt(image, 0.25F, 0.5F)) << ", right "
+                 << describe(pixelAt(image, 0.75F, 0.5F)));
+    CHECK(near(pixelAt(image, 0.25F, 0.5F), expectedLeft));
+    CHECK(near(pixelAt(image, 0.75F, 0.5F), kNoNormal));
+    CHECK(gpu.renderer->errorCount() == 0);
+}
+
+TEST_CASE("UVs reach the vertex shader; meshes without them read (0, 0)", "[render][gpu]")
+{
+    auto gpu = createRenderer(kUvAsColorShaders);
+    const MeshHandle withUvs =
+        upload(*gpu.renderer, attributedQuad(Vec4{1.0F}, std::nullopt, true));
+    const MeshHandle withoutUvs =
+        upload(*gpu.renderer, attributedQuad(Vec4{1.0F}, std::nullopt, false));
+
+    // Red shows U, green V. Top-left quarter: U about 0.25, V about 0.75 (V
+    // points up); bottom-right quarter: the other way round.
+    const Image image = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(withUvs); });
+    INFO("top left " << describe(pixelAt(image, 0.25F, 0.25F)) << ", bottom right "
+                     << describe(pixelAt(image, 0.75F, 0.75F)));
+    CHECK(near(pixelAt(image, 0.25F, 0.25F), Rgb{64, 191, 0}, 4));
+    CHECK(near(pixelAt(image, 0.75F, 0.75F), Rgb{191, 64, 0}, 4));
+
+    const Image without = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(withoutUvs); });
+    CHECK(near(pixelAt(without, 0.5F, 0.5F), Rgb{0, 0, 0}));
+    CHECK(gpu.renderer->errorCount() == 0);
+}
+
+TEST_CASE("updateMesh can add and remove normals and UVs", "[render][gpu]")
+{
+    auto gpu = createRenderer(kNormalAsColorShaders);
+    const Vec4 white{1.0F};
+    const MeshHandle mesh = upload(*gpu.renderer, attributedQuad(white, std::nullopt, false));
+    const auto centerAfterDraw = [&]() {
+        const Image image = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh); });
+        return pixelAt(image, 0.5F, 0.5F);
+    };
+    CHECK(near(centerAfterDraw(), kNoNormal));
+
+    // Same vertex count each time: the buffers are reused while the layout changes.
+    REQUIRE_FALSE(
+        gpu.renderer->updateMesh(mesh, attributedQuad(white, Vec3{0.0F, 0.0F, 1.0F}, true))
+            .has_value());
+    CHECK(near(centerAfterDraw(), kNormalTowardsViewer));
+
+    REQUIRE_FALSE(
+        gpu.renderer->updateMesh(mesh, attributedQuad(white, std::nullopt, true)).has_value());
+    CHECK(near(centerAfterDraw(), kNoNormal));
+
+    REQUIRE_FALSE(
+        gpu.renderer->updateMesh(mesh, attributedQuad(white, Vec3{0.0F, 0.0F, 1.0F}, false))
+            .has_value());
+    CHECK(near(centerAfterDraw(), kNormalTowardsViewer));
+    CHECK(gpu.renderer->errorCount() == 0);
 }

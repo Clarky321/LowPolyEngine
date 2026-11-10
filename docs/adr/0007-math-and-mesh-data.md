@@ -62,3 +62,10 @@ M2 needs per-vertex normals (lighting, M2.8) and texture coordinates (texturing,
 - The size arithmetic lives in the internal header `engine/src/geometry/MeshLimits.hpp`, so the 32-bit limits are unit-tested with plain numbers instead of meshes with billions of vertices.
 
 The renderer still uploads only positions and colors; uploading normals and UVs is M2.3. Every mesh it receives is validated with the rules above.
+
+## Amendment 2: normals and UVs on the GPU (M2.3, 2026-11-10)
+
+- **Buffer layout.** `GlMesh`'s vertex buffer holds four ranges for its vertex capacity: positions, colors, normals, UVs (still structure of arrays, no interleaving copy). Space for normals and UVs is always reserved, about 48 instead of 28 bytes per vertex, so an update that adds or removes an optional attribute reuses the buffers like any other update. Lit meshes will carry normals anyway; the meshes without them (debug text) are small.
+- **Shader interface.** Vertex inputs `aNormal` at location 2 and `aUv` at location 3, next to `aPosition` (0) and `aColor` (1). Each attribute has its own buffer binding with the same number.
+- **Absent attributes.** A mesh without normals or UVs has that array disabled in its vertex array object, and the shader reads a fixed value set once at renderer startup: normal (0, 0, 0), meaning "no normal", and UV (0, 0). The values are context state; the renderer owns the context's attribute defaults. Later steps that need normals or UVs (lighting, textures) reject meshes without them rather than relying on these values.
+- **Startup check.** `aPosition`, `aColor` and `uModelViewProjection` stay required. `aNormal` and `aUv` may be inactive, because the compiler removes inputs a shader does not use (the default shader does not use them before lighting and textures), but an active one must sit at its location; otherwise startup fails with the input name and both locations.

@@ -31,6 +31,8 @@ constexpr const char* kMeshFragmentShader = "mesh.frag";
 constexpr const char* kMvpUniform = "uModelViewProjection";
 constexpr const char* kPositionAttribute = "aPosition";
 constexpr const char* kColorAttribute = "aColor";
+constexpr const char* kNormalAttribute = "aNormal";
+constexpr const char* kUvAttribute = "aUv";
 
 struct LoadedProgram {
     GlShaderProgram program;
@@ -63,10 +65,22 @@ core::Result<LoadedProgram> loadProgram(const std::filesystem::path& directory,
 
 // The mesh program must expose the interface GlMesh and drawMesh rely on.
 // Catches renamed or unused (optimized away) variables with a clear message
-// instead of a silently black or empty frame.
+// instead of a silently black or empty frame. Normals and UVs are optional:
+// the compiler removes inputs a shader does not use, so they may be inactive,
+// but an active one must sit at its GlMesh location.
 std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, GLint& mvpLocation)
 {
     const GLuint program = loaded.program.name();
+    const auto checkOptionalAttribute = [&](const char* name,
+                                            GLuint location) -> std::optional<core::Error> {
+        const GLint actual = glGetAttribLocation(program, name);
+        if (actual < 0 || actual == static_cast<GLint>(location)) {
+            return std::nullopt;
+        }
+        return core::Error{"shader program " + loaded.description + ": vertex input '" + name +
+                           "' must be at location " + std::to_string(location) + " (found at " +
+                           std::to_string(actual) + ")"};
+    };
     const auto requireAttribute = [&](const char* name,
                                       GLuint location) -> std::optional<core::Error> {
         const GLint actual = glGetAttribLocation(program, name);
@@ -82,6 +96,12 @@ std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, GLint
         return error;
     }
     if (auto error = requireAttribute(kColorAttribute, opengl::kColorLocation)) {
+        return error;
+    }
+    if (auto error = checkOptionalAttribute(kNormalAttribute, opengl::kNormalLocation)) {
+        return error;
+    }
+    if (auto error = checkOptionalAttribute(kUvAttribute, opengl::kUvLocation)) {
         return error;
     }
     mvpLocation = glGetUniformLocation(program, kMvpUniform);
@@ -196,6 +216,8 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     glDepthFunc(GL_LESS);
+    // What the shader reads for normals or UVs a mesh does not have.
+    opengl::setMissingAttributeDefaults();
 
     auto impl = std::make_unique<Impl>(std::move(loaded).value().program, mvpLocation, debugOutput);
     impl->errorCount += opengl::checkGlErrors("renderer setup");

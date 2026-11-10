@@ -57,3 +57,10 @@ lpe_add_gpu_test(island_preview_shader_missing_uniform
     island-preview --frames 1 --assets "${fixtures}/missing-uniform")
 set_tests_properties(island_preview_shader_missing_uniform PROPERTIES
     PASS_REGULAR_EXPRESSION "uniform mat4 'uModelViewProjection' is missing or unused")
+
+# An optional input (normals, UVs) that is used at the wrong location would read
+# the wrong buffer range; it is named with both locations.
+lpe_add_gpu_test(island_preview_shader_wrong_attribute_location
+    island-preview --frames 1 --assets "${fixtures}/wrong-attribute-location")
+set_tests_properties(island_preview_shader_wrong_attribute_location PROPERTIES
+    PASS_REGULAR_EXPRESSION "vertex input 'aNormal' must be at location 2 \\(found at 4\\)")

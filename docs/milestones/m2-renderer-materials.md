@@ -16,7 +16,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 |---|---|---|
 | M2.1 | Optional normals and UVs in `MeshData` | done |
 | M2.2 | Flat normals and UVs for the primitives | done |
-| M2.3 | Upload normals and UVs to the GPU | planned |
+| M2.3 | Upload normals and UVs to the GPU | in progress |
 | M2.4 | PNG decoding with stb_image | planned |
 | M2.5 | GPU textures behind handles | planned |
 | M2.6 | Materials with a base color | planned |
@@ -81,13 +81,12 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** the OpenGL backend uploads the optional attributes and the mesh shaders receive them.
 
-**Scope:**
-- `GlMesh` stores normals and UVs as further ranges of its vertex buffer (same structure-of-arrays layout as today) at attribute locations 2 (`aNormal`) and 3 (`aUv`). Absent attributes are disabled and the shader reads a fixed default.
-- Updates that add or remove an optional attribute keep working, including buffer reuse.
-- `mesh.vert` declares the inputs with explicit locations; the frame looks the same as before.
-- GPU tests: meshes with and without normals/UVs draw the same; updates between layouts; a test-only shader that outputs normal or UV as color proves the data arrives (readback).
-
-**Risk:** GLSL compilers drop unused inputs, so the startup interface check may only require what the shaders actually use. Broken-shader fixtures are updated if the check changes.
+**Scope** (decisions taken while implementing, ADR 0007 Amendment 2):
+- `GlMesh` stores normals and UVs as further ranges of its vertex buffer (same structure-of-arrays layout as today) at attribute locations 2 (`aNormal`) and 3 (`aUv`), one buffer binding per attribute. The buffer always reserves space for all four ranges (about 48 instead of 28 bytes per vertex), so adding or removing an optional attribute in an update reuses the buffers.
+- Absent attributes are disabled per mesh, and the shader reads fixed defaults set once at renderer startup: normal (0, 0, 0), meaning "no normal", and UV (0, 0).
+- `mesh.vert` declares the inputs with explicit locations but does not use them yet; the frame looks the same as before.
+- Startup interface check: `aPosition`, `aColor` and `uModelViewProjection` stay required. `aNormal` and `aUv` may be inactive (the compiler drops unused inputs), but an active one must be at its location, else startup fails naming the input and both locations. New broken-shader fixture `wrong-attribute-location`.
+- GPU tests: meshes with and without normals/UVs draw the same with the default shaders; test-only shaders (`normal-as-color`, `uv-as-color` fixtures) prove the data arrives and that meshes without the attribute read the defaults, also side by side in one frame; updates add and remove normals and UVs.
 
 **Visual check:** island-preview looks as in `docs/screenshots/m1/004-debug-overlay.png`, compared by eye; no new screenshot.
 

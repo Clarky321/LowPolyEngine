@@ -7,17 +7,22 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace engine::render::opengl {
 
 namespace {
 
 // Buffer layout relies on tightly packed GLM vectors (the GLM default).
+static_assert(sizeof(math::Vec2) == 2 * sizeof(float));
 static_assert(sizeof(math::Vec3) == 3 * sizeof(float));
 static_assert(sizeof(math::Vec4) == 4 * sizeof(float));
 
+// One vertex buffer binding per attribute.
 constexpr GLuint kPositionBinding = 0;
 constexpr GLuint kColorBinding = 1;
+constexpr GLuint kNormalBinding = 2;
+constexpr GLuint kUvBinding = 3;
 
 // glDrawElements takes the index count as GLsizei (signed 32-bit).
 constexpr std::size_t kMaxIndexCount =
@@ -26,6 +31,25 @@ constexpr std::size_t kMaxIndexCount =
 GLsizeiptr byteSize(std::size_t count, std::size_t elementSize)
 {
     return static_cast<GLsizeiptr>(count * elementSize);
+}
+
+// Byte offsets of the four attribute ranges in a vertex buffer for
+// `capacity` vertices (positions start at 0), and the buffer's total size.
+struct VertexRanges {
+    GLintptr colors = 0;
+    GLintptr normals = 0;
+    GLintptr uvs = 0;
+    GLsizeiptr size = 0;
+};
+
+VertexRanges rangesFor(std::uint32_t capacity)
+{
+    VertexRanges ranges;
+    ranges.colors = byteSize(capacity, sizeof(math::Vec3));
+    ranges.normals = ranges.colors + byteSize(capacity, sizeof(math::Vec4));
+    ranges.uvs = ranges.normals + byteSize(capacity, sizeof(math::Vec3));
+    ranges.size = ranges.uvs + byteSize(capacity, sizeof(math::Vec2));
+    return ranges;
 }
 
 // Room for the requested count plus 50 %, so a slowly growing mesh does not
@@ -37,7 +61,35 @@ std::uint32_t grownCapacity(std::size_t needed, std::uint32_t current)
     return static_cast<std::uint32_t>(std::clamp<std::size_t>(grown, 1, limit));
 }
 
+// A float attribute with `components` values per vertex, read from `binding`.
+void describeAttribute(GLuint layout, GLuint location, GLuint binding, GLint components)
+{
+    glVertexArrayAttribFormat(layout, location, components, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(layout, location, binding);
+}
+
+void setAttributeEnabled(GLuint layout, GLuint location, bool enabled)
+{
+    if (enabled) {
+        glEnableVertexArrayAttrib(layout, location);
+    } else {
+        glDisableVertexArrayAttrib(layout, location);
+    }
+}
+
+template <typename T>
+void uploadRange(GLuint buffer, GLintptr offset, const std::vector<T>& values)
+{
+    glNamedBufferSubData(buffer, offset, byteSize(values.size(), sizeof(T)), values.data());
+}
+
 } // namespace
+
+void setMissingAttributeDefaults()
+{
+    glVertexAttrib3f(kNormalLocation, 0.0F, 0.0F, 0.0F);
+    glVertexAttrib2f(kUvLocation, 0.0F, 0.0F);
+}
 
 core::Result<GlMesh> GlMesh::create(const geometry::MeshData& mesh)
 {
@@ -76,13 +128,12 @@ std::optional<core::Error> GlMesh::allocate(std::uint32_t vertexCapacity,
 {
     // Dynamic storage: contents can be replaced with glNamedBufferSubData.
     constexpr GLbitfield kFlags = GL_DYNAMIC_STORAGE_BIT;
-    const GLsizeiptr positionBytes = byteSize(vertexCapacity, sizeof(math::Vec3));
-    const GLsizeiptr colorBytes = byteSize(vertexCapacity, sizeof(math::Vec4));
+    const VertexRanges ranges = rangesFor(vertexCapacity);
 
     GLuint name = 0;
     glCreateBuffers(1, &name);
     GlBuffer vertices{name};
-    glNamedBufferStorage(vertices.get(), positionBytes + colorBytes, nullptr, kFlags);
+    glNamedBufferStorage(vertices.get(), ranges.size, nullptr, kFlags);
 
     glCreateBuffers(1, &name);
     GlBuffer indices{name};
@@ -94,16 +145,21 @@ std::optional<core::Error> GlMesh::allocate(std::uint32_t vertexCapacity,
     GlVertexArray layout{name};
     glVertexArrayVertexBuffer(layout.get(), kPositionBinding, vertices.get(), 0,
                               static_cast<GLsizei>(sizeof(math::Vec3)));
-    glVertexArrayVertexBuffer(layout.get(), kColorBinding, vertices.get(), positionBytes,
+    glVertexArrayVertexBuffer(layout.get(), kColorBinding, vertices.get(), ranges.colors,
                               static_cast<GLsizei>(sizeof(math::Vec4)));
+    glVertexArrayVertexBuffer(layout.get(), kNormalBinding, vertices.get(), ranges.normals,
+                              static_cast<GLsizei>(sizeof(math::Vec3)));
+    glVertexArrayVertexBuffer(layout.get(), kUvBinding, vertices.get(), ranges.uvs,
+                              static_cast<GLsizei>(sizeof(math::Vec2)));
 
+    describeAttribute(layout.get(), kPositionLocation, kPositionBinding, 3);
+    describeAttribute(layout.get(), kColorLocation, kColorBinding, 4);
+    describeAttribute(layout.get(), kNormalLocation, kNormalBinding, 3);
+    describeAttribute(layout.get(), kUvLocation, kUvBinding, 2);
+    // Positions and colors are always there; normals and UVs are enabled per
+    // upload, depending on the data.
     glEnableVertexArrayAttrib(layout.get(), kPositionLocation);
-    glVertexArrayAttribFormat(layout.get(), kPositionLocation, 3, GL_FLOAT, GL_FALSE, 0);
-    glVertexArrayAttribBinding(layout.get(), kPositionLocation, kPositionBinding);
-
     glEnableVertexArrayAttrib(layout.get(), kColorLocation);
-    glVertexArrayAttribFormat(layout.get(), kColorLocation, 4, GL_FLOAT, GL_FALSE, 0);
-    glVertexArrayAttribBinding(layout.get(), kColorLocation, kColorBinding);
 
     glVertexArrayElementBuffer(layout.get(), indices.get());
 
@@ -121,13 +177,21 @@ std::optional<core::Error> GlMesh::allocate(std::uint32_t vertexCapacity,
 
 void GlMesh::upload(const geometry::MeshData& mesh)
 {
-    const std::size_t vertexCount = mesh.positions.size();
-    if (vertexCount > 0) {
-        glNamedBufferSubData(vertices_.get(), 0, byteSize(vertexCount, sizeof(math::Vec3)),
-                             mesh.positions.data());
-        glNamedBufferSubData(vertices_.get(), byteSize(vertexCapacity_, sizeof(math::Vec3)),
-                             byteSize(vertexCount, sizeof(math::Vec4)), mesh.colors.data());
+    const VertexRanges ranges = rangesFor(vertexCapacity_);
+    if (!mesh.positions.empty()) {
+        uploadRange(vertices_.get(), 0, mesh.positions);
+        uploadRange(vertices_.get(), ranges.colors, mesh.colors);
+        if (mesh.hasNormals()) {
+            uploadRange(vertices_.get(), ranges.normals, mesh.normals);
+        }
+        if (mesh.hasUvs()) {
+            uploadRange(vertices_.get(), ranges.uvs, mesh.uvs);
+        }
     }
+    // A disabled array makes the shader read the defaults from
+    // setMissingAttributeDefaults(); stale data from an earlier upload is unused.
+    setAttributeEnabled(layout_.get(), kNormalLocation, mesh.hasNormals());
+    setAttributeEnabled(layout_.get(), kUvLocation, mesh.hasUvs());
     if (!mesh.indices.empty()) {
         glNamedBufferSubData(indices_.get(), 0,
                              byteSize(mesh.indices.size(), sizeof(std::uint32_t)),
