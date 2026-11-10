@@ -17,7 +17,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.1 | Optional normals and UVs in `MeshData` | done |
 | M2.2 | Flat normals and UVs for the primitives | done |
 | M2.3 | Upload normals and UVs to the GPU | done |
-| M2.4 | PNG decoding with stb_image | in progress |
+| M2.4 | PNG decoding with stb_image | done |
 | M2.5 | GPU textures behind handles | planned |
 | M2.6 | Materials with a base color | planned |
 | M2.7 | Texture sampling | planned |
