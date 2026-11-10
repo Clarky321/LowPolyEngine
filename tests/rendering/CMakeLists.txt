@@ -10,8 +10,11 @@ set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
 add_executable(lpe_gpu_tests
     application_gpu_test.cpp
     renderer_gpu_test.cpp
+    texture_gpu_test.cpp
 )
-target_link_libraries(lpe_gpu_tests PRIVATE engine Catch2::Catch2WithMain)
+# glad: the texture tests inspect OpenGL objects directly, because textures are
+# not drawn before M2.7. The renderer loads the function pointers.
+target_link_libraries(lpe_gpu_tests PRIVATE engine glad Catch2::Catch2WithMain)
 lpe_set_project_warnings(lpe_gpu_tests)
 catch_discover_tests(lpe_gpu_tests
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

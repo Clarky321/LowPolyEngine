@@ -18,7 +18,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.2 | Flat normals and UVs for the primitives | done |
 | M2.3 | Upload normals and UVs to the GPU | done |
 | M2.4 | PNG decoding with stb_image | done |
-| M2.5 | GPU textures behind handles | planned |
+| M2.5 | GPU textures behind handles | in progress |
 | M2.6 | Materials with a base color | planned |
 | M2.7 | Texture sampling | planned |
 | M2.8 | Directional light and flat shading | planned |
@@ -108,14 +108,14 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** upload images as textures referenced by handles.
 
-**Scope:**
-- `Renderer::createTexture(image, desc) → TextureHandle`, `destroyTexture`, `isValid`; generation-checked like meshes (shared `HandlePool`). Destroying the renderer releases all textures.
-- `TextureDesc`: filtering (nearest, linear), wrapping (repeat, clamp to edge), mipmaps on or off.
-- `core::Image` rows run top to bottom while UV (0, 0) is bottom-left (M2.1); the upload maps one onto the other.
-- Color space (whether textures are stored as sRGB, and whether lighting moves to linear space) is decided here and recorded in an ADR together with the texture API.
+**Scope** (decisions taken while implementing, ADR 0009):
+- `Renderer::createTexture(image, desc = {}) → TextureHandle`, `destroyTexture`, `isValid(TextureHandle)`; generation-checked like meshes (shared `HandlePool`). Destroying the renderer releases all textures. Invalid images are rejected with the `core::validate()` reason.
+- `TextureDesc`: `filter` (`Nearest`, `Linear`), `wrap` (`Repeat`, `ClampToEdge`), `mipmaps`; defaults `Linear`, `Repeat`, mipmaps on.
+- `GlTexture`: immutable `GL_RGB8`/`GL_RGBA8` storage; rows uploaded bottom up (one call per row, no flipped copy), so V = 0 is the image's bottom row; full mip chain generated when enabled; sampling state on the texture object.
+- Color space: M2 stays in display space, as M1 — textures without sRGB decoding, no sRGB framebuffer, lighting (M2.8) on the same values. The migration path to a linear pipeline is recorded in ADR 0009.
 - No drawing with textures yet.
 
-**Tests (GPU):** create and destroy, stale and null handles, invalid images rejected with a message, release on renderer destruction.
+**Tests (GPU, `tests/rendering/texture_gpu_test.cpp`, OpenGL introspection):** create and destroy, null and stale handles with slot reuse, invalid images rejected with a message and not uploaded, release on renderer destruction, bottom row at V = 0 (RGB with 3-byte rows and RGBA), filter/wrap/mip levels/internal format for every option, largest size 16384 with 15 mip levels.
 
 **Visual check:** none.
 
@@ -198,7 +198,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 ## Risks and open questions
 
-- Color space of textures and lighting (decided in M2.5).
+- Color space of textures and lighting: decided in M2.5 — display space for all of M2, linear pipeline later as its own change (ADR 0009).
 - The shader interface check must only require inputs and uniforms the shaders use, because the GLSL compiler removes unused ones (M2.3, M2.7).
 - `core::Image` has no alpha channel yet (M2.4).
 - OBJ files differ between exporters. The subset and limits are tested with fixtures; arbitrary files are not promised to load (M2.9).

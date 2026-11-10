@@ -60,7 +60,12 @@ struct GlProgramDeleter {
     void operator()(GLuint name) const noexcept { glDeleteProgram(name); }
 };
 
+struct GlTextureDeleter {
+    void operator()(GLuint name) const noexcept { glDeleteTextures(1, &name); }
+};
+
 using GlBuffer = GlHandle<GlBufferDeleter>;
+using GlTextureObject = GlHandle<GlTextureDeleter>;
 using GlVertexArray = GlHandle<GlVertexArrayDeleter>;
 using GlShader = GlHandle<GlShaderDeleter>;
 using GlProgram = GlHandle<GlProgramDeleter>;

@@ -40,6 +40,39 @@ struct MeshHandle {
     friend bool operator==(const MeshHandle&, const MeshHandle&) = default;
 };
 
+// Identifies a texture uploaded to the GPU; null and stale handles behave like
+// MeshHandle's.
+struct TextureHandle {
+    std::uint32_t index = 0;
+    std::uint32_t generation = 0;
+
+    [[nodiscard]] bool isNull() const noexcept { return generation == 0; }
+    friend bool operator==(const TextureHandle&, const TextureHandle&) = default;
+};
+
+enum class TextureFilter {
+    // The closest texel: hard pixel edges.
+    Nearest,
+    // Blends neighboring texels (and mip levels): smooth.
+    Linear,
+};
+
+enum class TextureWrap {
+    // UVs outside [0, 1] tile the texture.
+    Repeat,
+    // UVs outside [0, 1] repeat the border texels.
+    ClampToEdge,
+};
+
+// How a texture is sampled. Defaults suit color textures on 3D surfaces.
+struct TextureDesc {
+    TextureFilter filter = TextureFilter::Linear;
+    TextureWrap wrap = TextureWrap::Repeat;
+    // A full mip chain down to 1x1, generated from the image, avoids shimmering
+    // when the texture is drawn smaller than its size.
+    bool mipmaps = true;
+};
+
 enum class DepthMode {
     // Nearer surfaces hide farther ones (3D scenes).
     TestAndWrite,
@@ -83,7 +116,7 @@ struct RenderStats {
 //
 // Uses the OpenGL context that is current on the calling thread: create, use
 // and destroy the renderer on that thread, and destroy it before the context.
-// Destroying the renderer releases all meshes it still owns.
+// Destroying the renderer releases all meshes and textures it still owns.
 class Renderer {
 public:
     [[nodiscard]] static core::Result<Renderer> create(const RendererDesc& desc);
@@ -106,6 +139,18 @@ public:
     void destroyMesh(MeshHandle handle) noexcept;
 
     [[nodiscard]] bool isValid(MeshHandle handle) const noexcept;
+
+    // Uploads an image (RGB8 or RGBA8) as a texture. Fails if the image does
+    // not pass core::validate(). Image rows run top to bottom; the upload puts
+    // the bottom row at V = 0, so UV (0, 0) is the image's bottom-left corner
+    // (ADR 0007, 0009). Texel values are used as stored: no sRGB decoding.
+    [[nodiscard]] core::Result<TextureHandle> createTexture(const core::Image& image,
+                                                            const TextureDesc& desc = {});
+
+    // Releases the texture. Null and already destroyed handles are ignored.
+    void destroyTexture(TextureHandle handle) noexcept;
+
+    [[nodiscard]] bool isValid(TextureHandle handle) const noexcept;
 
     // Sets the viewport to the framebuffer size, clears color and depth and
     // resets the view to identity matrices (normalized device coordinates).

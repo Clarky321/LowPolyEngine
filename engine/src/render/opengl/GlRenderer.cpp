@@ -3,6 +3,7 @@
 #include "GlHandle.hpp"
 #include "GlMesh.hpp"
 #include "GlShaderProgram.hpp"
+#include "GlTexture.hpp"
 
 #include "engine/core/FileSystem.hpp"
 #include "engine/core/Log.hpp"
@@ -21,6 +22,7 @@ namespace {
 
 using opengl::GlMesh;
 using opengl::GlShaderProgram;
+using opengl::GlTexture;
 
 constexpr int kRequiredGlMajor = 4;
 constexpr int kRequiredGlMinor = 5;
@@ -117,6 +119,11 @@ detail::PoolHandle toPoolHandle(MeshHandle handle) noexcept
     return detail::PoolHandle{handle.index, handle.generation};
 }
 
+detail::PoolHandle toPoolHandle(TextureHandle handle) noexcept
+{
+    return detail::PoolHandle{handle.index, handle.generation};
+}
+
 std::string glString(GLenum name)
 {
     // glGetString returns null on error; the bytes are ASCII/UTF-8 text.
@@ -157,6 +164,7 @@ struct Renderer::Impl {
     GLint mvpLocation = -1;
     RendererInfo info = queryInfo();
     detail::HandlePool<GlMesh> meshes;
+    detail::HandlePool<GlTexture> textures;
     bool debugOutputEnabled = false;
     std::uint32_t errorCount = 0;
     bool invalidDrawLogged = false;
@@ -266,6 +274,30 @@ void Renderer::destroyMesh(MeshHandle handle) noexcept
 bool Renderer::isValid(MeshHandle handle) const noexcept
 {
     return impl_->meshes.find(toPoolHandle(handle)) != nullptr;
+}
+
+core::Result<TextureHandle> Renderer::createTexture(const core::Image& image,
+                                                    const TextureDesc& desc)
+{
+    if (auto error = core::validate(image)) {
+        return core::Error{"createTexture: " + error->message};
+    }
+    auto glTexture = GlTexture::create(image, desc);
+    if (!glTexture) {
+        return core::Error{"createTexture: " + glTexture.error().message};
+    }
+    const detail::PoolHandle handle = impl_->textures.insert(std::move(glTexture).value());
+    return TextureHandle{handle.index, handle.generation};
+}
+
+void Renderer::destroyTexture(TextureHandle handle) noexcept
+{
+    (void)impl_->textures.erase(toPoolHandle(handle));
+}
+
+bool Renderer::isValid(TextureHandle handle) const noexcept
+{
+    return impl_->textures.find(toPoolHandle(handle)) != nullptr;
 }
 
 void Renderer::beginFrame(int framebufferWidth, int framebufferHeight, const Color& clearColor)

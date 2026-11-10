@@ -25,6 +25,7 @@ add_library(engine STATIC
     src/render/opengl/GlMesh.cpp
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
+    src/render/opengl/GlTexture.cpp
 )
 
 target_include_directories(engine PUBLIC
