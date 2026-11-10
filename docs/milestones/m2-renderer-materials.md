@@ -14,7 +14,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 
 | ID | Title | Status |
 |---|---|---|
-| M2.1 | Optional normals and UVs in `MeshData` | planned |
+| M2.1 | Optional normals and UVs in `MeshData` | in progress |
 | M2.2 | Flat normals and UVs for the primitives | planned |
 | M2.3 | Upload normals and UVs to the GPU | planned |
 | M2.4 | PNG decoding with stb_image | planned |
@@ -45,12 +45,13 @@ Status values: `planned`, `in progress`, `done` (committed and CI green). `git l
 
 **Goal:** `MeshData` can carry per-vertex normals and texture coordinates, with clear validity rules, before anything produces or uploads them.
 
-**Scope:**
-- New arrays `normals` (`Vec3`) and `uvs` (`Vec2`). Each is empty (absent) or holds exactly one element per position. Queries `hasNormals()` and `hasUvs()`.
-- `validate()`: the count rule for each optional array; normals finite and of unit length within a documented tolerance; UVs finite, any range (tiling).
-- `append()`: concatenates the attributes both meshes have. It fails with an error and leaves the target unchanged when only one side has an attribute (a mesh without vertices matches any layout) or when the result would exceed 32-bit indices. Appending a mesh to itself works.
-- UV convention documented in the header: (0, 0) is the bottom-left corner of the image, v points up (OBJ/OpenGL convention).
-- Amendment to ADR 0007.
+**Scope** (final specification, approved 2026-11-10):
+- New arrays `normals` (`Vec3`) and `uvs` (`Vec2`). Each is empty (absent) or holds exactly one element per position; a mesh without positions has neither. Queries `hasNormals()` and `hasUvs()`. Missing attributes are never synthesized.
+- `validate()` reports the first failure in a fixed order: vertex count, color count, normal count, UV count, whole triangles, index range, then vertex by vertex position, color, normal, UV. Normals are finite with length 1 ± `kNormalLengthTolerance` (1e-3); validation never normalizes them. UVs are finite, any range (tiling). Messages name the attribute and the vertex, e.g. `mesh has 3 positions but 2 normals (expected 0 or 3)`, `mesh normal 1 has length 0.5, expected 1 +/- 0.001`, `mesh uv 2 is not finite`.
+- `append()` returns `std::optional<core::Error>` instead of `void`. It concatenates normals and UVs; a mesh without vertices matches any layout (an empty target takes the source's layout, an empty source changes nothing). It fails, leaving the target unchanged, if both meshes have vertices but only one has normals or UVs, if the result would exceed 4294967295 vertices, or if a shifted index would wrap around 32 bits. All arrays are reserved before anything is inserted. Appending a mesh to itself works.
+- The size arithmetic sits in the internal header `engine/src/geometry/MeshLimits.hpp` and is unit-tested directly.
+- UV convention documented in the header: (0, 0) is the bottom-left corner of the image, U points right, V points up (OBJ/OpenGL convention).
+- Amendment 1 to ADR 0007.
 
 **Out of scope:** GPU upload and shader inputs (M2.3), primitives that produce normals/UVs (M2.2), computing normals, tangents, more than one UV set.
 

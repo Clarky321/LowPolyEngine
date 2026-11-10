@@ -1,6 +1,6 @@
 # ADR 0007: GLM math types, CPU-side MeshData and renderer mesh handles
 
-- **Status:** Accepted
+- **Status:** Accepted; amended for M2.1 (Amendment 1)
 - **Date:** 2026-11-10
 - **Related:** ADR 0001 (GLM candidate), ADR 0003 (WorldGen is pure CPU), `docs/ENGINE_PLAN.md` §5/§6, `docs/PROJECT_STRUCTURE.md`
 
@@ -49,3 +49,16 @@ M1 replaces the hard-coded test triangle with real mesh rendering and adds a cam
 - `docs/PROJECT_STRUCTURE.md` gains `engine/geometry/`; WorldGen will depend on `core` + `geometry` only.
 - The shader interface (`aPosition` at 0, `aColor` at 1, `uModelViewProjection`) is checked when the renderer starts; mismatches fail with a named variable instead of an empty frame.
 - Revisit when M2 adds normals/UVs and materials (likely more `MeshData` arrays and a material handle next to the mesh handle).
+
+## Amendment 1: optional normals and UVs (M2.1, 2026-11-10)
+
+M2 needs per-vertex normals (lighting, M2.8) and texture coordinates (texturing, M2.7). They are added as further `MeshData` arrays, as decision 2 foresaw.
+
+- **Optional, empty or one per vertex.** `normals` (`Vec3`) and `uvs` (`Vec2`) are optional; positions and colors stay required. An empty array means the attribute is absent; otherwise it holds exactly one entry per position. `hasNormals()` and `hasUvs()` report presence. Nothing fills in a missing attribute: producers that have normals or UVs provide them, and the others (debug text, and the primitives until M2.2) stay unchanged.
+- **Normals have unit length within `kNormalLengthTolerance` (1e-3).** Producers normalize; `validate()` only checks and never changes data. The tolerance accepts float rounding (about 1e-7) and normals read from text formats (up to about 1e-4); a length error of 1e-3 changes diffuse lighting by at most 0.1 %, less than one 8-bit color step. Zero and unnormalized normals fail with the vertex index and the measured length. A normal does not have to match its face (smooth normals of imported models are allowed).
+- **UV convention.** (0, 0) is the bottom-left corner of the image, U points right, V points up (OBJ/OpenGL). Values outside [0, 1] are valid and repeat the texture. `core::Image` rows run top to bottom; mapping one onto the other is the job of the texture upload (M2.5).
+- **Fixed validation order**, documented in the header, so the reported error is predictable: vertex count, color count, normal count, UV count, whole triangles, index range, then vertex by vertex position, color, normal, UV.
+- **`append()` returns `std::optional<core::Error>`**, like `validate()`. `core::Result` has no `void` form, and one function does not justify adding it. Two meshes with vertices must agree on which optional attributes they have; a mesh without vertices matches any layout. `append()` also fails if the result would exceed 4294967295 vertices or a shifted index would wrap around 32 bits. On failure the target is unchanged: every check runs before the first change, and all arrays are reserved before anything is inserted. Appending a mesh to itself works (the source is copied first).
+- The size arithmetic lives in the internal header `engine/src/geometry/MeshLimits.hpp`, so the 32-bit limits are unit-tested with plain numbers instead of meshes with billions of vertices.
+
+The renderer still uploads only positions and colors; uploading normals and UVs is M2.3. Every mesh it receives is validated with the rules above.
