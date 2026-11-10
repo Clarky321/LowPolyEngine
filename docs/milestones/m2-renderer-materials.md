@@ -19,7 +19,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.3 | Upload normals and UVs to the GPU | done |
 | M2.4 | PNG decoding with stb_image | done |
 | M2.5 | GPU textures behind handles | done |
-| M2.6 | Materials with a base color | in progress |
+| M2.6 | Materials with a base color | done |
 | M2.7 | Texture sampling | planned |
 | M2.8 | Directional light and flat shading | planned |
 | M2.9 | OBJ subset loader | planned |
