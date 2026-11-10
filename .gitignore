@@ -73,5 +73,9 @@ Testing/
 # Personal CMake presets
 CMakeUserPresets.json
 
+# Git worktrees created by Claude Code. The project works in one checkout
+# (docs/DEVELOPMENT_WORKFLOW.md); the shared skills in .claude/skills/ stay tracked.
+.claude/worktrees/
+
 # Screenshots taken with F12 at runtime. Curated screenshots live in docs/screenshots/.
 /screenshots/

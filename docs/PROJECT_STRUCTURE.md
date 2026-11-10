@@ -7,9 +7,10 @@ lowpoly-engine/
 ├── CLAUDE.md
 ├── AGENTS.md
 ├── .claude/
-│   └── skills/
-│       └── engine-dev/
-│           └── SKILL.md
+│   ├── skills/               # tracked: shared Claude Code skills
+│   │   └── engine-dev/
+│   │       └── SKILL.md
+│   └── worktrees/            # ignored; worktrees are not used (DEVELOPMENT_WORKFLOW.md)
 ├── CMakeLists.txt
 ├── CMakePresets.json
 ├── conanfile.py
@@ -106,6 +107,9 @@ lowpoly-engine/
 │   ├── TECH_STACK.md
 │   ├── PROJECT_STRUCTURE.md
 │   ├── TESTING_AND_CI.md
+│   ├── DEVELOPMENT_WORKFLOW.md  # branches, one sub-milestone per task, commits, reports
+│   ├── milestones/           # step-by-step plan per milestone (mN-<name>.md)
+│   ├── screenshots/          # engine-made captures per milestone (mN/), with README
 │   ├── references/
 │   └── adr/
 ├── .github/

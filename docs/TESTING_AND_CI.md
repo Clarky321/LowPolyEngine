@@ -124,4 +124,28 @@ A change is not “green” until:
 - format/static checks are clean or documented;
 - the PR workflow passes on the required matrix;
 - a manual GPU smoke test is recorded when a change affects windowing, shaders, resource lifetime or rendering;
+- the checks that §8 requires for the kind of change have run;
 - the author/agent reports exactly which commands ran and which checks were not run.
+
+## 8. Checks per sub-milestone
+
+Every sub-milestone task (`docs/DEVELOPMENT_WORKFLOW.md`) runs these checks before its commit and reports the exact commands and results. Commands are for Windows, from the repository root; on Linux use the `README.md` commands with the `linux-gcc-*` presets.
+
+| Check | Command | Required when the change touches |
+|---|---|---|
+| Debug build, warnings as errors | `$env:LPE_WARNINGS_AS_ERRORS = "ON"` (PowerShell) or `set LPE_WARNINGS_AS_ERRORS=ON` (cmd), then `scripts\windows\build.bat debug` | code, shaders, CMake, Conan or scripts |
+| Headless tests (unit + integration) | `scripts\windows\test.bat debug` | code, shaders, CMake, Conan or scripts |
+| Format check | `scripts\windows\format-check.bat` | code |
+| Whitespace | `git diff --check`, and `git diff --cached --check` after staging | anything, documentation included |
+| GPU tier, Debug | `scripts\windows\test.bat debug gpu` | rendering, shaders, GPU resources, windowing, the application loop, or code the renderer calls (such as `geometry::validate`) |
+| Release build + headless tests | `scripts\windows\build.bat release`, then `scripts\windows\test.bat release` | resource lifetime or ownership, build files or dependencies; always in the final sub-milestone |
+| GPU tier, Release | `scripts\windows\test.bat release gpu` | the final sub-milestone; a Release build that changed rendering code |
+| Screenshot | `build\windows-msvc-debug\bin\Debug\island-preview.exe --screenshot docs\screenshots\mN\NNN-name.png` | anything visible on screen (`docs/DEVELOPMENT_WORKFLOW.md` §6) |
+| Links and names | every relative link, file, script, preset and command named in changed documents exists | documentation |
+| CI | push, then the run for that commit is green on all jobs | anything |
+
+Notes:
+
+- The presets read `LPE_WARNINGS_AS_ERRORS` from the environment at configure time, and `build.bat` configures on every run, so setting it in the same shell is enough. CI sets it for all jobs.
+- CI runs neither the GPU tier nor screenshots (no GPU runner). Their results come only from the local run and must be in the report, including the GPU and driver used.
+- A check that does not apply is reported as "not required" with the reason; a check that applies but could not run is reported as "not run", never as passed.
