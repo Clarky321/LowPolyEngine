@@ -16,7 +16,8 @@ lowpoly-engine/
 ├── conan.lock
 ├── profiles/
 │   ├── windows-msvc
-│   └── linux-clang
+│   └── linux-gcc
+├── requirements-dev.txt      # pinned developer tools (Conan, clang-format, Ninja)
 ├── cmake/
 │   ├── CompilerWarnings.cmake
 │   ├── ProjectOptions.cmake
@@ -84,9 +85,12 @@ lowpoly-engine/
 ├── scripts/
 │   ├── python/
 │   └── windows/
+│       ├── _common.bat       # shared helpers (presets, tool lookup)
+│       ├── configure.bat
 │       ├── build.bat
 │       ├── test.bat
-│       ├── run-editor.bat
+│       ├── run.bat
+│       ├── format-check.bat
 │       └── clean.bat
 ├── tools/                    # Offline asset/shader utilities, if needed
 ├── third_party/
@@ -118,14 +122,16 @@ Editor ───────────────┐
                       |
         ┌─────────────┼──────────────┐
         v             v              v
-      Scene         Assets        WorldGen
-        |             |              |
-        └─────────────┴──────┬───────┘
-                             v
-                       Renderer API
-                             |
-                        OpenGL backend
+      Scene         Assets        WorldGen (pure CPU: settings → MeshData/WorldData)
+        |             |
+        └──────┬──────┘
+               v
+         Renderer API  ← uploads MeshData produced by WorldGen
+               |
+          OpenGL backend
 
+WorldGen depends only on Core/math; it never includes renderer, SDL or ImGui
+headers, so it runs in headless tests (ADR 0003).
 Platform (SDL3) supplies window/input/context services.
 Scripting (Lua) uses selected Engine APIs; it does not reach into renderer internals.
 ```

@@ -1,0 +1,21 @@
+# Line endings are fixed by the repository, not by each machine's core.autocrlf.
+# LF everywhere keeps clang-format, CI on Linux and diffs consistent;
+# Visual Studio and VS Code handle LF files without conversion.
+* text=auto eol=lf
+
+# cmd.exe can misparse labels/goto in batch files with LF endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets: never convert or diff as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.tga  binary
+*.ktx2 binary
+*.glb  binary
+*.bin  binary
+*.ttf  binary
+*.otf  binary
+*.wav  binary
+*.ogg  binary

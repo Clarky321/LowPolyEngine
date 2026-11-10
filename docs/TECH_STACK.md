@@ -105,24 +105,26 @@ GLAD is generated API loader code; generated source may be vendored under a clea
 ## 7. Build, automation and repository tooling
 
 - `CMakeLists.txt`: targets and feature options; no machine-specific absolute paths.
-- `CMakePresets.json`: named configurations such as `windows-msvc-debug`, `windows-msvc-release`, `linux-clang-debug`.
+- `CMakePresets.json`: named configurations such as `windows-msvc-debug`, `windows-msvc-release`, `linux-gcc-debug`, `linux-gcc-release`.
+- `requirements-dev.txt`: pinned Python developer tools (Conan, clang-format, Ninja on Linux) for local work and CI.
 - `conanfile.py`: dependency requirements, generators and build options.
 - `conan.lock`: exact dependency graph once baseline is stable.
 - `profiles/`: Conan host/build profiles for supported compiler/platform combinations.
 - `scripts/python/`: asset validation, shader checks, deterministic test fixtures and build helpers.
 - `scripts/windows/`: `.bat` wrappers that call Conan, CMake and CTest, passing through exit codes.
 
-Expected command sequence (names are illustrative until created in repository):
+Command sequence (implemented in M0.1; Windows presets use the Visual Studio 2026 generator so no developer command prompt is needed):
 
 ```powershell
-conan profile detect --force
-conan install . -pr:h=profiles/windows-msvc -pr:b=default --build=missing
+conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --build=missing -of build/windows-msvc-debug/conan
 cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
-ctest --preset windows-msvc-debug --output-on-failure
+ctest --preset windows-msvc-debug
 ```
 
-Use the exact profile/preset names present in the repository. CI should follow the same sequence rather than inventing a parallel build path.
+Each preset expects Conan output in `build/<preset>/conan/`. Use the exact profile/preset names present in the repository. CI should follow the same sequence rather than inventing a parallel build path.
+
+Conan Center availability checked on 8 November 2026: `catch2/3.16.1`, `spdlog/1.17.0`, `glm/1.0.3`, `sdl/3.4.16`, `glad/2.0.8`, `imgui/1.92.9b`, `entt/4.0.0`, `lua/5.5.0`, `nlohmann_json/3.12.0`, `stb/cci.20261021`. Note that SDL 3.4.20 and Lua 5.5.1 mentioned above are upstream releases not yet in Conan Center.
 
 ## 8. Docker and GitHub Actions
 

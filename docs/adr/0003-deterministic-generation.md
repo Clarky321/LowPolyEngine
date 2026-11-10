@@ -1,0 +1,59 @@
+# ADR 0003: Deterministic procedural generation
+
+- **Status:** Accepted
+- **Date:** 2026-11-09
+- **Related:** `docs/ENGINE_PLAN.md` §6, `docs/TESTING_AND_CI.md` §2, AGENTS.md §3
+
+## Context
+
+Islands, vegetation and clouds are generated from a seed. The same seed, settings and generator version must give the same world: for saved projects, bug reports, tests and future multiplayer/streaming. The engine is built with MSVC on Windows and GCC/Clang on Linux.
+
+## Problem
+
+The C++ standard library does not give reproducible random numbers across implementations:
+
+- `std::uniform_int_distribution`, `std::uniform_real_distribution` and other distributions are implementation-defined; MSVC STL and libstdc++ return different values for the same engine state.
+- `std::hash` values are implementation-defined and may change between library versions.
+- `std::random_device`, time and frame timing are non-deterministic.
+- Iteration order of `std::unordered_map`/`unordered_set` is unspecified.
+
+Floating-point results can also differ between compilers: fused multiply-add contraction, fast-math flags and different implementations of `std::sin`, `std::pow`, `std::exp`.
+
+## Options
+
+1. `std::mt19937` + standard distributions — engines are specified, distributions are not. Rejected.
+2. Project-owned PRNG, hash and distributions — small amount of code, fully specified, testable with fixed expected values.
+3. Third-party random library (e.g. PCG reference implementation) — adds a dependency for ~50 lines of code. Rejected for now.
+
+## Decision
+
+Use project-owned code in `engine/worldgen` (no OpenGL, SDL or ImGui dependency):
+
+1. **Seed mixing/hash: SplitMix64.** `mix64(x)` is the SplitMix64 finalizer. Seed derivation:
+   `deriveSeed(masterSeed, stream, index, generatorVersion)` folds each value into the state with `mix64`. `stream` is an `enum class RandomStream : std::uint64_t { IslandLayout = 1, IslandShape = 2, Terrain = 3, Vegetation = 4, Clouds = 5, ... }`; values are fixed forever and never reused. New features get new stream values, so adding a feature does not change existing random sequences.
+2. **Random sequence: PCG32 (XSH-RR, 64-bit state).** One `Pcg32` instance per derived seed. It is a value type: no globals, no thread-local state.
+3. **Distributions are project code:**
+   - `nextFloat01()` = `(next() >> 8) * 0x1.0p-24f` — exact, in `[0, 1)`.
+   - `nextBounded(n)` = Lemire's multiply-shift with rejection — unbiased and integer-only.
+   - Ranges/booleans are built on these two.
+4. **No `std::hash`, `std::random_device`, clocks or unordered-container iteration order** in generation code.
+5. **Floating-point rules for generation code:**
+   - Do not enable fast-math (`/fp:fast`, `-ffast-math`) for the engine.
+   - Disable FMA contraction for worldgen sources on GCC/Clang (`-ffp-contract=off`); MSVC `/fp:precise` (default) does not contract across statements.
+   - Avoid transcendental functions in noise and height evaluation where a polynomial works (fade curves, octave amplitude by repeated multiplication instead of `std::pow`). Where they are needed, results are only compared with tolerances.
+6. **`generatorVersion`** (unsigned integer) is part of the generator settings and the seed derivation. Any change that alters generated output for the same inputs increments it.
+
+### Test strategy
+
+- **Exact golden values** for integer outputs: `mix64`, `deriveSeed`, the first N outputs of `Pcg32` for fixed seeds, `nextBounded`. These must match on every platform in CI.
+- **Tolerance checks** for float outputs (noise samples, heights) against stored expected values.
+- **Same-binary repeatability**: generating twice from the same inputs gives identical vertex/index data (bitwise), checked with a stable hash of the mesh data.
+- **Cross-platform mesh equality** is a goal, checked by comparing a hash of positions quantized to a documented grid (e.g. 1/1024 world units). If CI shows a mismatch, it is investigated, not silenced.
+- Invariants from `docs/TESTING_AND_CI.md` §2 (finite values, valid indices, bounds) on every generated mesh.
+
+## Consequences
+
+- WorldGen is a pure CPU module producing `MeshData`/`WorldData`. The renderer consumes this data; WorldGen does not depend on the renderer.
+- About 100–150 lines of PRNG/hash code to own and test; no new dependency.
+- `RandomStream` values and the `deriveSeed` formula are part of the save-compatibility contract: changing them requires a `generatorVersion` bump.
+- Exact cross-compiler equality of float geometry is not guaranteed; the contract is "same logical result", verified with tolerances and quantized hashes.

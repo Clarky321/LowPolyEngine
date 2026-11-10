@@ -1,29 +1,81 @@
-# Low-poly engine — Claude Code starter docs
+# LowPolyEngine
 
-This bundle contains the initial architecture plan and instruction files for a C++20/Lua low-poly 3D engine.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M0 — foundation** is done (build, CI, SDL3 window, OpenGL 4.5 test triangle); next is **M1 — engine loop and camera**. See `docs/ENGINE_PLAN.md` for the roadmap.
 
-## Included
+## Building on Windows
 
-- `CLAUDE.md` — Claude Code entry point. Imports `AGENTS.md` using `@AGENTS.md`.
-- `AGENTS.md` — shared project engineering rules.
-- `.claude/skills/engine-dev/SKILL.md` — the `/engine-dev` skill workflow.
-- `docs/ENGINE_PLAN.md` — product scope, architecture, world generation plan and milestones.
-- `docs/TECH_STACK.md` — technology comparison and recommended stack.
-- `docs/PROJECT_STRUCTURE.md` — proposed repository tree and module boundaries.
-- `docs/TESTING_AND_CI.md` — quality gates, test layers, Docker and GitHub Actions approach.
-- `docs/references/REPOSITORY_REVIEW.md` — notes on Raven, ThinMatrix examples and VoxelCore.
-- `docs/adr/0001-initial-technology-stack.md` — proposed first architecture decision record.
+### Requirements
 
-## How to use
+| Tool | Version used | Notes |
+|---|---|---|
+| Visual Studio 2026 (MSVC 19.5x) | 18.x | "Desktop development with C++" workload. Ships CMake, Ninja, clang-format and clang-tidy. |
+| CMake | ≥ 3.25 | The one bundled with Visual Studio works. |
+| Python | 3.10+ | Only for the developer tools below. |
+| Conan, clang-format | pinned in `requirements-dev.txt` | Installed into a local `.venv`, see below. CI uses the same versions. |
 
-1. Copy the contents of this directory into the root of a new Git repository.
-2. Read `docs/ENGINE_PLAN.md` and confirm the scope/decisions before asking Claude Code to implement anything.
-3. Start Claude Code from the repository root so it loads `CLAUDE.md`.
-4. Ask Claude to review the plan and produce a small M0 implementation checklist; do not ask it to implement every milestone in one pass.
-5. Use `/engine-dev` for implementation/debugging tasks once Claude Code recognizes the skill.
+### First-time setup
 
-The proposed profiles, presets and scripts are future repository files. The skill explicitly tells Claude to inspect actual filenames rather than assume they exist.
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+```
 
-## Important
+### Build and test with the scripts
 
-This bundle contains plans and instruction files, not an implemented engine. Raven integration, the Conan dependency graph, CI workflow and all runtime systems still need to be built and verified in the target repository.
+Thin wrappers in `scripts/windows/` run the same commands as below. Each takes `debug` (default) or `release`; they work from any folder.
+
+| Script | Does |
+|---|---|
+| `configure.bat [debug\|release]` | `conan install` + `cmake --preset` |
+| `build.bat [debug\|release]` | configure, then `cmake --build --preset` |
+| `test.bat [debug\|release] [gpu]` | `ctest --preset` on an existing build: headless tests, or with `gpu` only the rendering tests (need OpenGL 4.5) |
+| `run.bat [debug\|release] [target]` | runs `build\<preset>\bin\<Config>\<target>.exe` from the repository root; default target `island-preview` (window with a test triangle) |
+| `format-check.bat` | `clang-format --dry-run --Werror` on all C/C++ sources |
+| `clean.bat [debug\|release\|all]` | deletes `build\windows-msvc-*` only (default: all) |
+
+Conan and clang-format are taken from `.venv` first; other tools from `PATH`, then from the Visual Studio installation (CMake, clang-format).
+
+### Build and test manually (Debug)
+
+```powershell
+.venv\Scripts\conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --build=missing -of build/windows-msvc-debug/conan
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug
+ctest --preset windows-msvc-debug
+```
+
+For Release, replace `Debug` with `Release` and `windows-msvc-debug` with `windows-msvc-release`. Conan must run before CMake: it generates the toolchain file the preset points to.
+
+Options: `-DLPE_BUILD_TESTS=OFF` skips tests; `-DLPE_WARNINGS_AS_ERRORS=ON` (or the environment variable `LPE_WARNINGS_AS_ERRORS=ON`, which CI sets) turns warnings into errors.
+
+## Building on Linux
+
+Supported baseline: Ubuntu 24.04 with GCC 13 (what CI uses). Ninja comes from `requirements-dev.txt`.
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+export PATH="$PWD/.venv/bin:$PATH"
+conan install . -pr:h=profiles/linux-gcc -pr:b=profiles/linux-gcc -s build_type=Debug --build=missing -of build/linux-gcc-debug/conan
+cmake --preset linux-gcc-debug
+cmake --build --preset linux-gcc-debug
+ctest --preset linux-gcc-debug
+```
+
+SDL needs X11 and OpenGL development packages (`libx11-dev`, `libgl-dev` and related). Conan only checks for them by default; add `-c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True` to `conan install` to let it install them with apt (CI does this).
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: Windows MSVC (`windows-2025-vs2026` runner, through `scripts/windows/*.bat`) and Linux GCC 13 (`ubuntu-24.04`, the commands above), Debug and Release, with warnings as errors. The Windows Debug job also runs `format-check.bat`. CI runs the headless tiers only; the GPU tier (`test.bat <config> gpu` or the `*-gpu` test presets) is run locally.
+
+## Repository layout
+
+- `engine/` — engine library (`engine` CMake target). SDL3 is used only in `engine/src/platform/sdl3/`, OpenGL/GLAD only in `engine/src/render/opengl/`.
+- `sandbox/island-preview/` — first executable: OpenGL 4.5 window with a test triangle (`island-preview [--frames N] [--assets DIR]`; `assets/` is found relative to the working directory).
+- `assets/shaders/` — GLSL sources loaded at runtime.
+- `tests/` — Catch2/CTest tiers: `unit/` (headless), `integration/` (SDL dummy video driver, headless), `rendering/` (label `gpu`, real OpenGL).
+- `third_party/glad/` — generated OpenGL loader; regenerate with `scripts/python/generate_glad.py` (ADR 0005).
+- `cmake/` — shared CMake modules (warning policy).
+- `profiles/` — Conan profiles.
+- `docs/` — plan, tech stack, structure, testing strategy, ADRs.
+- `CLAUDE.md`, `AGENTS.md`, `.claude/skills/engine-dev/` — instructions for AI-assisted development.

@@ -22,8 +22,11 @@ Initial high-value test groups:
 - Run a Lua script against a controlled engine facade.
 - Import a small fixture asset and verify metadata/geometry.
 - Generate a world from a fixed seed and verify a stable logical summary/hash.
+- Platform layer (implemented, `tests/integration/`): SDL init/shutdown, window creation and error paths, event polling, with `SDL_VIDEO_DRIVER=dummy` set by CTest — no display or GPU. Label `integration`; part of the default test presets and CI.
 
 ### Rendering tests — separate optional tier
+
+Implemented in `tests/rendering/` with CTest label `gpu`. The default test presets exclude the label; `ctest --preset <preset>-gpu` (or `scripts\windows\test.bat <config> gpu`) runs only this tier, so a failure is never mixed with the headless results. Current tests: `island-preview` renders 30 frames without OpenGL errors; broken-shader fixtures must produce compile, link and missing-file messages that name the shader file.
 
 - Create a graphics context in a known runner/environment.
 - Compile/link all required shaders.
@@ -67,7 +70,7 @@ Do not turn on every analyzer for every compiler before the first build is stabl
 ### Pull request / push workflow
 
 1. Checkout with required submodules only if any have actually been adopted.
-2. Install the pinned CMake, Conan and compiler toolchain.
+2. Install the pinned developer tools (`requirements-dev.txt`: Conan, clang-format, Ninja on Linux). CMake and the compiler come from the pinned runner image.
 3. Select a Conan profile and install locked dependencies.
 4. Configure CMake using the documented preset.
 5. Build the engine, editor (where appropriate) and tests.
@@ -77,10 +80,12 @@ Do not turn on every analyzer for every compiler before the first build is stabl
 
 ### Initial matrix
 
+Implemented in `.github/workflows/ci.yml` (M0.3). Runner labels are explicit rather than `*-latest`, so an image change does not silently change the toolchain.
+
 | Runner | Compiler | Purpose |
 |---|---|---|
-| `windows-latest` | MSVC | Main developer platform; compile editor/runtime and run headless tests. |
-| `ubuntu-latest` | GCC or Clang | Portability and Linux build/test path. |
+| `windows-2025-vs2026` | MSVC 19.5x (VS 2026) | Main developer platform; Debug + Release, headless tests, format check. |
+| `ubuntu-24.04` | GCC 13 | Portability and Linux build/test path; Debug + Release. |
 | Optional Linux sanitizer job | Clang/GCC | ASan/UBSan and later TSAN where supported. |
 | Optional self-hosted GPU runner | Known GPU/driver | OpenGL shader/context/render smoke tests. |
 
@@ -94,11 +99,14 @@ Use Docker for a pinned Linux build environment and headless tests. Keep the nor
 
 The `.bat` wrappers should be thin interfaces over the same build graph used in CI:
 
-- `build.bat debug` — Conan install + CMake configure + build.
-- `build.bat release` — release profile/configuration + build.
-- `test.bat debug` — run CTest and return its exit code.
-- `run-editor.bat` — launch the selected editor build.
-- `clean.bat` — remove only known generated build directories; ask before destructive cleanup outside them.
+Implemented in `scripts/windows/` (M0.2); shared preset mapping and tool lookup live in `_common.bat`:
+
+- `configure.bat debug|release` — Conan install + CMake configure.
+- `build.bat debug|release` — configure + build.
+- `test.bat debug|release` — run CTest and return its exit code. Test presets fail when no tests are found.
+- `run.bat debug|release [target]` — run a built executable from `build/<preset>/bin/<Config>/`.
+- `format-check.bat` — clang-format check without modifying files.
+- `clean.bat debug|release|all` — remove only known generated build directories.
 
 Use `setlocal`, quoted paths, `if errorlevel 1 exit /b %errorlevel%` (or an equivalent robust pattern) and avoid hard-coded absolute paths. Python can provide cross-platform orchestration later; Windows batch should not reimplement dependency resolution.
 

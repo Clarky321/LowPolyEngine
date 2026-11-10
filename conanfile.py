@@ -1,0 +1,60 @@
+from conan import ConanFile
+from conan.tools.cmake import CMakeDeps, CMakeToolchain
+
+# SDL3 subsystems the engine does not use yet. They stay off until a milestone
+# needs them: fewer build dependencies, smaller binaries. "gpu" (SDL_GPU) and
+# "render" (SDL_Renderer) are off by design, see ADR 0002.
+_SDL_UNUSED_SUBSYSTEMS = (
+    "audio",
+    "camera",
+    "dialog",
+    "gpu",
+    "haptic",
+    "hidapi",
+    "joystick",  # enable together with controller input (M1+)
+    "power",
+    "render",
+    "sensor",
+    "tray",
+)
+
+
+class LowPolyEngineConan(ConanFile):
+    """Dependency graph for LowPolyEngine.
+
+    Conan only installs packages and generates CMake integration files.
+    Targets, options and tests live in CMakeLists.txt (see docs/TECH_STACK.md).
+    Add a dependency only when the current milestone needs it.
+    """
+
+    name = "lowpolyengine"
+    settings = "os", "arch", "compiler", "build_type"
+
+    def requirements(self):
+        # Window, events and the OpenGL context (ADR 0002).
+        self.requires("sdl/3.4.16")
+        # Unit tests only; never linked into the engine runtime.
+        self.test_requires("catch2/3.16.1")
+
+    def configure(self):
+        sdl = self.options["sdl/*"]
+        sdl.shared = False
+        for subsystem in _SDL_UNUSED_SUBSYSTEMS:
+            setattr(sdl, subsystem, False)
+        # Only desktop OpenGL is used; Vulkan support is added with that backend.
+        sdl.opengles = False
+        sdl.vulkan = False
+        if self.settings.os == "Linux":
+            # X11 only for now (Wayland desktops run it through XWayland).
+            # Wayland and D-Bus would build several large libraries from source.
+            sdl.wayland = False
+            sdl.dbus = False
+            sdl.libudev = False
+
+    def generate(self):
+        toolchain = CMakeToolchain(self)
+        # The repository's CMakePresets.json is the single source of presets,
+        # so do not let Conan write a CMakeUserPresets.json into the source tree.
+        toolchain.user_presets_path = False
+        toolchain.generate()
+        CMakeDeps(self).generate()

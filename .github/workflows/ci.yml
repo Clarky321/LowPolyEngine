@@ -1,0 +1,117 @@
+# Headless build + unit tests + format check (docs/TESTING_AND_CI.md).
+# Uses the same commands as local development: scripts/windows/*.bat on Windows,
+# the README command sequence on Linux. GPU/rendering tests do not run here.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the run that is still in progress.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Read by CMakePresets.json; the warning baseline is clean, so CI keeps it clean.
+  LPE_WARNINGS_AS_ERRORS: "ON"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  windows-msvc:
+    name: Windows MSVC (${{ matrix.config }})
+    # Explicit image label: the Conan profile and presets target Visual Studio 2026.
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [debug, release]
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install developer tools (requirements-dev.txt)
+        run: |
+          python -m venv .venv || exit /b 1
+          .venv\Scripts\python -m pip install -r requirements-dev.txt
+
+      - name: Cache Conan packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.conan2/p
+          key: conan-windows-msvc-${{ matrix.config }}-${{ hashFiles('conanfile.py', 'profiles/windows-msvc', 'requirements-dev.txt') }}
+
+      - name: Build
+        run: scripts\windows\build.bat ${{ matrix.config }}
+
+      - name: Test
+        run: scripts\windows\test.bat ${{ matrix.config }}
+
+      # Formatting does not depend on the configuration; check it once.
+      - name: Format check
+        if: matrix.config == 'debug'
+        run: scripts\windows\format-check.bat
+
+  linux-gcc:
+    name: Linux GCC (${{ matrix.config }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: debug
+            build_type: Debug
+          - config: release
+            build_type: Release
+    env:
+      PRESET: linux-gcc-${{ matrix.config }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install developer tools (requirements-dev.txt)
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-dev.txt
+          # Makes conan and ninja from .venv visible to the following steps.
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Conan packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.conan2/p
+          key: conan-linux-gcc-${{ matrix.config }}-${{ hashFiles('conanfile.py', 'profiles/linux-gcc', 'requirements-dev.txt') }}
+
+      # SDL needs X11/OpenGL development packages from the system (xorg/system,
+      # opengl/system); let Conan install them with apt on the runner.
+      - name: Install dependencies (Conan)
+        run: >-
+          conan install . -pr:h=profiles/linux-gcc -pr:b=profiles/linux-gcc
+          -s build_type=${{ matrix.build_type }} --build=missing
+          -c tools.system.package_manager:mode=install
+          -c tools.system.package_manager:sudo=True
+          -of "build/$PRESET/conan"
+
+      - name: Configure
+        run: cmake --preset "$PRESET"
+
+      - name: Build
+        run: cmake --build --preset "$PRESET"
+
+      - name: Test
+        run: ctest --preset "$PRESET"
