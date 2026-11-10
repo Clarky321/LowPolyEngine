@@ -97,34 +97,31 @@ Bytes zlibStored(const Bytes& raw)
     return out;
 }
 
-// Header fields and image rows (without filter bytes) of a test PNG.
-struct PngSpec {
-    std::uint32_t width = 1;
-    std::uint32_t height = 1;
-    std::uint8_t bitDepth = 8;
-    std::uint8_t colorType = 6; // 0 gray, 2 RGB, 3 palette, 4 gray + alpha, 6 RGBA
-    std::vector<Bytes> rows;
-    Bytes palette;      // PLTE contents (RGB triples), palette images only
-    Bytes transparency; // tRNS contents, optional
-};
-
-Bytes buildPng(const PngSpec& spec)
+// A test PNG from its header fields and image rows (without filter bytes).
+// colorType: 0 gray, 2 RGB, 3 palette, 4 gray + alpha, 6 RGBA. palette holds
+// the PLTE contents (RGB triples) of palette images, transparency the
+// optional tRNS contents. A function rather than an aggregate, so leaving out
+// the optional chunks needs no designated-initializer gaps (GCC warns about
+// those with -Wmissing-field-initializers).
+Bytes buildPng(std::uint32_t width, std::uint32_t height, std::uint8_t bitDepth,
+               std::uint8_t colorType, const std::vector<Bytes>& rows, const Bytes& palette = {},
+               const Bytes& transparency = {})
 {
     Bytes png{0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
     Bytes header;
-    appendBigEndian32(header, spec.width);
-    appendBigEndian32(header, spec.height);
+    appendBigEndian32(header, width);
+    appendBigEndian32(header, height);
     // Bit depth, color type, compression, filter method, no interlacing.
-    header.insert(header.end(), {spec.bitDepth, spec.colorType, 0, 0, 0});
+    header.insert(header.end(), {bitDepth, colorType, 0, 0, 0});
     appendChunk(png, "IHDR", header);
-    if (!spec.palette.empty()) {
-        appendChunk(png, "PLTE", spec.palette);
+    if (!palette.empty()) {
+        appendChunk(png, "PLTE", palette);
     }
-    if (!spec.transparency.empty()) {
-        appendChunk(png, "tRNS", spec.transparency);
+    if (!transparency.empty()) {
+        appendChunk(png, "tRNS", transparency);
     }
     Bytes raw;
-    for (const Bytes& row : spec.rows) {
+    for (const Bytes& row : rows) {
         raw.push_back(0); // filter type 0 (none)
         raw.insert(raw.end(), row.begin(), row.end());
     }
@@ -233,11 +230,7 @@ TEST_CASE("decodePng reads RGB and RGBA files written by encodePng", "[core][ima
 
 TEST_CASE("decodePng keeps the top row first", "[core][image][png]")
 {
-    const Bytes png = buildPng({.width = 1,
-                                .height = 2,
-                                .bitDepth = 8,
-                                .colorType = 6,
-                                .rows = {{255, 0, 0, 255}, {0, 0, 255, 255}}});
+    const Bytes png = buildPng(1, 2, 8, 6, {{255, 0, 0, 255}, {0, 0, 255, 255}});
     const Image image = decodeOrFail(png);
     CHECK(pixelAt(image, 0, 0) == Rgba{255, 0, 0, 255});
     CHECK(pixelAt(image, 0, 1) == Rgba{0, 0, 255, 255});
@@ -247,16 +240,14 @@ TEST_CASE("decodePng converts every PNG color type to RGBA8", "[core][image][png
 {
     SECTION("gray, 8 bits")
     {
-        const Image image = decodeOrFail(buildPng(
-            {.width = 3, .height = 1, .bitDepth = 8, .colorType = 0, .rows = {{0, 128, 255}}}));
+        const Image image = decodeOrFail(buildPng(3, 1, 8, 0, {{0, 128, 255}}));
         CHECK(pixelAt(image, 0, 0) == Rgba{0, 0, 0, 255});
         CHECK(pixelAt(image, 1, 0) == Rgba{128, 128, 128, 255});
         CHECK(pixelAt(image, 2, 0) == Rgba{255, 255, 255, 255});
     }
     SECTION("gray, 1 bit")
     {
-        const Image image = decodeOrFail(buildPng(
-            {.width = 8, .height = 1, .bitDepth = 1, .colorType = 0, .rows = {{0b10110000}}}));
+        const Image image = decodeOrFail(buildPng(8, 1, 1, 0, {{0b10110000}}));
         const std::array<std::uint8_t, 8> expected{255, 0, 255, 255, 0, 0, 0, 0};
         for (int x = 0; x < 8; ++x) {
             INFO("pixel " << x);
@@ -266,20 +257,14 @@ TEST_CASE("decodePng converts every PNG color type to RGBA8", "[core][image][png
     }
     SECTION("gray with alpha")
     {
-        const Image image = decodeOrFail(buildPng(
-            {.width = 2, .height = 1, .bitDepth = 8, .colorType = 4, .rows = {{10, 20, 30, 40}}}));
+        const Image image = decodeOrFail(buildPng(2, 1, 8, 4, {{10, 20, 30, 40}}));
         CHECK(pixelAt(image, 0, 0) == Rgba{10, 10, 10, 20});
         CHECK(pixelAt(image, 1, 0) == Rgba{30, 30, 30, 40});
     }
     SECTION("palette with transparency")
     {
-        const Image image = decodeOrFail(buildPng({.width = 3,
-                                                   .height = 1,
-                                                   .bitDepth = 8,
-                                                   .colorType = 3,
-                                                   .rows = {{0, 1, 2}},
-                                                   .palette = {255, 0, 0, 0, 255, 0, 0, 0, 255},
-                                                   .transparency = {0, 128}}));
+        const Image image = decodeOrFail(
+            buildPng(3, 1, 8, 3, {{0, 1, 2}}, {255, 0, 0, 0, 255, 0, 0, 0, 255}, {0, 128}));
         CHECK(pixelAt(image, 0, 0) == Rgba{255, 0, 0, 0});
         CHECK(pixelAt(image, 1, 0) == Rgba{0, 255, 0, 128});
         // Entries without a tRNS value are opaque.
@@ -287,33 +272,20 @@ TEST_CASE("decodePng converts every PNG color type to RGBA8", "[core][image][png
     }
     SECTION("palette without transparency")
     {
-        const Image image = decodeOrFail(buildPng({.width = 2,
-                                                   .height = 1,
-                                                   .bitDepth = 8,
-                                                   .colorType = 3,
-                                                   .rows = {{1, 0}},
-                                                   .palette = {10, 20, 30, 40, 50, 60}}));
+        const Image image = decodeOrFail(buildPng(2, 1, 8, 3, {{1, 0}}, {10, 20, 30, 40, 50, 60}));
         CHECK(pixelAt(image, 0, 0) == Rgba{40, 50, 60, 255});
         CHECK(pixelAt(image, 1, 0) == Rgba{10, 20, 30, 255});
     }
     SECTION("RGB, 16 bits: the high byte is kept")
     {
         const Image image =
-            decodeOrFail(buildPng({.width = 1,
-                                   .height = 1,
-                                   .bitDepth = 16,
-                                   .colorType = 2,
-                                   .rows = {{0x12, 0xAB, 0x34, 0xCD, 0xFF, 0x00}}}));
+            decodeOrFail(buildPng(1, 1, 16, 2, {{0x12, 0xAB, 0x34, 0xCD, 0xFF, 0x00}}));
         CHECK(pixelAt(image, 0, 0) == Rgba{0x12, 0x34, 0xFF, 255});
     }
     SECTION("RGBA, 16 bits")
     {
         const Image image =
-            decodeOrFail(buildPng({.width = 1,
-                                   .height = 1,
-                                   .bitDepth = 16,
-                                   .colorType = 6,
-                                   .rows = {{0x80, 0x01, 0x40, 0x02, 0x20, 0x03, 0x10, 0x04}}}));
+            decodeOrFail(buildPng(1, 1, 16, 6, {{0x80, 0x01, 0x40, 0x02, 0x20, 0x03, 0x10, 0x04}}));
         CHECK(pixelAt(image, 0, 0) == Rgba{0x80, 0x40, 0x20, 0x10});
     }
 }
@@ -345,8 +317,7 @@ TEST_CASE("decodePng checks the size in the header before decoding", "[core][ima
 {
     // Each file holds a single tiny row: only the header claims the size.
     const auto withSize = [](std::uint32_t width, std::uint32_t height) {
-        return buildPng(
-            {.width = width, .height = height, .bitDepth = 8, .colorType = 0, .rows = {{0}}});
+        return buildPng(width, height, 8, 0, {{0}});
     };
     CHECK(failsWith(decodePng(withSize(0, 4)), "corrupt PNG header"));
     CHECK(failsWith(decodePng(withSize(4, 0)), "corrupt PNG header"));
@@ -365,8 +336,7 @@ TEST_CASE("decodePng accepts the largest width", "[core][image][png]")
 {
     // 16384 x 1 gray: a 16 KiB row, cheap to decode.
     const Bytes row(static_cast<std::size_t>(kMaxImageExtent), 77);
-    const Image image = decodeOrFail(buildPng(
-        {.width = kMaxImageExtent, .height = 1, .bitDepth = 8, .colorType = 0, .rows = {row}}));
+    const Image image = decodeOrFail(buildPng(kMaxImageExtent, 1, 8, 0, {row}));
     CHECK(image.width == kMaxImageExtent);
     CHECK(pixelAt(image, kMaxImageExtent - 1, 0) == Rgba{77, 77, 77, 255});
 }
@@ -388,13 +358,7 @@ TEST_CASE("decodePng survives corrupted and truncated data", "[core][image][png]
     };
     const std::array<Bytes, 2> inputs{
         patternPng(),
-        buildPng({.width = 3,
-                  .height = 2,
-                  .bitDepth = 8,
-                  .colorType = 3,
-                  .rows = {{0, 1, 2}, {2, 1, 0}},
-                  .palette = {255, 0, 0, 0, 255, 0, 0, 0, 255},
-                  .transparency = {0, 128}}),
+        buildPng(3, 2, 8, 3, {{0, 1, 2}, {2, 1, 0}}, {255, 0, 0, 0, 255, 0, 0, 0, 255}, {0, 128}),
     };
     for (const Bytes& png : inputs) {
         for (std::size_t i = 0; i < png.size(); ++i) {
