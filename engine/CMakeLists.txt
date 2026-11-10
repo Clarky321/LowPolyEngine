@@ -21,6 +21,7 @@ add_library(engine STATIC
     src/platform/sdl3/Sdl3Input.cpp
     src/platform/sdl3/Sdl3Platform.cpp
     src/platform/sdl3/Sdl3Window.cpp
+    src/render/Material.cpp
     src/render/opengl/GlDiagnostics.cpp
     src/render/opengl/GlMesh.cpp
     src/render/opengl/GlRenderer.cpp

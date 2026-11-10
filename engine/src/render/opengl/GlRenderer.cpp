@@ -31,6 +31,16 @@ constexpr int kRequiredGlMinor = 5;
 constexpr const char* kMeshVertexShader = "mesh.vert";
 constexpr const char* kMeshFragmentShader = "mesh.frag";
 constexpr const char* kMvpUniform = "uModelViewProjection";
+constexpr const char* kBaseColorUniform = "uBaseColor";
+
+// The built-in material of drawMesh(mesh, model): vertex colors unchanged.
+constexpr Color kDefaultBaseColor{1.0F, 1.0F, 1.0F, 1.0F};
+
+// Uniform locations of the mesh program, found once at startup.
+struct MeshUniforms {
+    GLint modelViewProjection = -1;
+    GLint baseColor = -1;
+};
 constexpr const char* kPositionAttribute = "aPosition";
 constexpr const char* kColorAttribute = "aColor";
 constexpr const char* kNormalAttribute = "aNormal";
@@ -70,7 +80,7 @@ core::Result<LoadedProgram> loadProgram(const std::filesystem::path& directory,
 // instead of a silently black or empty frame. Normals and UVs are optional:
 // the compiler removes inputs a shader does not use, so they may be inactive,
 // but an active one must sit at its GlMesh location.
-std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, GLint& mvpLocation)
+std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, MeshUniforms& uniforms)
 {
     const GLuint program = loaded.program.name();
     const auto checkOptionalAttribute = [&](const char* name,
@@ -106,10 +116,20 @@ std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, GLint
     if (auto error = checkOptionalAttribute(kUvAttribute, opengl::kUvLocation)) {
         return error;
     }
-    mvpLocation = glGetUniformLocation(program, kMvpUniform);
-    if (mvpLocation < 0) {
-        return core::Error{"shader program " + loaded.description + ": uniform mat4 '" +
-                           kMvpUniform + "' is missing or unused"};
+    const auto requireUniform = [&](const char* type, const char* name,
+                                    GLint& location) -> std::optional<core::Error> {
+        location = glGetUniformLocation(program, name);
+        if (location < 0) {
+            return core::Error{"shader program " + loaded.description + ": uniform " + type + " '" +
+                               name + "' is missing or unused"};
+        }
+        return std::nullopt;
+    };
+    if (auto error = requireUniform("mat4", kMvpUniform, uniforms.modelViewProjection)) {
+        return error;
+    }
+    if (auto error = requireUniform("vec4", kBaseColorUniform, uniforms.baseColor)) {
+        return error;
     }
     return std::nullopt;
 }
@@ -120,6 +140,11 @@ detail::PoolHandle toPoolHandle(MeshHandle handle) noexcept
 }
 
 detail::PoolHandle toPoolHandle(TextureHandle handle) noexcept
+{
+    return detail::PoolHandle{handle.index, handle.generation};
+}
+
+detail::PoolHandle toPoolHandle(MaterialHandle handle) noexcept
 {
     return detail::PoolHandle{handle.index, handle.generation};
 }
@@ -145,8 +170,8 @@ RendererInfo queryInfo()
 } // namespace
 
 struct Renderer::Impl {
-    Impl(GlShaderProgram program, GLint mvp, bool debugOutput)
-        : meshProgram(std::move(program)), mvpLocation(mvp), debugOutputEnabled(debugOutput)
+    Impl(GlShaderProgram program, MeshUniforms locations, bool debugOutput)
+        : meshProgram(std::move(program)), uniforms(locations), debugOutputEnabled(debugOutput)
     {
     }
 
@@ -160,14 +185,65 @@ struct Renderer::Impl {
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
 
+    // The mesh of a draw call; an invalid handle is counted as an error and
+    // logged once (it usually repeats every frame).
+    const GlMesh* meshForDraw(MeshHandle handle)
+    {
+        const GlMesh* mesh = meshes.find(toPoolHandle(handle));
+        if (mesh == nullptr) {
+            ++errorCount;
+            if (!invalidMeshDrawLogged) {
+                invalidMeshDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: invalid or destroyed mesh handle (index {}, "
+                               "generation {}); further invalid draws are only counted",
+                               handle.index, handle.generation);
+            }
+        }
+        return mesh;
+    }
+
+    // The material of a draw call; like meshForDraw.
+    const MaterialDesc* materialForDraw(MaterialHandle handle)
+    {
+        const MaterialDesc* material = materials.find(toPoolHandle(handle));
+        if (material == nullptr) {
+            ++errorCount;
+            if (!invalidMaterialDrawLogged) {
+                invalidMaterialDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: invalid or destroyed material handle (index {}, "
+                               "generation {}); further invalid draws are only counted",
+                               handle.index, handle.generation);
+            }
+        }
+        return material;
+    }
+
+    void draw(const GlMesh& mesh, const Color& baseColor, const math::Mat4& model)
+    {
+        const math::Mat4 modelViewProjection = viewProjection * model;
+        glProgramUniformMatrix4fv(meshProgram.name(), uniforms.modelViewProjection, 1, GL_FALSE,
+                                  glm::value_ptr(modelViewProjection));
+        glProgramUniform4f(meshProgram.name(), uniforms.baseColor, baseColor.r, baseColor.g,
+                           baseColor.b, baseColor.a);
+        mesh.draw();
+
+        ++currentFrame.drawCalls;
+        currentFrame.triangles += mesh.indexCount() / 3;
+    }
+
     GlShaderProgram meshProgram;
-    GLint mvpLocation = -1;
+    MeshUniforms uniforms;
     RendererInfo info = queryInfo();
     detail::HandlePool<GlMesh> meshes;
     detail::HandlePool<GlTexture> textures;
+    // Materials are plain data: no GPU object, uploaded as uniforms per draw.
+    detail::HandlePool<MaterialDesc> materials;
     bool debugOutputEnabled = false;
     std::uint32_t errorCount = 0;
-    bool invalidDrawLogged = false;
+    bool invalidMeshDrawLogged = false;
+    bool invalidMaterialDrawLogged = false;
     // Size passed to the last beginFrame(); 0 before the first frame.
     int frameWidth = 0;
     int frameHeight = 0;
@@ -212,8 +288,8 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
     if (!loaded) {
         return failSetup(loaded.error());
     }
-    GLint mvpLocation = -1;
-    if (auto error = checkMeshInterface(loaded.value(), mvpLocation)) {
+    MeshUniforms uniforms;
+    if (auto error = checkMeshInterface(loaded.value(), uniforms)) {
         return failSetup(std::move(*error));
     }
 
@@ -227,7 +303,7 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
     // What the shader reads for normals or UVs a mesh does not have.
     opengl::setMissingAttributeDefaults();
 
-    auto impl = std::make_unique<Impl>(std::move(loaded).value().program, mvpLocation, debugOutput);
+    auto impl = std::make_unique<Impl>(std::move(loaded).value().program, uniforms, debugOutput);
     impl->errorCount += opengl::checkGlErrors("renderer setup");
     return Renderer{std::move(impl)};
 }
@@ -334,29 +410,41 @@ void Renderer::setView(const ViewDesc& view)
     }
 }
 
+core::Result<MaterialHandle> Renderer::createMaterial(const MaterialDesc& desc)
+{
+    if (auto error = validate(desc)) {
+        return core::Error{"createMaterial: " + error->message};
+    }
+    const detail::PoolHandle handle = impl_->materials.insert(desc);
+    return MaterialHandle{handle.index, handle.generation};
+}
+
+void Renderer::destroyMaterial(MaterialHandle handle) noexcept
+{
+    (void)impl_->materials.erase(toPoolHandle(handle));
+}
+
+bool Renderer::isValid(MaterialHandle handle) const noexcept
+{
+    return impl_->materials.find(toPoolHandle(handle)) != nullptr;
+}
+
 void Renderer::drawMesh(MeshHandle handle, const math::Mat4& model)
 {
-    const GlMesh* glMesh = impl_->meshes.find(toPoolHandle(handle));
+    if (const GlMesh* glMesh = impl_->meshForDraw(handle)) {
+        impl_->draw(*glMesh, kDefaultBaseColor, model);
+    }
+}
+
+void Renderer::drawMesh(MeshHandle mesh, MaterialHandle material, const math::Mat4& model)
+{
+    const GlMesh* glMesh = impl_->meshForDraw(mesh);
     if (glMesh == nullptr) {
-        ++impl_->errorCount;
-        // Usually happens every frame once it happens; one message is enough.
-        if (!impl_->invalidDrawLogged) {
-            impl_->invalidDrawLogged = true;
-            core::logError("render",
-                           "drawMesh: invalid or destroyed mesh handle (index {}, "
-                           "generation {}); further invalid draws are only counted",
-                           handle.index, handle.generation);
-        }
         return;
     }
-
-    const math::Mat4 modelViewProjection = impl_->viewProjection * model;
-    glProgramUniformMatrix4fv(impl_->meshProgram.name(), impl_->mvpLocation, 1, GL_FALSE,
-                              glm::value_ptr(modelViewProjection));
-    glMesh->draw();
-
-    ++impl_->currentFrame.drawCalls;
-    impl_->currentFrame.triangles += glMesh->indexCount() / 3;
+    if (const MaterialDesc* desc = impl_->materialForDraw(material)) {
+        impl_->draw(*glMesh, desc->baseColor, model);
+    }
 }
 
 void Renderer::endFrame()

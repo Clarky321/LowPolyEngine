@@ -1,5 +1,6 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
-// M1 scope: engine loop, input, free-fly camera and a static test scene.
+// So far: engine loop, input, free-fly camera (M1) and a static test scene
+// drawn with materials (M2).
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
@@ -109,12 +110,22 @@ public:
 
     std::optional<engine::core::Error> start(engine::app::AppContext& context) override
     {
-        for (auto& object : island_preview::buildTestScene()) {
-            auto handle = context.renderer().createMesh(object.mesh);
+        auto& renderer = context.renderer();
+        const island_preview::TestScene scene = island_preview::buildTestScene();
+        for (const auto& mesh : scene.meshes) {
+            auto handle = renderer.createMesh(mesh);
             if (!handle) {
                 return handle.error();
             }
-            meshes_.push_back({handle.value(), object.position, object.spinRadiansPerSecond});
+            meshes_.push_back(handle.value());
+        }
+        for (const auto& object : scene.objects) {
+            auto material = renderer.createMaterial(object.material);
+            if (!material) {
+                return material.error();
+            }
+            objects_.push_back({meshes_.at(object.mesh), material.value(), object.position,
+                                object.spinRadiansPerSecond});
         }
         // Rebuilt every frame; starts empty.
         auto overlay = context.renderer().createMesh(engine::geometry::MeshData{});
@@ -123,16 +134,20 @@ public:
         }
         overlay_ = overlay.value();
         engine::core::logInfo("app",
-                              "test scene: {} meshes; hold the right mouse button to look "
-                              "around, WASD to fly, Escape to quit",
-                              meshes_.size());
+                              "test scene: {} objects, {} meshes; hold the right mouse button to "
+                              "look around, WASD to fly, Escape to quit",
+                              objects_.size(), meshes_.size());
         return std::nullopt;
     }
 
     void stop(engine::app::AppContext& context) override
     {
-        for (const auto& mesh : meshes_) {
-            context.renderer().destroyMesh(mesh.handle);
+        for (const auto& object : objects_) {
+            context.renderer().destroyMaterial(object.material);
+        }
+        objects_.clear();
+        for (const auto mesh : meshes_) {
+            context.renderer().destroyMesh(mesh);
         }
         meshes_.clear();
         context.renderer().destroyMesh(overlay_);
@@ -185,13 +200,13 @@ public:
             .projection = engine::camera::projectionMatrix(
                 camera_, engine::camera::aspectRatio(size.width, size.height)),
         });
-        for (const auto& mesh : meshes_) {
-            engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, mesh.position);
-            if (mesh.spinRadiansPerSecond != 0.0F) {
-                model = glm::rotate(model, mesh.spinRadiansPerSecond * sceneSeconds_,
+        for (const auto& object : objects_) {
+            engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, object.position);
+            if (object.spinRadiansPerSecond != 0.0F) {
+                model = glm::rotate(model, object.spinRadiansPerSecond * sceneSeconds_,
                                     engine::camera::kWorldUp);
             }
-            renderer.drawMesh(mesh.handle, model);
+            renderer.drawMesh(object.mesh, object.material, model);
         }
 
         if (showOverlay_) {
@@ -227,14 +242,17 @@ private:
         renderer.drawMesh(overlay_);
     }
 
-    struct SceneMesh {
-        engine::render::MeshHandle handle;
+    struct SceneObject {
+        engine::render::MeshHandle mesh;
+        engine::render::MaterialHandle material;
         engine::math::Vec3 position{0.0F};
         float spinRadiansPerSecond = 0.0F;
     };
 
     Options options_;
-    std::vector<SceneMesh> meshes_;
+    // Shared by several objects; destroyed after them.
+    std::vector<engine::render::MeshHandle> meshes_;
+    std::vector<SceneObject> objects_;
     engine::camera::Camera camera_ = initialCamera();
     engine::camera::FreeFlyController controller_;
     bool mouseLook_ = false;

@@ -30,6 +30,8 @@ using engine::math::Mat4;
 using engine::math::Vec3;
 using engine::math::Vec4;
 using engine::render::Color;
+using engine::render::MaterialDesc;
+using engine::render::MaterialHandle;
 using engine::render::MeshHandle;
 using engine::render::Renderer;
 
@@ -473,4 +475,129 @@ TEST_CASE("updateMesh can add and remove normals and UVs", "[render][gpu]")
             .has_value());
     CHECK(near(centerAfterDraw(), kNormalTowardsViewer));
     CHECK(gpu.renderer->errorCount() == 0);
+}
+
+// --- Materials (M2.6) ----------------------------------------------------------
+
+namespace {
+
+MaterialHandle createMaterial(Renderer& renderer, const Color& baseColor)
+{
+    auto material = renderer.createMaterial(MaterialDesc{.baseColor = baseColor});
+    REQUIRE(material.hasValue());
+    return material.value();
+}
+
+} // namespace
+
+TEST_CASE("A material's base color multiplies the vertex colors", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    // Vertex color (1, 0.5, 0.25); tinted by (0.5, 1, 1) it becomes (0.5, 0.5, 0.25).
+    const MeshHandle mesh = upload(renderer, quad(0.0F, {1.0F, 0.5F, 0.25F, 1.0F}, 0.5F));
+    const MaterialHandle tint = createMaterial(renderer, {0.5F, 1.0F, 1.0F, 1.0F});
+    const MaterialHandle white = createMaterial(renderer, {1.0F, 1.0F, 1.0F, 1.0F});
+
+    // One mesh, two materials, side by side in one frame.
+    const Image image = renderFrame(gpu, [&](Renderer& r) {
+        r.drawMesh(mesh, tint, glm::translate(Mat4{1.0F}, Vec3{-0.5F, 0.0F, 0.0F}));
+        r.drawMesh(mesh, white, glm::translate(Mat4{1.0F}, Vec3{0.5F, 0.0F, 0.0F}));
+    });
+    INFO("left " << describe(pixelAt(image, 0.25F, 0.5F)) << ", right "
+                 << describe(pixelAt(image, 0.75F, 0.5F)));
+    CHECK(near(pixelAt(image, 0.25F, 0.5F), Rgb{128, 128, 64}));
+    CHECK(near(pixelAt(image, 0.75F, 0.5F), Rgb{255, 128, 64}));
+    CHECK(renderer.lastFrameStats().drawCalls == 2);
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("The default material reproduces the vertex colors", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MeshHandle mesh = upload(renderer, quad(0.0F, {0.2F, 0.4F, 0.6F, 1.0F}));
+    const MaterialHandle white = createMaterial(renderer, MaterialDesc{}.baseColor);
+    const MaterialHandle black = createMaterial(renderer, {0.0F, 0.0F, 0.0F, 1.0F});
+    const Rgb vertexColor{51, 102, 153};
+
+    const Image byDefault = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh); });
+    CHECK(near(pixelAt(byDefault, 0.5F, 0.5F), vertexColor));
+    const Image byWhite = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, white); });
+    CHECK(near(pixelAt(byWhite, 0.5F, 0.5F), vertexColor));
+
+    // A tinted draw does not leak into later draws with the default material.
+    const Image tinted = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, black); });
+    CHECK(near(pixelAt(tinted, 0.5F, 0.5F), Rgb{0, 0, 0}));
+    const Image again = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh); });
+    CHECK(near(pixelAt(again, 0.5F, 0.5F), vertexColor));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("A material's alpha blends like vertex alpha", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MeshHandle mesh = upload(renderer, quad(0.0F, Vec4{1.0F}));
+    const MaterialHandle halfRed = createMaterial(renderer, {1.0F, 0.0F, 0.0F, 0.5F});
+    const Image image = renderFrame(
+        gpu,
+        [&](Renderer& r) {
+            r.setView({.depth = engine::render::DepthMode::Off,
+                       .blend = engine::render::BlendMode::Alpha});
+            r.drawMesh(mesh, halfRed);
+        },
+        Color{0.0F, 0.0F, 0.0F, 1.0F});
+    INFO("center " << describe(pixelAt(image, 0.5F, 0.5F)));
+    CHECK(near(pixelAt(image, 0.5F, 0.5F), Rgb{128, 0, 0}));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Destroyed and null material handles draw nothing and count an error", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MeshHandle mesh = upload(renderer, quad(0.0F, {1.0F, 0.0F, 0.0F, 1.0F}));
+    const MaterialHandle material = createMaterial(renderer, {0.0F, 1.0F, 0.0F, 1.0F});
+    CHECK(renderer.isValid(material));
+    CHECK_FALSE(renderer.isValid(MaterialHandle{}));
+
+    renderer.destroyMaterial(material);
+    renderer.destroyMaterial(material); // second destroy is ignored
+    renderer.destroyMaterial(MaterialHandle{});
+    CHECK_FALSE(renderer.isValid(material));
+
+    // The slot is reused, but the old handle must not reach the new material.
+    const MaterialHandle replacement = createMaterial(renderer, {0.0F, 0.0F, 1.0F, 1.0F});
+    CHECK(replacement.index == material.index);
+    CHECK(replacement != material);
+
+    const Image stale = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, material); });
+    CHECK(near(pixelAt(stale, 0.5F, 0.5F), kClearRgb));
+    CHECK(renderer.errorCount() == 1);
+    CHECK(renderer.lastFrameStats().drawCalls == 0);
+
+    (void)renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, MaterialHandle{}); });
+    CHECK(renderer.errorCount() == 2);
+
+    // An invalid mesh counts once, whatever the material.
+    (void)renderFrame(gpu, [&](Renderer& r) { r.drawMesh(MeshHandle{}, replacement); });
+    CHECK(renderer.errorCount() == 3);
+    (void)renderFrame(gpu, [&](Renderer& r) { r.drawMesh(MeshHandle{}, MaterialHandle{}); });
+    CHECK(renderer.errorCount() == 4);
+
+    // The replacement itself works.
+    const Image fine = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, replacement); });
+    CHECK(near(pixelAt(fine, 0.5F, 0.5F), Rgb{0, 0, 0})); // red x blue
+    CHECK(renderer.lastFrameStats().drawCalls == 1);
+}
+
+TEST_CASE("createMaterial rejects invalid base colors with a reason", "[render][gpu]")
+{
+    auto gpu = createRenderer();
+    const auto material =
+        gpu.renderer->createMaterial(MaterialDesc{.baseColor = {0.0F, 2.0F, 0.0F, 1.0F}});
+    REQUIRE_FALSE(material.hasValue());
+    CHECK(material.error().message.find("createMaterial") != std::string::npos);
+    CHECK(material.error().message.find("base color green is 2") != std::string::npos);
 }

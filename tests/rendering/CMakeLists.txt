@@ -61,6 +61,12 @@ lpe_add_gpu_test(island_preview_shader_missing_uniform
 set_tests_properties(island_preview_shader_missing_uniform PROPERTIES
     PASS_REGULAR_EXPRESSION "uniform mat4 'uModelViewProjection' is missing or unused")
 
+# Without the material base color the renderer cannot apply materials (M2.6).
+lpe_add_gpu_test(island_preview_shader_missing_base_color
+    island-preview --frames 1 --assets "${fixtures}/missing-base-color")
+set_tests_properties(island_preview_shader_missing_base_color PROPERTIES
+    PASS_REGULAR_EXPRESSION "uniform vec4 'uBaseColor' is missing or unused")
+
 # An optional input (normals, UVs) that is used at the wrong location would read
 # the wrong buffer range; it is named with both locations.
 lpe_add_gpu_test(island_preview_shader_wrong_attribute_location

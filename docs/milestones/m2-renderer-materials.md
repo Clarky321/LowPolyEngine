@@ -19,7 +19,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.3 | Upload normals and UVs to the GPU | done |
 | M2.4 | PNG decoding with stb_image | done |
 | M2.5 | GPU textures behind handles | done |
-| M2.6 | Materials with a base color | planned |
+| M2.6 | Materials with a base color | in progress |
 | M2.7 | Texture sampling | planned |
 | M2.8 | Directional light and flat shading | planned |
 | M2.9 | OBJ subset loader | planned |
@@ -123,16 +123,16 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** draws use a material instead of fixed shader state.
 
-**Scope:**
-- `MaterialDesc { baseColor }` → `Renderer::createMaterial` → `MaterialHandle`, `destroyMaterial`; `drawMesh(mesh, material, model)`. Output color = vertex color × base color.
+**Scope** (decisions taken while implementing, ADR 0010):
+- `MaterialDesc { baseColor }` (RGBA, default white, each component finite and in [0, 1], checked by the GPU-free `validate(MaterialDesc)`) → `Renderer::createMaterial` → `MaterialHandle`, `destroyMaterial`, `isValid`; `drawMesh(mesh, material, model)`. Output color = vertex color × base color. Materials are plain data in the renderer (no GPU object); the base color is the uniform `uBaseColor` of `mesh.frag`, set per draw and required by the startup interface check (new fixture `missing-base-color`; the other test shaders declare it too).
 - `drawMesh(mesh, model)` keeps M1 behavior through a built-in white default material, so the overlay and M1 tests are unchanged.
-- A stale material handle draws nothing and counts as an error, like a stale mesh handle.
-- ADR: what a material holds in M2 and what is deferred to M6.
-- Test scene: several objects with different materials.
+- An invalid mesh or material handle draws nothing and counts as one error, logged once per kind.
+- ADR 0010: what a material holds in M2 and what is deferred to M6.
+- Test scene: shapes keep brightness factors as gray vertex colors and take their hue from materials (same look as M1); the ground keeps its vertex colors with a white material; meshes are shared (cubes, pillars) and five swatch cubes share one mesh with five materials. The overlay subtitle says M2.
 
-**Tests (GPU):** base color tints the readback; the default material reproduces M1 output; stale material handles.
+**Tests:** unit (`tests/unit/render/material_test.cpp`): default material, valid and invalid components with messages. GPU: base color tints the readback, one mesh with two materials in one frame, the default and a white material reproduce the vertex colors and a tint does not leak into later default draws, material alpha blends, destroyed/null/reused material handles and invalid meshes count one error each, invalid colors rejected with a reason; smoke test for the missing `uBaseColor`.
 
-**Visual check:** screenshot `docs/screenshots/m2/001-*.png`.
+**Visual check:** screenshot `docs/screenshots/m2/001-materials.png`.
 
 ### M2.7 — Texture sampling
 
