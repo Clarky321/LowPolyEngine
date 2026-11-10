@@ -12,6 +12,7 @@ add_executable(lpe_unit_tests
     unit/core/frame_clock_test.cpp
     unit/core/image_test.cpp
     unit/core/log_test.cpp
+    unit/core/png_decode_test.cpp
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
     unit/debug/text_mesh_test.cpp

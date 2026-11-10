@@ -34,12 +34,13 @@ target_include_directories(engine PUBLIC
 target_compile_features(engine PUBLIC cxx_std_20)
 
 # PRIVATE: SDL is used only in src/platform/sdl3/, GLAD only in
-# src/render/opengl/ and stb_image_write only in src/core/Image.cpp (ADR 0002,
-# 0005, 0006). Public headers include none of them; consumers only get them as
-# link dependencies.
+# src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp
+# (ADR 0002, 0005, 0006, 0008). Public headers include none of them; consumers
+# only get them as link dependencies.
 target_link_libraries(engine PRIVATE
     SDL3::SDL3
     glad
+    stb_image
     stb_image_write
 )
 

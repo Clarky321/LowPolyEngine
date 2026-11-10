@@ -115,6 +115,7 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
 - `docs/screenshots/` — captured screenshots per milestone, with how they were made.
 - `third_party/glad/` — generated OpenGL loader; regenerate with `scripts/python/generate_glad.py` (ADR 0005).
 - `third_party/stb_image_write/` — compiles the stb PNG writer (header from Conan) without project warning flags (ADR 0006).
+- `third_party/stb_image/` — compiles the stb PNG decoder the same way, PNG only (ADR 0008).
 - `cmake/` — shared CMake modules (warning policy).
 - `profiles/` — Conan profiles.
 - `docs/` — plan, tech stack, structure, testing strategy, development workflow, ADRs; `docs/milestones/` holds the step-by-step plan of each milestone.

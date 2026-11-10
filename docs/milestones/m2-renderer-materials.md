@@ -17,7 +17,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.1 | Optional normals and UVs in `MeshData` | done |
 | M2.2 | Flat normals and UVs for the primitives | done |
 | M2.3 | Upload normals and UVs to the GPU | done |
-| M2.4 | PNG decoding with stb_image | planned |
+| M2.4 | PNG decoding with stb_image | in progress |
 | M2.5 | GPU textures behind handles | planned |
 | M2.6 | Materials with a base color | planned |
 | M2.7 | Texture sampling | planned |
@@ -94,13 +94,13 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** load PNG files into `core::Image` safely.
 
-**Scope:**
-- `core::Image` is RGB8 today (frame captures); textures need alpha. Add RGBA8 support; the representation (channel count or a separate type) is decided in this step.
-- PNG decoding from memory and from a file with `stb_image` from the `stb` package already in `conanfile.py`, compiled outside the project warning flags like `third_party/stb_image_write/` (ADR 0006), PNG only (`STBI_ONLY_PNG`).
-- Imported files are untrusted input: a file size limit, `kMaxImageExtent` checked from the header before decoding, errors that name the file, no crash or unbounded allocation on corrupt data.
-- ADR: decoder choice, accepted formats, limits, threat model.
+**Scope** (decisions taken while implementing, ADR 0008):
+- `core::Image` gains `PixelFormat format` (`Rgb8`, the default, or `Rgba8`), the last member, so `Image{width, height, pixels}` stays the RGB frame capture; `validate()` and `encodePng()` handle both formats.
+- `decodePng(std::span<const std::uint8_t>)` and `readPng(path)` return RGBA8, top row first, for every PNG color type and bit depth, using `stb_image` (v2.30) from the `stb` package already in `conanfile.py`. Compiled once in `third_party/stb_image/` without project warning flags, with `STBI_ONLY_PNG`, `STBI_NO_STDIO`, `STBI_NO_LINEAR`; the project never changes stb's global settings.
+- Untrusted input: data/files up to `kMaxPngFileBytes` (256 MiB, file size checked before reading); own signature check; header read with `stbi_info_from_memory` before decoding, each side in 1..`kMaxImageExtent` (16384) and at most `kMaxPngPixels` (64 Mi pixels, 256 MiB as RGBA) in total; errors with stb's short reason, `readPng` errors name the file; allocation failures become errors.
+- ADR 0008: decoder choice, PNG only, limits, threat model and residual risks.
 
-**Tests (headless):** round trip `encodePng` → decode; RGB, RGBA, gray, palette and 16-bit inputs converted to RGBA8; truncated data, wrong signature, zero and oversized dimensions, empty and missing files. Fixtures are generated in the tests where possible.
+**Tests (headless, `tests/unit/core/png_decode_test.cpp` and `image_test.cpp`):** round trips `encodePng` → decode for RGB and RGBA; row order; gray (8 and 1 bit), gray + alpha, palette with and without tRNS, 16-bit RGB and RGBA converted to RGBA8; not-a-PNG inputs and empty data; truncated files; zero, oversized and too-many-pixels headers; the largest width decodes; every byte of two valid files flipped and every truncation length tried (error or valid image, never a crash); `readPng` with a non-ASCII path, missing file, folder, non-PNG file and a file above the size limit; RGBA validation and the color type `encodePng` writes. Fixtures are built by the tests (a small PNG writer with stored deflate blocks).
 
 **Visual check:** none.
 

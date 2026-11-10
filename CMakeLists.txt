@@ -34,6 +34,7 @@ if(LPE_BUILD_TESTS)
 endif()
 
 add_subdirectory(third_party/glad)
+add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/stb_image_write)
 add_subdirectory(engine)
 add_subdirectory(sandbox/island-preview)

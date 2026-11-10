@@ -8,7 +8,7 @@ Use Catch2 and register tests with CTest. Keep these tests independent of SDL wi
 
 Initial high-value test groups:
 
-- Core: clock conversions, event dispatch invariants, result/error helpers.
+- Core: clock conversions, event dispatch invariants, result/error helpers, PNG encoding and decoding (every color type, size limits, corrupted and truncated files; implemented, `tests/unit/core/`).
 - Camera: basis vectors, yaw/pitch limits, movement normalization, projection parameters.
 - WorldGen: seeded PRNG, stable seed derivation, noise edge cases, island masks, height bounds, mesh construction, biome selection, placement bounds.
 - Scene: stable ID uniqueness, component add/remove, hierarchy validation, serialization round-trip.

@@ -8,7 +8,7 @@ Every dependency added to `conanfile.py` or vendored under `third_party/` is lis
 | SDL3 (`sdl`) | 3.4.16, static | Zlib | runtime | `engine/src/platform/sdl3/` | M0.4 |
 | GLAD 2 loader (vendored, generated) | glad2 2.0.8, `gl:core=4.5` | generated code: WTFPL or CC0-1.0; Khronos spec: Apache-2.0; `khrplatform.h`: Khronos MIT-style | runtime | `engine/src/render/opengl/` | M0.5 |
 | GLM (`glm`) | 1.0.3, header-only | MIT or Happy Bunny (modified MIT), licensee's choice | runtime | `engine/core/Math.hpp` (public), camera, renderer (ADR 0007) | M1.5 |
-| stb (`stb_image_write.h` only) | cci.20261021, header-only | MIT or public domain (Unlicense-style), licensee's choice | runtime | `engine/src/core/Image.cpp` (PNG encoding, ADR 0006); implementation compiled in `third_party/stb_image_write/` | M1.2 |
+| stb (`stb_image_write.h`, `stb_image.h` v2.30) | cci.20261021, header-only | MIT or public domain (Unlicense-style), licensee's choice | runtime | `engine/src/core/Image.cpp`: PNG encoding (ADR 0006) and PNG decoding (ADR 0008); implementations compiled in `third_party/stb_image_write/` and `third_party/stb_image/` | M1.2 (encoding), M2.4 (decoding) |
 
 GLAD lives in `third_party/glad/` (settings in its `README.md`, licenses in its `LICENSE`); why it is not taken from Conan: ADR 0005.
 
