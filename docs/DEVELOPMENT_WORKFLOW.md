@@ -43,6 +43,8 @@ Preparation tasks (milestone plans, workflow documents) are not sub-milestones. 
 
 ## 4. A sub-milestone task, step by step
 
+A sub-milestone task starts when the user names the sub-milestone, or when the user answers "yes" to the question at the end of the previous report (step 9). The user does not write a separate prompt for each sub-milestone: its section in `docs/milestones/` and the decisions recorded there and in the ADRs are the task description. The steps run in the order of the plan's status table.
+
 1. **Check the state.** In the canonical checkout, `git branch --show-current` names the milestone branch, `git status` is clean, and after `git fetch` the branch is level with `origin`. The history ends with the previous sub-milestone (or the plan). Otherwise stop and report.
 2. **Plan.** Read the sub-milestone in `docs/milestones/`. Before writing code, restate its scope, out-of-scope items, acceptance criteria, files, tests and visual check (or "no visible change"). If the repository disagrees with the plan, report the discrepancy first. Then set its status in the plan to `in progress`.
 3. **Implement only this sub-milestone** (§3).
@@ -51,7 +53,14 @@ Preparation tasks (milestone plans, workflow documents) are not sub-milestones. 
 6. **Commit the change once** (§5): code, tests and documentation, with the status still `in progress`.
 7. **Push** to the milestone branch and wait until CI is green for that commit. A failure is fixed by a new commit with the same sub-milestone suffix, pushed and checked the same way.
 8. **Mark it done.** Only after CI is green, a separate commit `docs(milestones): mark MN.x done (MN.x)` changes the status line to `done` and nothing else. Push it and wait until its CI is green as well. The status is a commit of its own because `done` means "committed and CI green", which the change's own commit cannot know yet.
-9. **Report and stop** (§7). The next sub-milestone starts only when the user starts a new task for it.
+9. **Report, ask, stop** (§7). The report ends with one question: whether to continue with the next sub-milestone of the plan, named by ID and title. Then stop and wait.
+   - **"Yes"** starts exactly that next sub-milestone as a new task, from step 1, using the plan and the recorded decisions. Do not ask the user to describe it again.
+   - **"No"**, or any other answer, means stay stopped until the next instruction.
+   - Each "yes" covers one sub-milestone only. The next one never starts without its own "yes".
+
+### Decisions the plan leaves open
+
+If a sub-milestone needs a decision its plan section does not make, choose the option that fits the plan, the accepted ADRs and `AGENTS.md`. Record it in the sub-milestone's section of the plan (and in an ADR where the plan asks for one) in the change commit, and list it in the report. Stop and ask before implementing only if the choice would change the plan's scope, add a dependency the plan does not name, or contradict an accepted ADR.
 
 ## 5. Commits
 
@@ -79,7 +88,7 @@ type(scope): summary in imperative mood (MN.x)
 
 ## 7. Report
 
-Every task ends with this report, and then stops:
+Every sub-milestone task ends with this report and its closing question (§4, step 9), and then stops:
 
 ```text
 Milestone:      MN — <milestone title>
@@ -97,6 +106,8 @@ Branch:         branch name; pushed or not
 CI:             run link and result for each pushed commit
 Limitations:    what was not done or not tested
 Next:           the next sub-milestone in the plan (not started)
+
+Continue with MN.y — <title>? (yes / no)
 ```
 
 A check that was not run is reported as not run, never as passed.

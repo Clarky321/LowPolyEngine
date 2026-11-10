@@ -20,7 +20,7 @@ Follow `docs/DEVELOPMENT_WORKFLOW.md`. Before editing anything:
 Then:
 
 - Read `CLAUDE.md`, `AGENTS.md`, and the relevant sections of `docs/ENGINE_PLAN.md`, `docs/TECH_STACK.md`, `docs/PROJECT_STRUCTURE.md` and `docs/TESTING_AND_CI.md`.
-- Find the requested sub-milestone in `docs/milestones/mN-<name>.md`. **This task implements exactly that one sub-milestone:** not the next one, not parts of it, not code that only a later step needs. If the request names several sub-milestones, or this one cannot be done without another, stop and ask for the plan to be changed first.
+- Find the sub-milestone to implement in `docs/milestones/mN-<name>.md`: the one the user named, or, after the user answered "yes" to the previous report's question, the next one in the plan's status table. Its plan section and the recorded decisions are the task; do not ask the user for a separate prompt. **This task implements exactly that one sub-milestone:** not the next one, not parts of it, not code that only a later step needs. If the request names several sub-milestones, or this one cannot be done without another, stop and ask for the plan to be changed first.
 - Inspect the existing CMake targets, public headers, call sites and tests before proposing new abstractions.
 
 ## 2. Make a small technical plan
@@ -81,6 +81,8 @@ For a visible change, capture a screenshot with `island-preview --screenshot` an
 - Push to the milestone branch and wait for CI on that commit. Fix failures with a new commit; never force-push or amend a pushed commit.
 - Only after CI is green, commit the status change alone, `in progress` → `done`, as `docs(milestones): mark MN.x done (MN.x)`. Push it and wait for its CI to be green too.
 - Report with the template in `docs/DEVELOPMENT_WORKFLOW.md` §7: what changed and why, public API/data format changes, the exact commands and results, what was not tested (especially GPU-specific behavior), limitations, and the next sub-milestone.
-- Then stop. Do not start the next sub-milestone; the user starts it as a new task.
+- End the report with one question: "Continue with MN.y — <title>?" (the next sub-milestone in the plan). Then stop.
+- On "yes", start exactly that sub-milestone from §1 of this skill. On "no", or any other answer, wait for the next instruction. Each "yes" covers one sub-milestone; never continue past it without a new "yes".
+- A decision the plan leaves open is made and recorded as described in `docs/DEVELOPMENT_WORKFLOW.md` §4 ("Decisions the plan leaves open"); stop and ask only if it would change the plan's scope, add a dependency or contradict an accepted ADR.
 
 Do not claim full support for a platform/backend that was only stubbed or compiled conditionally.
