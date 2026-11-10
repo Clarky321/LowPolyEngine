@@ -36,6 +36,8 @@ Before writing code, state:
 
 If implementation reveals that the plan is wrong, stop and explain the new evidence before widening scope.
 
+When the plan stands, set the sub-milestone's status to `in progress` in the milestone plan.
+
 ## 3. Implement by domain
 
 - Core/platform: keep SDL3 and OS details out of engine-domain APIs.
@@ -75,8 +77,9 @@ For a visible change, capture a screenshot with `island-preview --screenshot` an
 
 ## 6. Commit, push, report, stop
 
-- Make one Conventional Commit for the sub-milestone, `type(scope): summary (MN.x)`, that also sets its status to done in the milestone plan (`docs/DEVELOPMENT_WORKFLOW.md` §5).
+- Make one Conventional Commit for the change, `type(scope): summary (MN.x)`, with the status in the milestone plan still `in progress` (`docs/DEVELOPMENT_WORKFLOW.md` §4–§5).
 - Push to the milestone branch and wait for CI on that commit. Fix failures with a new commit; never force-push or amend a pushed commit.
+- Only after CI is green, commit the status change alone, `in progress` → `done`, as `docs(milestones): mark MN.x done (MN.x)`. Push it and wait for its CI to be green too.
 - Report with the template in `docs/DEVELOPMENT_WORKFLOW.md` §7: what changed and why, public API/data format changes, the exact commands and results, what was not tested (especially GPU-specific behavior), limitations, and the next sub-milestone.
 - Then stop. Do not start the next sub-milestone; the user starts it as a new task.
 

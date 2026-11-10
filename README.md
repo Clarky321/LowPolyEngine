@@ -1,6 +1,6 @@
 # LowPolyEngine
 
-A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M2 — low-poly renderer and materials** is in preparation on the branch `milestone/m2-renderer-materials`; its step-by-step plan is `docs/milestones/m2-renderer-materials.md`. Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context) and M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay). See `docs/ENGINE_PLAN.md` for the roadmap.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M2 — low-poly renderer and materials** is in progress on the branch `milestone/m2-renderer-materials`; its step-by-step plan and the status of each step are in `docs/milestones/m2-renderer-materials.md`. Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context) and M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay). See `docs/ENGINE_PLAN.md` for the roadmap.
 
 ![island-preview with the M1 debug overlay](docs/screenshots/m1/004-debug-overlay.png)
 
@@ -96,7 +96,7 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
 
 - Work in this one checkout with ordinary branches; no Git worktrees.
 - `main` is the stable branch. Each milestone is developed on `milestone/mN-<name>` and merged into `main` through a pull request once the milestone is accepted.
-- A milestone is split into numbered sub-milestones (`docs/milestones/`). One task implements exactly one of them, runs the checks in `docs/TESTING_AND_CI.md` §8, makes one commit `type(scope): summary (MN.x)`, pushes, waits for green CI, reports and stops.
+- A milestone is split into numbered sub-milestones (`docs/milestones/`). One task implements exactly one of them, runs the checks in `docs/TESTING_AND_CI.md` §8, makes one commit `type(scope): summary (MN.x)`, pushes and waits for green CI, then marks the step done in the plan with a separate commit, reports and stops.
 - Visible changes are recorded as engine-made screenshots in `docs/screenshots/mN/`.
 
 ## Repository layout

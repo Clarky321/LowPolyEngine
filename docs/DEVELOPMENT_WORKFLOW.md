@@ -44,13 +44,14 @@ Preparation tasks (milestone plans, workflow documents) are not sub-milestones. 
 ## 4. A sub-milestone task, step by step
 
 1. **Check the state.** In the canonical checkout, `git branch --show-current` names the milestone branch, `git status` is clean, and after `git fetch` the branch is level with `origin`. The history ends with the previous sub-milestone (or the plan). Otherwise stop and report.
-2. **Plan.** Read the sub-milestone in `docs/milestones/`. Before writing code, restate its scope, out-of-scope items, acceptance criteria, files, tests and visual check (or "no visible change"). If the repository disagrees with the plan, report the discrepancy first.
+2. **Plan.** Read the sub-milestone in `docs/milestones/`. Before writing code, restate its scope, out-of-scope items, acceptance criteria, files, tests and visual check (or "no visible change"). If the repository disagrees with the plan, report the discrepancy first. Then set its status in the plan to `in progress`.
 3. **Implement only this sub-milestone** (§3).
 4. **Check.** Run the checks for the kind of change, `docs/TESTING_AND_CI.md` §8.
 5. **Review the diff** for scope creep, OpenGL/API leakage, missing error handling, missing tests, and generated or personal files.
-6. **Commit once** (§5). The same commit sets the sub-milestone's status in the plan to done.
-7. **Push** to the milestone branch and wait until CI is green for that commit. A failure is fixed by a new commit with the same sub-milestone suffix.
-8. **Report and stop** (§7). The next sub-milestone starts only when the user starts a new task for it.
+6. **Commit the change once** (§5): code, tests and documentation, with the status still `in progress`.
+7. **Push** to the milestone branch and wait until CI is green for that commit. A failure is fixed by a new commit with the same sub-milestone suffix, pushed and checked the same way.
+8. **Mark it done.** Only after CI is green, a separate commit `docs(milestones): mark MN.x done (MN.x)` changes the status line to `done` and nothing else. Push it and wait until its CI is green as well. The status is a commit of its own because `done` means "committed and CI green", which the change's own commit cannot know yet.
+9. **Report and stop** (§7). The next sub-milestone starts only when the user starts a new task for it.
 
 ## 5. Commits
 
@@ -63,6 +64,7 @@ type(scope): summary in imperative mood (MN.x)
 - `type`: `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` or `chore`.
 - `scope`: the module or area, e.g. `geometry`, `render`, `core`, `app`, `sandbox`, `tests`, `build`, `workflow`, `milestones`.
 - The suffix names the sub-milestone, e.g. `feat(geometry): add optional normals and UVs to MeshData (M2.1)`. Preparation commits have no suffix.
+- A sub-milestone therefore ends with two commits: the change, and the status commit `docs(milestones): mark MN.x done (MN.x)` made after the change's CI is green (§4). Fix commits for CI failures or review findings come between them.
 - The body says what changed, why, and which checks ran.
 - `git log --grep "(M2.1)"` lists the commits of a sub-milestone, so the plan does not record hashes.
 - M0 and M1 used the shorter `scope: summary (MN.x)` form; the convention above applies from M2 on.
@@ -90,9 +92,9 @@ GPU:            GPU-tier result, or why it was not required
 Formatting:     format-check and git diff --check results
 Visual:         what was checked on screen, or "no visible change"
 Screenshots:    files added, or "none"
-Commit:         hash and subject
+Commits:        hash and subject of the change and of the status commit
 Branch:         branch name; pushed or not
-CI:             run link and result for that commit
+CI:             run link and result for each pushed commit
 Limitations:    what was not done or not tested
 Next:           the next sub-milestone in the plan (not started)
 ```

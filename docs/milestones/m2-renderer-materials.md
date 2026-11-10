@@ -26,7 +26,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.10 | Textured model in island-preview | planned |
 | M2.11 | Final verification and pull request | planned |
 
-Status values: `planned`, `in progress`, `done` (committed and CI green). `git log --grep "(M2.x)"` finds the commits.
+Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M2.x done (M2.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M2.x)"` finds the commits.
 
 ## Rules for all of M2
 
