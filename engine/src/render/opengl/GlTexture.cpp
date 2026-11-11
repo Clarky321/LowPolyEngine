@@ -89,4 +89,9 @@ core::Result<GlTexture> GlTexture::create(const core::Image& image, const Textur
     return GlTexture{std::move(texture)};
 }
 
+void GlTexture::bind(GLuint unit) const
+{
+    glBindTextureUnit(unit, texture_.get());
+}
+
 } // namespace engine::render::opengl

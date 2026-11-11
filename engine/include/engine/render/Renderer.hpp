@@ -83,17 +83,24 @@ struct MaterialHandle {
     friend bool operator==(const MaterialHandle&, const MaterialHandle&) = default;
 };
 
-// Surface appearance of a draw (ADR 0010). In M2 it is one color; later M2
-// steps add a base-color texture and lit/unlit shading.
+// Surface appearance of a draw (ADR 0010): output color = base color texture
+// at the mesh's UV x vertex color x base color, alpha included. A later M2
+// step adds lit/unlit shading.
 struct MaterialDesc {
     // RGBA, each component in [0, 1]. Multiplies the mesh's vertex colors, so
     // white keeps them; alpha matters with BlendMode::Alpha. Display-space
     // values, like vertex colors (ADR 0009).
     Color baseColor{1.0F, 1.0F, 1.0F, 1.0F};
+    // Optional; a null handle means no texture (as if it were white). A
+    // textured material needs meshes with UVs. The material refers to the
+    // texture and does not own it: destroying the texture makes draws with
+    // this material fail (counted in Renderer::errorCount()).
+    TextureHandle baseColorTexture{};
 };
 
 // Checks that every base color component is finite and in [0, 1]. The error
-// names the first offending component. GPU-free.
+// names the first offending component. GPU-free, so it cannot check the
+// texture handle; Renderer::createMaterial does that.
 [[nodiscard]] std::optional<core::Error> validate(const MaterialDesc& desc);
 
 enum class DepthMode {
@@ -182,7 +189,8 @@ public:
     // Camera matrices and depth/blend state for the following draw calls.
     void setView(const ViewDesc& view);
 
-    // Stores a material. Fails if the description does not pass validate().
+    // Stores a material. Fails if the description does not pass validate() or
+    // its base color texture is neither null nor a valid handle.
     [[nodiscard]] core::Result<MaterialHandle> createMaterial(const MaterialDesc& desc);
 
     // Forgets the material. Null and already destroyed handles are ignored.
@@ -196,8 +204,10 @@ public:
     // errorCount()).
     void drawMesh(MeshHandle handle, const math::Mat4& model = math::Mat4{1.0F});
 
-    // Draws a mesh with a material: output color = vertex color x base color.
-    // An invalid mesh or material handle draws nothing and counts as one error.
+    // Draws a mesh with a material: output color = texture x vertex color x
+    // base color (see MaterialDesc). Draws nothing and counts as one error if
+    // the mesh or material handle is invalid, the material's texture was
+    // destroyed, or the material has a texture and the mesh has no UVs.
     void drawMesh(MeshHandle mesh, MaterialHandle material,
                   const math::Mat4& model = math::Mat4{1.0F});
 

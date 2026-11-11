@@ -12,8 +12,8 @@ add_executable(lpe_gpu_tests
     renderer_gpu_test.cpp
     texture_gpu_test.cpp
 )
-# glad: the texture tests inspect OpenGL objects directly, because textures are
-# not drawn before M2.7. The renderer loads the function pointers.
+# glad: the texture tests inspect OpenGL objects directly (handles, row order,
+# sampling state). The renderer loads the function pointers.
 target_link_libraries(lpe_gpu_tests PRIVATE engine glad Catch2::Catch2WithMain)
 lpe_set_project_warnings(lpe_gpu_tests)
 catch_discover_tests(lpe_gpu_tests
@@ -66,6 +66,12 @@ lpe_add_gpu_test(island_preview_shader_missing_base_color
     island-preview --frames 1 --assets "${fixtures}/missing-base-color")
 set_tests_properties(island_preview_shader_missing_base_color PROPERTIES
     PASS_REGULAR_EXPRESSION "uniform vec4 'uBaseColor' is missing or unused")
+
+# Without the base color texture sampler textured materials cannot draw (M2.7).
+lpe_add_gpu_test(island_preview_shader_missing_base_color_texture
+    island-preview --frames 1 --assets "${fixtures}/missing-base-color-texture")
+set_tests_properties(island_preview_shader_missing_base_color_texture PROPERTIES
+    PASS_REGULAR_EXPRESSION "uniform sampler2D 'uBaseColorTexture' is missing or unused")
 
 # An optional input (normals, UVs) that is used at the wrong location would read
 # the wrong buffer range; it is named with both locations.

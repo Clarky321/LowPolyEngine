@@ -16,6 +16,8 @@ using engine::math::Vec3;
 using engine::math::Vec4;
 using engine::render::Color;
 using engine::render::MaterialDesc;
+using engine::render::TextureDesc;
+using engine::render::TextureFilter;
 
 Vec4 gray(float brightness)
 {
@@ -101,6 +103,15 @@ TestScene buildTestScene()
     for (std::size_t i = 0; i < swatchColors.size(); ++i) {
         add(swatch, swatchColors[i], {-13.0F + 2.5F * static_cast<float>(i), 0.6F, 10.0F});
     }
+
+    // A crate: the 16x16 pixel-art texture times the cube's gray shades and a
+    // white base color. Nearest filtering keeps its texels crisp.
+    scene.textures.push_back(
+        {.file = "crate.png", .desc = TextureDesc{.filter = TextureFilter::Nearest}});
+    scene.objects.push_back({.mesh = cube,
+                             .material = material(kWhite),
+                             .position = {3.5F, 1.0F, 5.5F},
+                             .texture = scene.textures.size() - 1});
     return scene;
 }
 

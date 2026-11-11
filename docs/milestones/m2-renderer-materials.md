@@ -20,7 +20,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.4 | PNG decoding with stb_image | done |
 | M2.5 | GPU textures behind handles | done |
 | M2.6 | Materials with a base color | done |
-| M2.7 | Texture sampling | planned |
+| M2.7 | Texture sampling | in progress |
 | M2.8 | Directional light and flat shading | planned |
 | M2.9 | OBJ subset loader | planned |
 | M2.10 | Textured model in island-preview | planned |
@@ -138,15 +138,15 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** a material can have a base-color texture.
 
-**Scope:**
-- Optional `MaterialDesc::baseColorTexture`; output color = texture(uv) × vertex color × base color.
-- Drawing a textured material with a mesh that has no UVs is an error (counted, logged once), not a silent draw.
-- One sampler in the shader; broken-shader fixtures cover it.
-- Test scene: one textured object using a small project-made PNG in `assets/textures/` (loaded with M2.4).
+**Scope** (decisions taken while implementing, ADR 0010 Amendment 1):
+- Optional `MaterialDesc::baseColorTexture` (a `TextureHandle`, null by default; the material refers to the texture, it does not own it); output color = texture(uv) × vertex color × base color, alpha included. `createMaterial` rejects a texture handle that is neither null nor valid.
+- Drawing a textured material with a mesh that has no UVs is an error (counted, logged once), not a silent draw. So is drawing a material whose texture was destroyed; both draw nothing, like invalid mesh and material handles.
+- One sampler in the shader: `uniform sampler2D uBaseColorTexture` on texture unit 0, required by the startup interface check (new fixture `missing-base-color-texture`; the other test shaders declare and sample it). Untextured materials and the default material bind a built-in 1×1 white texture, so the shader has no branch and their output is unchanged. `mesh.vert` now passes the UV on.
+- Test scene: a crate (the shared cube mesh, white base color) with the 16×16 pixel-art `assets/textures/crate.png` made for the project, nearest filtering, loaded with M2.4 at startup; a missing or broken file stops island-preview with the reason, like a missing shader.
 
-**Tests (GPU):** checker texture readback with nearest filtering (exact texels) and linear filtering (tolerance); repeat versus clamp; a material whose texture was destroyed reports the invalid texture.
+**Tests:** unit: the default material is untextured; `validate` ignores the texture handle but still checks the color. GPU: checker texture readback with nearest filtering (exact texels, orientation) and linear filtering (every column of a black-to-white ramp within tolerance); repeat versus clamp with UVs up to 2; texture × vertex color × base color per channel, and no texture leaking into later untextured or default draws; texture alpha blends; a textured material on a mesh without UVs counts an error until an update adds UVs; a material whose texture was destroyed counts an error, also after the slot is reused, and a stale texture handle is rejected by `createMaterial`. The texture tests now set aside the renderer's own white texture and check that destroying the renderer releases it. Smoke test for the missing `uBaseColorTexture`.
 
-**Visual check:** screenshot.
+**Visual check:** screenshot `docs/screenshots/m2/002-textured-crate.png`.
 
 ### M2.8 — Directional light and flat shading
 
@@ -200,6 +200,6 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 - Color space of textures and lighting: decided in M2.5 — display space for all of M2, linear pipeline later as its own change (ADR 0009).
 - The shader interface check must only require inputs and uniforms the shaders use, because the GLSL compiler removes unused ones (M2.3, M2.7).
-- `core::Image` has no alpha channel yet (M2.4).
+- Alpha in images: resolved in M2.4 (`PixelFormat::Rgba8`); RGBA textures blend with their alpha since M2.7.
 - OBJ files differ between exporters. The subset and limits are tested with fixtures; arbitrary files are not promised to load (M2.9).
 - There is no GPU runner in CI: GPU tiers run locally and every sub-milestone report states their result.

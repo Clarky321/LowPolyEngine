@@ -1,8 +1,9 @@
-// GPU tier: textures behind renderer handles. Textures are not drawn before
-// M2.7, so these tests inspect the OpenGL objects directly (glad is linked for
-// that; the renderer loads the function pointers). Every test creates its own
-// context, in which the renderer itself creates no textures: the texture
-// objects found there are exactly the ones the test made.
+// GPU tier: textures behind renderer handles. These tests inspect the OpenGL
+// objects directly (glad is linked for that; the renderer loads the function
+// pointers); drawing with textures is tested in renderer_gpu_test.cpp. Every
+// test creates its own context. The renderer creates one texture there itself
+// (white, for untextured materials); the tests set it aside, so the other
+// texture objects found are exactly the ones the test made.
 
 #include "engine/core/Image.hpp"
 #include "engine/platform/GlContext.hpp"
@@ -14,6 +15,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -40,7 +42,21 @@ struct GpuContext {
     std::optional<engine::platform::Window> window;
     std::optional<engine::platform::GlContext> context;
     std::optional<Renderer> renderer;
+    // Texture objects the renderer made for itself at creation.
+    std::vector<GLuint> rendererTextures;
 };
+
+// All texture objects among the first names the driver hands out.
+std::vector<GLuint> allTextureObjects()
+{
+    std::vector<GLuint> names;
+    for (GLuint name = 1; name <= 1024; ++name) {
+        if (glIsTexture(name) == GL_TRUE) {
+            names.push_back(name);
+        }
+    }
+    return names;
+}
 
 GpuContext createRenderer()
 {
@@ -62,30 +78,32 @@ GpuContext createRenderer()
     REQUIRE(context.hasValue());
     gpu.context.emplace(std::move(context).value());
 
+    // Creating the renderer also loads the OpenGL functions these tests call.
     auto renderer = Renderer::create({.glProcLoader = gpu.context->procLoader(),
                                       .shaderDirectory = "assets/shaders",
                                       .debugOutput = true});
     REQUIRE(renderer.hasValue());
     gpu.renderer.emplace(std::move(renderer).value());
+    // Only the white texture of untextured materials.
+    gpu.rendererTextures = allTextureObjects();
+    REQUIRE(gpu.rendererTextures.size() == 1);
     return gpu;
 }
 
-// Texture objects among the first names the driver hands out.
-std::vector<GLuint> textureObjects()
+// Texture objects made through the renderer's texture API.
+std::vector<GLuint> textureObjects(const GpuContext& gpu)
 {
-    std::vector<GLuint> names;
-    for (GLuint name = 1; name <= 1024; ++name) {
-        if (glIsTexture(name) == GL_TRUE) {
-            names.push_back(name);
-        }
-    }
+    std::vector<GLuint> names = allTextureObjects();
+    std::erase_if(names, [&gpu](GLuint name) {
+        return std::ranges::find(gpu.rendererTextures, name) != gpu.rendererTextures.end();
+    });
     return names;
 }
 
-// The one texture object of the context.
-GLuint onlyTexture()
+// The one texture object made through the texture API.
+GLuint onlyTexture(const GpuContext& gpu)
 {
-    const std::vector<GLuint> names = textureObjects();
+    const std::vector<GLuint> names = textureObjects(gpu);
     REQUIRE(names.size() == 1);
     return names.front();
 }
@@ -152,17 +170,17 @@ TEST_CASE("Textures are created and destroyed through generation-checked handles
     CHECK(first != second);
     CHECK(renderer.isValid(first));
     CHECK(renderer.isValid(second));
-    CHECK(textureObjects().size() == 2);
+    CHECK(textureObjects(gpu).size() == 2);
 
     renderer.destroyTexture(first);
     CHECK_FALSE(renderer.isValid(first));
     CHECK(renderer.isValid(second));
-    CHECK(textureObjects().size() == 1);
+    CHECK(textureObjects(gpu).size() == 1);
 
     // Destroying again, or a null handle, is ignored.
     renderer.destroyTexture(first);
     renderer.destroyTexture(TextureHandle{});
-    CHECK(textureObjects().size() == 1);
+    CHECK(textureObjects(gpu).size() == 1);
 
     // The freed slot is reused with a new generation: the old handle stays invalid.
     const TextureHandle third = upload(renderer, solid(1, 1, PixelFormat::Rgb8, 1));
@@ -187,7 +205,7 @@ TEST_CASE("Invalid images are rejected with a reason and not uploaded", "[render
     CHECK(mentions(renderer.createTexture(Image{2, 2, Bytes(12, 0), PixelFormat::Rgba8}),
                    "expected 16 for 2x2 RGBA"));
 
-    CHECK(textureObjects().empty());
+    CHECK(textureObjects(gpu).empty());
     CHECK(renderer.errorCount() == 0);
 }
 
@@ -197,11 +215,12 @@ TEST_CASE("Destroying the renderer releases its textures", "[render][gpu][textur
     for (int i = 0; i < 3; ++i) {
         (void)upload(*gpu.renderer, solid(8, 8, PixelFormat::Rgba8, 50));
     }
-    CHECK(textureObjects().size() == 3);
+    CHECK(textureObjects(gpu).size() == 3);
 
-    // The context is still current; only the renderer goes away.
+    // The context is still current; only the renderer goes away, with its own
+    // white texture too.
     gpu.renderer.reset();
-    CHECK(textureObjects().empty());
+    CHECK(allTextureObjects().empty());
     CHECK(glGetError() == GL_NO_ERROR);
 }
 
@@ -218,7 +237,7 @@ TEST_CASE("The image's bottom row is uploaded to V = 0", "[render][gpu][texture]
         // the unpack alignment (3-byte rows).
         const TextureHandle texture =
             upload(renderer, Image{1, 3, {255, 0, 0, 0, 255, 0, 0, 0, 255}}, noMipmaps);
-        CHECK(readLevel0(onlyTexture(), GL_RGB, 9) == Bytes{0, 0, 255, 0, 255, 0, 255, 0, 0});
+        CHECK(readLevel0(onlyTexture(gpu), GL_RGB, 9) == Bytes{0, 0, 255, 0, 255, 0, 255, 0, 0});
         renderer.destroyTexture(texture);
     }
     SECTION("RGBA, columns stay in order")
@@ -238,7 +257,7 @@ TEST_CASE("The image's bottom row is uploaded to V = 0", "[render][gpu][texture]
         for (const Bytes* texel : {&c, &d, &a, &b}) {
             expected.insert(expected.end(), texel->begin(), texel->end());
         }
-        CHECK(readLevel0(onlyTexture(), GL_RGBA, 16) == expected);
+        CHECK(readLevel0(onlyTexture(gpu), GL_RGBA, 16) == expected);
     }
     CHECK(glGetError() == GL_NO_ERROR);
     CHECK(renderer.errorCount() == 0);
@@ -280,7 +299,7 @@ TEST_CASE("TextureDesc sets filtering, wrapping and the mip chain", "[render][gp
             INFO("case " << i << ", " << (format == PixelFormat::Rgba8 ? "RGBA" : "RGB"));
             const Case& expected = cases[i];
             const TextureHandle handle = upload(renderer, solid(5, 3, format, 9), expected.desc);
-            const GLuint texture = onlyTexture();
+            const GLuint texture = onlyTexture(gpu);
 
             CHECK(textureParameter(texture, GL_TEXTURE_MIN_FILTER) == expected.minFilter);
             CHECK(textureParameter(texture, GL_TEXTURE_MAG_FILTER) == expected.magFilter);
@@ -309,7 +328,7 @@ TEST_CASE("The largest image size is accepted as a texture", "[render][gpu][text
     Renderer& renderer = *gpu.renderer;
     const int extent = engine::core::kMaxImageExtent;
     (void)upload(renderer, solid(extent, 1, PixelFormat::Rgba8, 7));
-    const GLuint texture = onlyTexture();
+    const GLuint texture = onlyTexture(gpu);
     CHECK(levelParameter(texture, 0, GL_TEXTURE_WIDTH) == extent);
     // 16384 halves 14 times down to 1: 15 levels.
     CHECK(textureParameter(texture, GL_TEXTURE_IMMUTABLE_LEVELS) == 15);

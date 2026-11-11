@@ -14,6 +14,14 @@ GLAD lives in `third_party/glad/` (settings in its `README.md`, licenses in its 
 
 SDL brings build-time tools from Conan Center: `cmake` (BSD-3-Clause) and, on Linux, `pkgconf` (ISC). On Linux it also uses system X11 and OpenGL packages (`xorg/system`, `opengl/system`); they are installed from the distribution, not redistributed. Only the video and OpenGL parts of SDL are enabled; see `conanfile.py`.
 
+## Assets in the repository
+
+Every committed asset that is not code (textures, models) is listed with its origin (`docs/milestones/m2-renderer-materials.md`, rules for M2). Assets made for the project carry no third-party rights.
+
+| File | Origin | Added in |
+|---|---|---|
+| `assets/textures/crate.png` | Made for this project: 16×16 RGB pixel-art crate (frame, nails, planks, diagonal brace), its pixels set by a short script written during M2.7; no external source. | M2.7 |
+
 ## Developer tools (not linked, not shipped)
 
 Pinned in `requirements-dev.txt`, installed from PyPI into `.venv` locally and in CI.

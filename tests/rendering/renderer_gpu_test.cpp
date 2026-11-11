@@ -15,6 +15,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -25,8 +27,10 @@
 #include <vector>
 
 using engine::core::Image;
+using engine::core::PixelFormat;
 using engine::geometry::MeshData;
 using engine::math::Mat4;
+using engine::math::Vec2;
 using engine::math::Vec3;
 using engine::math::Vec4;
 using engine::render::Color;
@@ -34,6 +38,10 @@ using engine::render::MaterialDesc;
 using engine::render::MaterialHandle;
 using engine::render::MeshHandle;
 using engine::render::Renderer;
+using engine::render::TextureDesc;
+using engine::render::TextureFilter;
+using engine::render::TextureHandle;
+using engine::render::TextureWrap;
 
 namespace {
 
@@ -107,15 +115,20 @@ Image renderFrame(GpuRenderer& gpu, const std::function<void(Renderer&)>& draw,
     return std::move(image).value();
 }
 
-// x and y as fractions of the image size; y = 0 is the top row.
-Rgb pixelAt(const Image& image, float fx, float fy)
+// y = 0 is the top row.
+Rgb pixel(const Image& image, int x, int y)
 {
-    const int x = static_cast<int>(fx * static_cast<float>(image.width - 1));
-    const int y = static_cast<int>(fy * static_cast<float>(image.height - 1));
     const auto offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
                          static_cast<std::size_t>(x)) *
                         3;
     return Rgb{image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2]};
+}
+
+// x and y as fractions of the image size; y = 0 is the top row.
+Rgb pixelAt(const Image& image, float fx, float fy)
+{
+    return pixel(image, static_cast<int>(fx * static_cast<float>(image.width - 1)),
+                 static_cast<int>(fy * static_cast<float>(image.height - 1)));
 }
 
 bool near(const Rgb& actual, const Rgb& expected, int tolerance = 3)
@@ -600,4 +613,265 @@ TEST_CASE("createMaterial rejects invalid base colors with a reason", "[render][
     REQUIRE_FALSE(material.hasValue());
     CHECK(material.error().message.find("createMaterial") != std::string::npos);
     CHECK(material.error().message.find("base color green is 2") != std::string::npos);
+}
+
+// --- Texture sampling (M2.7) ---------------------------------------------------
+
+namespace {
+
+// quad() with UVs from (0, 0) at the bottom-left corner to uvMax at the
+// top-right one.
+MeshData uvQuad(const Vec4& color, float halfSize = 1.0F, Vec2 uvMax = Vec2{1.0F})
+{
+    MeshData mesh = quad(0.0F, color, halfSize);
+    mesh.uvs = {{0.0F, 0.0F}, {uvMax.x, 0.0F}, uvMax, {0.0F, uvMax.y}};
+    return mesh;
+}
+
+// An RGB image from texels listed row by row, top row first.
+Image rgbImage(int width, int height, const std::vector<Rgb>& texels)
+{
+    Image image{width, height, {}, PixelFormat::Rgb8};
+    for (const Rgb& texel : texels) {
+        for (const int channel : {texel.r, texel.g, texel.b}) {
+            image.pixels.push_back(static_cast<std::uint8_t>(channel));
+        }
+    }
+    return image;
+}
+
+TextureHandle createTexture(Renderer& renderer, const Image& image, const TextureDesc& desc = {})
+{
+    auto texture = renderer.createTexture(image, desc);
+    REQUIRE(texture.hasValue());
+    return texture.value();
+}
+
+MaterialHandle texturedMaterial(Renderer& renderer, TextureHandle texture,
+                                const Color& baseColor = Color{1.0F, 1.0F, 1.0F, 1.0F})
+{
+    auto material =
+        renderer.createMaterial(MaterialDesc{.baseColor = baseColor, .baseColorTexture = texture});
+    REQUIRE(material.hasValue());
+    return material.value();
+}
+
+constexpr TextureDesc kNearestClamp{
+    .filter = TextureFilter::Nearest, .wrap = TextureWrap::ClampToEdge, .mipmaps = false};
+
+} // namespace
+
+TEST_CASE("Nearest filtering shows the exact texels", "[render][gpu][texture]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    // A 4x4 checker; the image's top-left texel is A, so a flipped texture
+    // would show B in the top-left corner of the frame.
+    const Rgb a{200, 40, 10};
+    const Rgb b{30, 90, 220};
+    std::vector<Rgb> texels;
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            texels.push_back((row + column) % 2 == 0 ? a : b);
+        }
+    }
+    const TextureHandle texture = createTexture(renderer, rgbImage(4, 4, texels), kNearestClamp);
+    const MaterialHandle material = texturedMaterial(renderer, texture);
+    const MeshHandle mesh = upload(renderer, uvQuad(Vec4{1.0F}));
+
+    // The quad fills the frame: each texel covers a quarter of its width and height.
+    const Image image = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, material); });
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            const Rgb actual = pixelAt(image, (static_cast<float>(column) + 0.5F) / 4.0F,
+                                       (static_cast<float>(row) + 0.5F) / 4.0F);
+            INFO("texel row " << row << ", column " << column << ": " << describe(actual));
+            CHECK(near(actual, (row + column) % 2 == 0 ? a : b, 0));
+        }
+    }
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Linear filtering blends neighboring texels", "[render][gpu][texture]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    // Black and white texels; their centers are at U = 0.25 and 0.75.
+    const TextureHandle texture = createTexture(
+        renderer, rgbImage(2, 1, {Rgb{0, 0, 0}, Rgb{255, 255, 255}}),
+        TextureDesc{
+            .filter = TextureFilter::Linear, .wrap = TextureWrap::ClampToEdge, .mipmaps = false});
+    const MaterialHandle material = texturedMaterial(renderer, texture);
+    const MeshHandle mesh = upload(renderer, uvQuad(Vec4{1.0F}));
+    const Image image = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, material); });
+
+    // Every column of the middle row: black up to U = 0.25 (clamped), a linear
+    // ramp to U = 0.75, then white.
+    int mismatches = 0;
+    for (int x = 0; x < image.width; ++x) {
+        const float u = (static_cast<float>(x) + 0.5F) / static_cast<float>(image.width);
+        const float weight = std::clamp(u * 2.0F - 0.5F, 0.0F, 1.0F);
+        const int value = static_cast<int>(std::lround(255.0F * weight));
+        const Rgb actual = pixel(image, x, image.height / 2);
+        if (!near(actual, Rgb{value, value, value})) {
+            ++mismatches;
+            UNSCOPED_INFO("column " << x << ": " << describe(actual) << ", expected " << value);
+        }
+    }
+    CHECK(mismatches == 0);
+    // Blended, not the nearest texel.
+    CHECK(near(pixelAt(image, 0.5F, 0.5F), Rgb{128, 128, 128}, 4));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Repeat tiles the texture; ClampToEdge stretches its border texels",
+          "[render][gpu][texture]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const Image redBlue = rgbImage(2, 1, {kRed, kBlue});
+    const auto drawWith = [&](TextureWrap wrap) {
+        const TextureHandle texture = createTexture(
+            renderer, redBlue,
+            TextureDesc{.filter = TextureFilter::Nearest, .wrap = wrap, .mipmaps = false});
+        const MaterialHandle material = texturedMaterial(renderer, texture);
+        // U runs from 0 to 2 across the frame.
+        const MeshHandle mesh = upload(renderer, uvQuad(Vec4{1.0F}, 1.0F, Vec2{2.0F, 1.0F}));
+        return renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, material); });
+    };
+
+    const Image repeated = drawWith(TextureWrap::Repeat);
+    CHECK(near(pixelAt(repeated, 0.125F, 0.5F), kRed));  // U 0.25
+    CHECK(near(pixelAt(repeated, 0.375F, 0.5F), kBlue)); // U 0.75
+    CHECK(near(pixelAt(repeated, 0.625F, 0.5F), kRed));  // U 1.25: second copy
+    CHECK(near(pixelAt(repeated, 0.875F, 0.5F), kBlue)); // U 1.75
+
+    const Image clamped = drawWith(TextureWrap::ClampToEdge);
+    CHECK(near(pixelAt(clamped, 0.125F, 0.5F), kRed));
+    CHECK(near(pixelAt(clamped, 0.375F, 0.5F), kBlue));
+    CHECK(near(pixelAt(clamped, 0.625F, 0.5F), kBlue)); // the right border texel
+    CHECK(near(pixelAt(clamped, 0.875F, 0.5F), kBlue));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Texture, vertex color and base color multiply", "[render][gpu][texture]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    // Each factor shows in one channel: texture (1, 0.5, 1) x vertex color
+    // (0.5, 1, 1) x base color (1, 1, 0.25) = (0.5, 0.5, 0.25).
+    const TextureHandle texture = createTexture(renderer, rgbImage(1, 1, {Rgb{255, 128, 255}}));
+    const Color baseColor{1.0F, 1.0F, 0.25F, 1.0F};
+    const MaterialHandle textured = texturedMaterial(renderer, texture, baseColor);
+    const MaterialHandle untextured = createMaterial(renderer, baseColor);
+    const MeshHandle mesh = upload(renderer, uvQuad({0.5F, 1.0F, 1.0F, 1.0F}, 0.5F));
+
+    // The untextured draw after the textured one must not see its texture.
+    const Image image = renderFrame(gpu, [&](Renderer& r) {
+        r.drawMesh(mesh, textured, glm::translate(Mat4{1.0F}, Vec3{-0.5F, 0.0F, 0.0F}));
+        r.drawMesh(mesh, untextured, glm::translate(Mat4{1.0F}, Vec3{0.5F, 0.0F, 0.0F}));
+    });
+    INFO("left " << describe(pixelAt(image, 0.25F, 0.5F)) << ", right "
+                 << describe(pixelAt(image, 0.75F, 0.5F)));
+    CHECK(near(pixelAt(image, 0.25F, 0.5F), Rgb{128, 128, 64}));
+    CHECK(near(pixelAt(image, 0.75F, 0.5F), Rgb{128, 255, 64}));
+
+    // Nor does the default material: drawn nearer, over the textured draw.
+    const Image byDefault = renderFrame(gpu, [&](Renderer& r) {
+        r.drawMesh(mesh, textured);
+        r.drawMesh(mesh, glm::translate(Mat4{1.0F}, Vec3{0.0F, 0.0F, -0.5F}));
+    });
+    CHECK(near(pixelAt(byDefault, 0.5F, 0.5F), Rgb{128, 255, 255}));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Texture alpha blends like vertex alpha", "[render][gpu][texture]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const TextureHandle texture =
+        createTexture(renderer, Image{1, 1, {255, 0, 0, 128}, PixelFormat::Rgba8});
+    const MaterialHandle material = texturedMaterial(renderer, texture);
+    const MeshHandle mesh = upload(renderer, uvQuad(Vec4{1.0F}));
+    const Image image = renderFrame(
+        gpu,
+        [&](Renderer& r) {
+            r.setView({.depth = engine::render::DepthMode::Off,
+                       .blend = engine::render::BlendMode::Alpha});
+            r.drawMesh(mesh, material);
+        },
+        Color{0.0F, 0.0F, 0.0F, 1.0F});
+    INFO("center " << describe(pixelAt(image, 0.5F, 0.5F)));
+    CHECK(near(pixelAt(image, 0.5F, 0.5F), Rgb{128, 0, 0}));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("A textured material on a mesh without UVs draws nothing and counts an error",
+          "[render][gpu][texture]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const TextureHandle texture = createTexture(renderer, rgbImage(1, 1, {Rgb{0, 255, 0}}));
+    const MaterialHandle textured = texturedMaterial(renderer, texture);
+    const MaterialHandle untextured = createMaterial(renderer, {1.0F, 1.0F, 1.0F, 1.0F});
+    const MeshHandle mesh = upload(renderer, quad(0.0F, {1.0F, 0.0F, 0.0F, 1.0F}));
+
+    const Image skipped = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, textured); });
+    CHECK(near(pixelAt(skipped, 0.5F, 0.5F), kClearRgb));
+    CHECK(renderer.errorCount() == 1);
+    CHECK(renderer.lastFrameStats().drawCalls == 0);
+    (void)renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, textured); });
+    CHECK(renderer.errorCount() == 2);
+
+    // Untextured materials need no UVs.
+    const Image plain = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, untextured); });
+    CHECK(near(pixelAt(plain, 0.5F, 0.5F), kRed));
+    CHECK(renderer.errorCount() == 2);
+
+    // Once an update adds UVs, the textured draw works: red x green.
+    REQUIRE_FALSE(renderer.updateMesh(mesh, uvQuad({1.0F, 0.0F, 0.0F, 1.0F})).has_value());
+    const Image drawn = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, textured); });
+    CHECK(near(pixelAt(drawn, 0.5F, 0.5F), Rgb{0, 0, 0}));
+    CHECK(renderer.lastFrameStats().drawCalls == 1);
+    CHECK(renderer.errorCount() == 2);
+}
+
+TEST_CASE("A material whose texture was destroyed reports the invalid texture",
+          "[render][gpu][texture]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const TextureHandle texture = createTexture(renderer, rgbImage(1, 1, {kRed}));
+    const MaterialHandle material = texturedMaterial(renderer, texture);
+    const MeshHandle mesh = upload(renderer, uvQuad(Vec4{1.0F}));
+    const Image before = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, material); });
+    CHECK(near(pixelAt(before, 0.5F, 0.5F), kRed));
+
+    renderer.destroyTexture(texture);
+    CHECK(renderer.isValid(material)); // the material itself is still there
+    const Image stale = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, material); });
+    CHECK(near(pixelAt(stale, 0.5F, 0.5F), kClearRgb));
+    CHECK(renderer.errorCount() == 1);
+    CHECK(renderer.lastFrameStats().drawCalls == 0);
+
+    // A new texture in the freed slot does not revive the material.
+    const TextureHandle replacement = createTexture(renderer, rgbImage(1, 1, {kBlue}));
+    CHECK(replacement.index == texture.index);
+    CHECK(replacement != texture);
+    (void)renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, material); });
+    CHECK(renderer.errorCount() == 2);
+
+    // A stale texture handle is rejected when the material is created.
+    const auto rejected = renderer.createMaterial(MaterialDesc{.baseColorTexture = texture});
+    REQUIRE_FALSE(rejected.hasValue());
+    INFO(rejected.error().message);
+    CHECK(rejected.error().message.find("createMaterial: base color texture (index " +
+                                        std::to_string(texture.index) + ", generation " +
+                                        std::to_string(texture.generation) +
+                                        ") is invalid or destroyed") != std::string::npos);
+
+    const MaterialHandle current = texturedMaterial(renderer, replacement);
+    const Image fine = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, current); });
+    CHECK(near(pixelAt(fine, 0.5F, 0.5F), kBlue));
+    CHECK(renderer.errorCount() == 2);
 }

@@ -106,11 +106,12 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
   - `core/` — results, logging, frame clock, files, PNG images, math aliases (GLM).
   - `platform/` — window, OpenGL context, input; SDL3 only in `engine/src/platform/sdl3/`.
   - `geometry/` — CPU-side `MeshData` and primitive builders; no GPU or SDL code.
-  - `render/` — renderer API with mesh handles; OpenGL/GLAD only in `engine/src/render/opengl/`.
+  - `render/` — renderer API with mesh, texture and material handles; OpenGL/GLAD only in `engine/src/render/opengl/`.
   - `camera/` — camera math and the free-fly controller.
   - `debug/` — built-in pixel font for on-screen diagnostics.
 - `sandbox/island-preview/` — first executable: free-fly test scene with debug overlay (see above; `assets/` is found relative to the working directory).
 - `assets/shaders/` — GLSL sources loaded at runtime.
+- `assets/textures/` — textures of the test scene (PNG, made for the project; origin in `docs/references/THIRD_PARTY_NOTICES.md`).
 - `tests/` — Catch2/CTest tiers: `unit/` (headless), `integration/` (SDL dummy video driver, headless), `rendering/` (label `gpu`, real OpenGL, frame readback).
 - `docs/screenshots/` — captured screenshots per milestone, with how they were made.
 - `third_party/glad/` — generated OpenGL loader; regenerate with `scripts/python/generate_glad.py` (ADR 0005).

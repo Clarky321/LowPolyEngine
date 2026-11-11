@@ -192,6 +192,7 @@ void GlMesh::upload(const geometry::MeshData& mesh)
     // setMissingAttributeDefaults(); stale data from an earlier upload is unused.
     setAttributeEnabled(layout_.get(), kNormalLocation, mesh.hasNormals());
     setAttributeEnabled(layout_.get(), kUvLocation, mesh.hasUvs());
+    hasUvs_ = mesh.hasUvs();
     if (!mesh.indices.empty()) {
         glNamedBufferSubData(indices_.get(), 0,
                              byteSize(mesh.indices.size(), sizeof(std::uint32_t)),

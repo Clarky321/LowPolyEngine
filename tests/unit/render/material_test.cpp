@@ -10,6 +10,7 @@
 
 using engine::render::Color;
 using engine::render::MaterialDesc;
+using engine::render::TextureHandle;
 using engine::render::validate;
 
 namespace {
@@ -26,13 +27,14 @@ MaterialDesc withColor(float r, float g, float b, float a)
 
 } // namespace
 
-TEST_CASE("The default material is white and valid", "[render][material]")
+TEST_CASE("The default material is white, untextured and valid", "[render][material]")
 {
     const MaterialDesc desc;
     CHECK(desc.baseColor.r == 1.0F);
     CHECK(desc.baseColor.g == 1.0F);
     CHECK(desc.baseColor.b == 1.0F);
     CHECK(desc.baseColor.a == 1.0F);
+    CHECK(desc.baseColorTexture.isNull());
     CHECK_FALSE(validate(desc).has_value());
 }
 
@@ -55,4 +57,16 @@ TEST_CASE("Base color components outside [0, 1] or not finite are rejected", "[r
     CHECK(mentions(validate(withColor(2.0F, 0.0F, 0.0F, 1.0F)), "must be finite and in [0, 1]"));
     // The first offending component is reported.
     CHECK(mentions(validate(withColor(2.0F, 3.0F, 0.0F, 1.0F)), "red"));
+}
+
+TEST_CASE("validate does not judge the texture handle", "[render][material]")
+{
+    // Whether a handle is valid only the renderer knows (Renderer::createMaterial).
+    const MaterialDesc textured{.baseColorTexture = TextureHandle{3, 7}};
+    CHECK_FALSE(validate(textured).has_value());
+
+    // A texture does not excuse an invalid base color.
+    const MaterialDesc broken{.baseColor = Color{0.0F, 0.0F, 0.0F, -1.0F},
+                              .baseColorTexture = TextureHandle{3, 7}};
+    CHECK(mentions(validate(broken), "base color alpha is -1"));
 }

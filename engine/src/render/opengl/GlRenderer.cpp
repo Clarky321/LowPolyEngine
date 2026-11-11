@@ -32,6 +32,10 @@ constexpr const char* kMeshVertexShader = "mesh.vert";
 constexpr const char* kMeshFragmentShader = "mesh.frag";
 constexpr const char* kMvpUniform = "uModelViewProjection";
 constexpr const char* kBaseColorUniform = "uBaseColor";
+constexpr const char* kBaseColorTextureUniform = "uBaseColorTexture";
+
+// The texture unit uBaseColorTexture reads; set once at startup.
+constexpr GLuint kBaseColorTextureUnit = 0;
 
 // The built-in material of drawMesh(mesh, model): vertex colors unchanged.
 constexpr Color kDefaultBaseColor{1.0F, 1.0F, 1.0F, 1.0F};
@@ -40,6 +44,7 @@ constexpr Color kDefaultBaseColor{1.0F, 1.0F, 1.0F, 1.0F};
 struct MeshUniforms {
     GLint modelViewProjection = -1;
     GLint baseColor = -1;
+    GLint baseColorTexture = -1;
 };
 constexpr const char* kPositionAttribute = "aPosition";
 constexpr const char* kColorAttribute = "aColor";
@@ -131,7 +136,21 @@ std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, MeshU
     if (auto error = requireUniform("vec4", kBaseColorUniform, uniforms.baseColor)) {
         return error;
     }
+    if (auto error =
+            requireUniform("sampler2D", kBaseColorTextureUniform, uniforms.baseColorTexture)) {
+        return error;
+    }
     return std::nullopt;
+}
+
+// Bound for materials without a texture, so the shader always samples one
+// texture and needs no branch: white leaves the other factors unchanged.
+core::Result<GlTexture> createWhiteTexture()
+{
+    const core::Image white{1, 1, {255, 255, 255}, core::PixelFormat::Rgb8};
+    return GlTexture::create(white, TextureDesc{.filter = TextureFilter::Nearest,
+                                                .wrap = TextureWrap::Repeat,
+                                                .mipmaps = false});
 }
 
 detail::PoolHandle toPoolHandle(MeshHandle handle) noexcept
@@ -170,8 +189,9 @@ RendererInfo queryInfo()
 } // namespace
 
 struct Renderer::Impl {
-    Impl(GlShaderProgram program, MeshUniforms locations, bool debugOutput)
-        : meshProgram(std::move(program)), uniforms(locations), debugOutputEnabled(debugOutput)
+    Impl(GlShaderProgram program, MeshUniforms locations, GlTexture white, bool debugOutput)
+        : meshProgram(std::move(program)), uniforms(locations), whiteTexture(std::move(white)),
+          debugOutputEnabled(debugOutput)
     {
     }
 
@@ -220,13 +240,55 @@ struct Renderer::Impl {
         return material;
     }
 
-    void draw(const GlMesh& mesh, const Color& baseColor, const math::Mat4& model)
+    // The base color texture of a draw: the white texture for an untextured
+    // material. A destroyed texture, or a texture on a mesh without UVs, is
+    // counted as an error and logged once per kind; the draw is skipped.
+    const GlTexture* textureForDraw(MeshHandle meshHandle, const GlMesh& mesh,
+                                    MaterialHandle materialHandle, const MaterialDesc& material)
+    {
+        if (material.baseColorTexture.isNull()) {
+            return &whiteTexture;
+        }
+        const TextureHandle handle = material.baseColorTexture;
+        const GlTexture* texture = textures.find(toPoolHandle(handle));
+        if (texture == nullptr) {
+            ++errorCount;
+            if (!invalidTextureDrawLogged) {
+                invalidTextureDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: material (index {}, generation {}) uses an invalid or "
+                               "destroyed base color texture (index {}, generation {}); further "
+                               "such draws are only counted",
+                               materialHandle.index, materialHandle.generation, handle.index,
+                               handle.generation);
+            }
+            return nullptr;
+        }
+        if (!mesh.hasUvs()) {
+            ++errorCount;
+            if (!missingUvsDrawLogged) {
+                missingUvsDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: material (index {}, generation {}) has a base color "
+                               "texture, but mesh (index {}, generation {}) has no UVs; further "
+                               "such draws are only counted",
+                               materialHandle.index, materialHandle.generation, meshHandle.index,
+                               meshHandle.generation);
+            }
+            return nullptr;
+        }
+        return texture;
+    }
+
+    void draw(const GlMesh& mesh, const GlTexture& baseColorTexture, const Color& baseColor,
+              const math::Mat4& model)
     {
         const math::Mat4 modelViewProjection = viewProjection * model;
         glProgramUniformMatrix4fv(meshProgram.name(), uniforms.modelViewProjection, 1, GL_FALSE,
                                   glm::value_ptr(modelViewProjection));
         glProgramUniform4f(meshProgram.name(), uniforms.baseColor, baseColor.r, baseColor.g,
                            baseColor.b, baseColor.a);
+        baseColorTexture.bind(kBaseColorTextureUnit);
         mesh.draw();
 
         ++currentFrame.drawCalls;
@@ -235,6 +297,8 @@ struct Renderer::Impl {
 
     GlShaderProgram meshProgram;
     MeshUniforms uniforms;
+    // Not in the pool: no handle can reach or destroy it.
+    GlTexture whiteTexture;
     RendererInfo info = queryInfo();
     detail::HandlePool<GlMesh> meshes;
     detail::HandlePool<GlTexture> textures;
@@ -244,6 +308,8 @@ struct Renderer::Impl {
     std::uint32_t errorCount = 0;
     bool invalidMeshDrawLogged = false;
     bool invalidMaterialDrawLogged = false;
+    bool invalidTextureDrawLogged = false;
+    bool missingUvsDrawLogged = false;
     // Size passed to the last beginFrame(); 0 before the first frame.
     int frameWidth = 0;
     int frameHeight = 0;
@@ -292,6 +358,13 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
     if (auto error = checkMeshInterface(loaded.value(), uniforms)) {
         return failSetup(std::move(*error));
     }
+    glProgramUniform1i(loaded.value().program.name(), uniforms.baseColorTexture,
+                       static_cast<GLint>(kBaseColorTextureUnit));
+    auto white = createWhiteTexture();
+    if (!white) {
+        return failSetup(
+            core::Error{"creating the white texture failed: " + white.error().message});
+    }
 
     // Fixed pipeline state for the forward renderer. Front faces are
     // counter-clockwise (MeshData convention); back faces are never visible on
@@ -303,7 +376,8 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
     // What the shader reads for normals or UVs a mesh does not have.
     opengl::setMissingAttributeDefaults();
 
-    auto impl = std::make_unique<Impl>(std::move(loaded).value().program, uniforms, debugOutput);
+    auto impl = std::make_unique<Impl>(std::move(loaded).value().program, uniforms,
+                                       std::move(white).value(), debugOutput);
     impl->errorCount += opengl::checkGlErrors("renderer setup");
     return Renderer{std::move(impl)};
 }
@@ -415,6 +489,12 @@ core::Result<MaterialHandle> Renderer::createMaterial(const MaterialDesc& desc)
     if (auto error = validate(desc)) {
         return core::Error{"createMaterial: " + error->message};
     }
+    const TextureHandle texture = desc.baseColorTexture;
+    if (!texture.isNull() && !isValid(texture)) {
+        return core::Error{"createMaterial: base color texture (index " +
+                           std::to_string(texture.index) + ", generation " +
+                           std::to_string(texture.generation) + ") is invalid or destroyed"};
+    }
     const detail::PoolHandle handle = impl_->materials.insert(desc);
     return MaterialHandle{handle.index, handle.generation};
 }
@@ -432,7 +512,7 @@ bool Renderer::isValid(MaterialHandle handle) const noexcept
 void Renderer::drawMesh(MeshHandle handle, const math::Mat4& model)
 {
     if (const GlMesh* glMesh = impl_->meshForDraw(handle)) {
-        impl_->draw(*glMesh, kDefaultBaseColor, model);
+        impl_->draw(*glMesh, impl_->whiteTexture, kDefaultBaseColor, model);
     }
 }
 
@@ -442,8 +522,12 @@ void Renderer::drawMesh(MeshHandle mesh, MaterialHandle material, const math::Ma
     if (glMesh == nullptr) {
         return;
     }
-    if (const MaterialDesc* desc = impl_->materialForDraw(material)) {
-        impl_->draw(*glMesh, desc->baseColor, model);
+    const MaterialDesc* desc = impl_->materialForDraw(material);
+    if (desc == nullptr) {
+        return;
+    }
+    if (const GlTexture* texture = impl_->textureForDraw(mesh, *glMesh, material, *desc)) {
+        impl_->draw(*glMesh, *texture, desc->baseColor, model);
     }
 }
 

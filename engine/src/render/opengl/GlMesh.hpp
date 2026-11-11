@@ -45,6 +45,9 @@ public:
 
     [[nodiscard]] std::uint32_t indexCount() const noexcept { return indexCount_; }
 
+    // Whether the current data has UVs (textured materials need them).
+    [[nodiscard]] bool hasUvs() const noexcept { return hasUvs_; }
+
 private:
     GlMesh() = default;
 
@@ -57,6 +60,7 @@ private:
     std::uint32_t vertexCapacity_ = 0;
     std::uint32_t indexCapacity_ = 0;
     std::uint32_t indexCount_ = 0;
+    bool hasUvs_ = false;
 };
 
 } // namespace engine::render::opengl

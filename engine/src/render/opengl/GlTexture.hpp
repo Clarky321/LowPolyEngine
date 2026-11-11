@@ -22,6 +22,9 @@ public:
     [[nodiscard]] static core::Result<GlTexture> create(const core::Image& image,
                                                         const TextureDesc& desc);
 
+    // Binds the texture to a texture unit for the following draws.
+    void bind(GLuint unit) const;
+
 private:
     explicit GlTexture(GlTextureObject texture) noexcept : texture_(std::move(texture)) {}
 

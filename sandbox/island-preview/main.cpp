@@ -1,6 +1,6 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
 // So far: engine loop, input, free-fly camera (M1) and a static test scene
-// drawn with materials (M2).
+// drawn with materials and a texture (M2).
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
@@ -12,6 +12,8 @@
 #include "engine/app/Application.hpp"
 #include "engine/camera/Camera.hpp"
 #include "engine/camera/FreeFlyController.hpp"
+#include "engine/core/FileSystem.hpp"
+#include "engine/core/Image.hpp"
 #include "engine/core/Log.hpp"
 #include "engine/core/Version.hpp"
 
@@ -119,8 +121,27 @@ public:
             }
             meshes_.push_back(handle.value());
         }
+        // Textures are part of the program's assets, like its shaders: a
+        // missing or broken file stops the start with the reason.
+        for (const auto& texture : scene.textures) {
+            const auto path = options_.assetDirectory / "textures" / texture.file;
+            auto image = engine::core::readPng(path);
+            if (!image) {
+                return image.error();
+            }
+            auto handle = renderer.createTexture(image.value(), texture.desc);
+            if (!handle) {
+                return engine::core::Error{"texture '" + engine::core::toUtf8(path) +
+                                           "': " + handle.error().message};
+            }
+            textures_.push_back(handle.value());
+        }
         for (const auto& object : scene.objects) {
-            auto material = renderer.createMaterial(object.material);
+            engine::render::MaterialDesc desc = object.material;
+            if (object.texture) {
+                desc.baseColorTexture = textures_.at(*object.texture);
+            }
+            auto material = renderer.createMaterial(desc);
             if (!material) {
                 return material.error();
             }
@@ -134,9 +155,9 @@ public:
         }
         overlay_ = overlay.value();
         engine::core::logInfo("app",
-                              "test scene: {} objects, {} meshes; hold the right mouse button to "
-                              "look around, WASD to fly, Escape to quit",
-                              objects_.size(), meshes_.size());
+                              "test scene: {} objects, {} meshes, {} textures; hold the right "
+                              "mouse button to look around, WASD to fly, Escape to quit",
+                              objects_.size(), meshes_.size(), textures_.size());
         return std::nullopt;
     }
 
@@ -150,6 +171,10 @@ public:
             context.renderer().destroyMesh(mesh);
         }
         meshes_.clear();
+        for (const auto texture : textures_) {
+            context.renderer().destroyTexture(texture);
+        }
+        textures_.clear();
         context.renderer().destroyMesh(overlay_);
         context.window().setRelativeMouseMode(false);
     }
@@ -252,6 +277,8 @@ private:
     Options options_;
     // Shared by several objects; destroyed after them.
     std::vector<engine::render::MeshHandle> meshes_;
+    // Used by the objects' materials; destroyed after them.
+    std::vector<engine::render::TextureHandle> textures_;
     std::vector<SceneObject> objects_;
     engine::camera::Camera camera_ = initialCamera();
     engine::camera::FreeFlyController controller_;
