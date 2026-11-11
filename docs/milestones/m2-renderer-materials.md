@@ -22,7 +22,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.6 | Materials with a base color | done |
 | M2.7 | Texture sampling | done |
 | M2.8 | Directional light and flat shading | done |
-| M2.9 | OBJ subset loader | in progress |
+| M2.9 | OBJ subset loader | done |
 | M2.10 | Textured model in island-preview | planned |
 | M2.11 | Final verification and pull request | planned |
 
