@@ -29,7 +29,7 @@ lowpoly-engine/
 │   │   ├── app/              # Application lifecycle and frame loop (M1)
 │   │   ├── core/             # Clock, Log, Result, files, images, math aliases
 │   │   ├── platform/         # Engine-facing window/input interfaces
-│   │   ├── geometry/         # CPU MeshData and primitive builders (M1, ADR 0007)
+│   │   ├── geometry/         # CPU MeshData, primitive builders (M1, ADR 0007), OBJ subset import (M2.9, ADR 0012)
 │   │   ├── render/           # RHI-facing types and renderer interfaces
 │   │   ├── scene/            # Entity, components, world, prefab, document
 │   │   ├── assets/           # Asset IDs, handles, registry interfaces

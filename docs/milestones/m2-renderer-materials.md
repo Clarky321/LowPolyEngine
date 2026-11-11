@@ -22,7 +22,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.6 | Materials with a base color | done |
 | M2.7 | Texture sampling | done |
 | M2.8 | Directional light and flat shading | done |
-| M2.9 | OBJ subset loader | planned |
+| M2.9 | OBJ subset loader | in progress |
 | M2.10 | Textured model in island-preview | planned |
 | M2.11 | Final verification and pull request | planned |
 
@@ -166,13 +166,14 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** import a simple model made in an external tool.
 
-**Scope:**
-- Parse a documented OBJ subset into `MeshData`: `v`, `vt`, `vn` and `f` (triangles and convex polygons, fan-triangulated; `v`, `v/vt`, `v//vn`, `v/vt/vn`; negative indices). Other statements (`o`, `g`, `s`, `usemtl`, `mtllib`, …) are ignored and counted in a warning.
-- Every face gets its own vertices (flat shading). Faces without `vn` get a computed flat normal; this step adds the helper that computes it. Vertex colors are white.
-- Imported files are untrusted input: limits for file size and element counts, index range checks, non-finite numbers rejected, line numbers in error messages.
-- ADR: own parser versus `tinyobjloader` (license, maintenance, Conan availability), the subset and the limits. OBJ is the M2 proof format; glTF 2.0 stays the M6 candidate.
+**Scope** (decisions taken while implementing, ADR 0012):
+- Own parser, no new dependency (`tinyobjloader` would still need the conversion, limits and error handling around it): `geometry::parseObj(text, limits)` and `readObj(path, limits)` → `ObjMesh { mesh, ignoredStatements, ignoredKeywords }`, in the geometry module since there is no asset registry yet.
+- Parse a documented OBJ subset into `MeshData`: `v x y z [w]`, `vt u [v [w]]`, `vn` (normalized on import) and `f` (triangles and convex polygons, fan-triangulated; `v`, `v/vt`, `v//vn`, `v/vt/vn`, one form per face; negative indices; indices refer to earlier elements). Either all faces have UVs or none. Other statements (`o`, `g`, `s`, `usemtl`, `mtllib`, …) are ignored, counted and listed; `readObj` logs them in one warning.
+- Every face gets its own vertices (flat shading). Faces without `vn` get a computed flat normal from the new public helper `geometry::faceNormal` (area vector in double, relative degeneracy threshold `kDegenerateFaceTolerance` = 1e-10), which the primitive builders now use too; a degenerate face without normals is an error. Vertex colors are white.
+- Imported files are untrusted input: `ObjLimits` (64 MiB of text, checked on the file size before reading; 1,000,000 elements of each kind; 1,000,000 face corners), index range checks, non-finite and out-of-range numbers rejected, line numbers in error messages, quoted tokens shortened and sanitized, out of memory reported as an error. Input without faces is an error.
+- ADR 0012: the parser choice, the subset and the limits. OBJ is the M2 proof format; glTF 2.0 stays the M6 candidate.
 
-**Tests (headless):** fixtures for every face form, negative indices, quads and polygons, missing normals, malformed lines (with line number), out-of-range indices, oversized counts, NaN/Inf, empty file, CRLF line endings.
+**Tests (headless):** `tests/unit/geometry/obj_import_test.cpp` with inline fixtures for every face form, negative indices, quads and polygons, own vertices per face, missing normals, comments/tabs/CRLF/optional components, skipped statements and the keyword cap, malformed lines (with line number), out-of-range and forward indices, NaN/Inf and out-of-range numbers, every limit (and exactly at it), empty input and input without faces, and `readObj` with a temp file (errors name the file, size checked first). `tests/unit/geometry/face_normal_test.cpp`: triangles, polygons with a collinear start, bent quads, degenerate and non-finite input, tiny, huge and thin polygons.
 
 **Visual check:** none.
 

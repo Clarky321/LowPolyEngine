@@ -60,7 +60,7 @@ Official/reference links:
 | Catch2 v3 | Unit/integration testing | Adopt with CTest. Use one main test framework. |
 | Lua 5.5.1 | Embedded scripts | Candidate baseline; validate Conan package and toolchain across target platforms. Lua official release list identifies 5.5.1 (3 Aug 2026) as current at research time. |
 | LuaBridge3 | C++ ↔ Lua bindings | Candidate. Prove compatibility with selected Lua 5.5.1 package; otherwise use a small project-owned wrapper around Lua C API. |
-| stb_image / tinyobjloader / meshoptimizer | Asset import/processing | Add only when the asset pipeline milestone needs them; verify licenses and current maintenance before selection. `stb_image_write` from the `stb` package is used for frame captures (M1, ADR 0006), and `stb_image` from the same package decodes PNG files (M2.4, ADR 0008). |
+| stb_image / tinyobjloader / meshoptimizer | Asset import/processing | Add only when the asset pipeline milestone needs them; verify licenses and current maintenance before selection. `stb_image_write` from the `stb` package is used for frame captures (M1, ADR 0006), and `stb_image` from the same package decodes PNG files (M2.4, ADR 0008). tinyobjloader was not taken: M2 imports an OBJ subset with its own parser (M2.9, ADR 0012). |
 | Tracy | Profiling | Optional later tool; add after there is meaningful runtime behavior to profile. |
 
 Lua release reference: <https://www.lua.org/versions.html>  

@@ -105,7 +105,7 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
   - `app/` — application lifecycle and frame loop (`Application`, `run`).
   - `core/` — results, logging, frame clock, files, PNG images, math aliases (GLM).
   - `platform/` — window, OpenGL context, input; SDL3 only in `engine/src/platform/sdl3/`.
-  - `geometry/` — CPU-side `MeshData` and primitive builders; no GPU or SDL code.
+  - `geometry/` — CPU-side `MeshData`, primitive builders and OBJ subset import (ADR 0012); no GPU or SDL code.
   - `render/` — renderer API with mesh, texture and material handles and one directional light; OpenGL/GLAD only in `engine/src/render/opengl/`.
   - `camera/` — camera math and the free-fly controller.
   - `debug/` — built-in pixel font for on-screen diagnostics.

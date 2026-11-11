@@ -1,7 +1,8 @@
 #include "engine/geometry/Primitives.hpp"
 
-#include <glm/geometric.hpp>
+#include "engine/geometry/FaceNormal.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -31,21 +32,13 @@ constexpr std::array<math::Vec2, 3> kTriangleUvs{{
     {0.5F, 1.0F},
 }};
 
-glm::dvec3 toDouble(const math::Vec3& v) noexcept
-{
-    return {static_cast<double>(v.x), static_cast<double>(v.y), static_cast<double>(v.z)};
-}
-
 // Unit normal of the triangle a, b, c (counter-clockwise seen from its front).
-// Computed in double, so very small or very large but finite sizes neither
-// underflow to zero nor overflow to infinity.
+// The builders only make triangles with positive sizes, which are never
+// degenerate.
 math::Vec3 faceNormal(const math::Vec3& a, const math::Vec3& b, const math::Vec3& c)
 {
-    const glm::dvec3 origin = toDouble(a);
-    const glm::dvec3 normal =
-        glm::normalize(glm::cross(toDouble(b) - origin, toDouble(c) - origin));
-    return {static_cast<float>(normal.x), static_cast<float>(normal.y),
-            static_cast<float>(normal.z)};
+    const std::array<math::Vec3, 3> corners{a, b, c};
+    return geometry::faceNormal(corners).value();
 }
 
 // Adds a quad given counter-clockwise (seen from its front) as two triangles.

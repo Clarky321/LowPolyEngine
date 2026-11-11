@@ -16,7 +16,9 @@ add_executable(lpe_unit_tests
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
     unit/debug/text_mesh_test.cpp
+    unit/geometry/face_normal_test.cpp
     unit/geometry/mesh_data_test.cpp
+    unit/geometry/obj_import_test.cpp
     unit/geometry/primitives_test.cpp
     unit/platform/input_state_test.cpp
     unit/platform/window_desc_test.cpp

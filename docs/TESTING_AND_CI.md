@@ -11,6 +11,7 @@ Initial high-value test groups:
 - Core: clock conversions, event dispatch invariants, result/error helpers, PNG encoding and decoding (every color type, size limits, corrupted and truncated files; implemented, `tests/unit/core/`).
 - Camera: basis vectors, yaw/pitch limits, movement normalization, projection parameters.
 - Render (GPU-free parts): handle pool, material and light validation, the normal matrix (implemented, `tests/unit/render/`).
+- Geometry: `MeshData` validation and appending, primitives, face normals, OBJ subset import with inline fixtures for every face form, negative indices, polygons, missing normals, malformed lines with their line number, out-of-range indices, limits, NaN/Inf, empty input and CRLF (implemented, `tests/unit/geometry/`).
 - WorldGen: seeded PRNG, stable seed derivation, noise edge cases, island masks, height bounds, mesh construction, biome selection, placement bounds.
 - Scene: stable ID uniqueness, component add/remove, hierarchy validation, serialization round-trip.
 - Assets: path normalization, stable handle validation, missing-file behavior.
