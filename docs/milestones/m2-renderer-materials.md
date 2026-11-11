@@ -23,7 +23,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.7 | Texture sampling | done |
 | M2.8 | Directional light and flat shading | done |
 | M2.9 | OBJ subset loader | done |
-| M2.10 | Textured model in island-preview | in progress |
+| M2.10 | Textured model in island-preview | done |
 | M2.11 | Final verification and pull request | planned |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M2.x done (M2.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M2.x)"` finds the commits.
