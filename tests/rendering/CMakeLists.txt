@@ -73,6 +73,13 @@ lpe_add_gpu_test(island_preview_shader_missing_base_color_texture
 set_tests_properties(island_preview_shader_missing_base_color_texture PROPERTIES
     PASS_REGULAR_EXPRESSION "uniform sampler2D 'uBaseColorTexture' is missing or unused")
 
+# Shaders without lighting (as of M2.7) are named by the first missing
+# lighting uniform (M2.8).
+lpe_add_gpu_test(island_preview_shader_missing_lighting
+    island-preview --frames 1 --assets "${fixtures}/missing-lighting")
+set_tests_properties(island_preview_shader_missing_lighting PROPERTIES
+    PASS_REGULAR_EXPRESSION "uniform mat3 'uNormalMatrix' is missing or unused")
+
 # An optional input (normals, UVs) that is used at the wrong location would read
 # the wrong buffer range; it is named with both locations.
 lpe_add_gpu_test(island_preview_shader_wrong_attribute_location

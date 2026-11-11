@@ -21,7 +21,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.5 | GPU textures behind handles | done |
 | M2.6 | Materials with a base color | done |
 | M2.7 | Texture sampling | done |
-| M2.8 | Directional light and flat shading | planned |
+| M2.8 | Directional light and flat shading | in progress |
 | M2.9 | OBJ subset loader | planned |
 | M2.10 | Textured model in island-preview | planned |
 | M2.11 | Final verification and pull request | planned |
@@ -152,14 +152,15 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** brightness comes from a light, not from colors baked into the scene.
 
-**Scope:**
-- One directional light per frame (direction, color, ambient), set like `ViewDesc`. Lambert diffuse plus ambient from the interpolated normal, which is constant per face for flat-shaded meshes. Normals use the normal matrix, so non-uniform scale stays correct.
-- Materials are lit or unlit; the debug overlay stays unlit. A lit material on a mesh without normals is an error, like a texture without UVs.
-- The test scene drops its hand-made brightness factors (`boxShades`, `pyramidShades`) and uses the light.
+**Scope** (decisions taken while implementing, ADR 0011):
+- One directional light per frame: `LightDesc { direction, color, ambient }` set with `Renderer::setLight`, like `ViewDesc`. `beginFrame` resets it to `LightDesc{}`, which is neutral (white ambient, no direct light). Direction any non-zero length, colors finite and `>= 0`, checked by the GPU-free `validate(LightDesc)`; an invalid light is ignored and counts one error, the previous light stays. Lambert diffuse plus ambient from the interpolated normal, which is constant per face for flat-shaded meshes; alpha is not lit. Normals use the cofactor matrix of the model matrix (`uNormalMatrix`), so non-uniform scale and mirroring stay correct and a flattened model stays defined.
+- Materials are lit or unlit: `MaterialDesc::shading`, `Shading::Unlit` by default, so the debug overlay, the default material and earlier materials are unchanged. Unlit draws use the same shader with white ambient and no light. A lit material on a mesh without normals is an error, like a texture without UVs.
+- Shader interface: `uNormalMatrix`, `uDirectionToLight`, `uLightColor`, `uAmbientColor` are required at startup (new fixture `missing-lighting`, the M2.7 shaders; the other fixtures declare them).
+- The test scene drops its hand-made brightness factors (`boxShades`, `pyramidShades`): white vertex colors, lit materials and a sunlight chosen by eye to stay close to the earlier look.
 
-**Tests (GPU):** a face toward the light is brighter than one facing away; ambient is the minimum; unlit materials ignore the light; non-uniform scale.
+**Tests:** unit (`tests/unit/render/light_test.cpp`): the default light, valid and invalid lights with messages; the normal matrix under translation, rotation, uniform and non-uniform scale, shear, mirroring and a flattened model. GPU: ambient plus Lambert diffuse for a face toward the light, one at 60 degrees and one facing away (ambient is the minimum); light color and ambient per channel, alpha not lit; unlit materials and the default material ignore the light, the default light leaves lit materials unchanged and `beginFrame` resets it; normals follow rotation and non-uniform scale; a lit material on a mesh without normals counts an error until an update adds normals; an invalid light is ignored and counted. Smoke test for the missing lighting uniforms.
 
-**Visual check:** screenshot, compared with the M1 look.
+**Visual check:** screenshot `docs/screenshots/m2/003-directional-light.png`, compared with the M1 look.
 
 ### M2.9 — OBJ subset loader
 

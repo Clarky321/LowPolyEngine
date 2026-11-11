@@ -11,7 +11,9 @@
 #include "engine/platform/Window.hpp"
 #include "engine/render/Renderer.hpp"
 
+#include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -874,4 +876,227 @@ TEST_CASE("A material whose texture was destroyed reports the invalid texture",
     const Image fine = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, current); });
     CHECK(near(pixelAt(fine, 0.5F, 0.5F), kBlue));
     CHECK(renderer.errorCount() == 2);
+}
+
+// --- Directional light and flat shading (M2.8) ----------------------------------
+
+namespace {
+
+using engine::render::LightDesc;
+using engine::render::Shading;
+
+// With identity view and projection the viewer looks along +Z. These lights
+// shine from the viewer into the screen, so a face whose normal points back
+// at the viewer, (0, 0, -1), faces the light.
+constexpr Vec3 kIntoScreen{0.0F, 0.0F, 1.0F};
+constexpr Vec3 kTowardsViewer{0.0F, 0.0F, -1.0F};
+
+MaterialHandle litMaterial(Renderer& renderer,
+                           const Color& baseColor = Color{1.0F, 1.0F, 1.0F, 1.0F})
+{
+    auto material =
+        renderer.createMaterial(MaterialDesc{.baseColor = baseColor, .shading = Shading::Lit});
+    REQUIRE(material.hasValue());
+    return material.value();
+}
+
+Mat4 at(float x)
+{
+    return glm::translate(Mat4{1.0F}, Vec3{x, 0.0F, 0.0F});
+}
+
+} // namespace
+
+TEST_CASE("Lit faces get ambient plus Lambert diffuse light", "[render][gpu][light]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MaterialHandle lit = litMaterial(renderer);
+    const Vec4 white{1.0F};
+    const MeshHandle facing = upload(renderer, attributedQuad(white, kTowardsViewer, false, 0.3F));
+    // 60 degrees away from the light: cos = 0.5.
+    const MeshHandle slanted =
+        upload(renderer, attributedQuad(white, Vec3{std::sqrt(0.75F), 0.0F, -0.5F}, false, 0.3F));
+    const MeshHandle away = upload(renderer, attributedQuad(white, kIntoScreen, false, 0.3F));
+
+    const Image image = renderFrame(gpu, [&](Renderer& r) {
+        r.setLight({.direction = kIntoScreen, .color = Vec3{0.5F}, .ambient = Vec3{0.25F}});
+        r.drawMesh(facing, lit, at(-0.6F));
+        r.drawMesh(slanted, lit, at(0.0F));
+        r.drawMesh(away, lit, at(0.6F));
+    });
+    INFO("facing " << describe(pixelAt(image, 0.2F, 0.5F)) << ", slanted "
+                   << describe(pixelAt(image, 0.5F, 0.5F)) << ", away "
+                   << describe(pixelAt(image, 0.8F, 0.5F)));
+    CHECK(near(pixelAt(image, 0.2F, 0.5F), Rgb{191, 191, 191})); // 0.25 + 0.5
+    CHECK(near(pixelAt(image, 0.5F, 0.5F), Rgb{128, 128, 128})); // 0.25 + 0.5 x 0.5
+    // Facing away gets the ambient light only: the minimum.
+    CHECK(near(pixelAt(image, 0.8F, 0.5F), Rgb{64, 64, 64}));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Light color and ambient act per channel; alpha is not lit", "[render][gpu][light]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MeshHandle mesh = upload(renderer, attributedQuad(Vec4{1.0F}, kTowardsViewer, false));
+
+    const MaterialHandle lit = litMaterial(renderer);
+    const Image colored = renderFrame(gpu, [&](Renderer& r) {
+        r.setLight({.direction = kIntoScreen,
+                    .color = {1.0F, 0.5F, 0.0F},
+                    .ambient = {0.0F, 0.0F, 0.25F}});
+        r.drawMesh(mesh, lit);
+    });
+    INFO("colored " << describe(pixelAt(colored, 0.5F, 0.5F)));
+    CHECK(near(pixelAt(colored, 0.5F, 0.5F), Rgb{255, 128, 64}));
+
+    // RGB 0.5 after lighting, alpha still 0.5: a quarter over black. A lit
+    // alpha (0.25) would give an eighth.
+    const MaterialHandle halfAlpha = litMaterial(renderer, {1.0F, 1.0F, 1.0F, 0.5F});
+    const Image blended = renderFrame(
+        gpu,
+        [&](Renderer& r) {
+            r.setView({.depth = engine::render::DepthMode::Off,
+                       .blend = engine::render::BlendMode::Alpha});
+            r.setLight({.direction = kIntoScreen, .color = Vec3{0.5F}, .ambient = Vec3{0.0F}});
+            r.drawMesh(mesh, halfAlpha);
+        },
+        Color{0.0F, 0.0F, 0.0F, 1.0F});
+    INFO("blended " << describe(pixelAt(blended, 0.5F, 0.5F)));
+    CHECK(near(pixelAt(blended, 0.5F, 0.5F), Rgb{64, 64, 64}));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Unlit materials ignore the light; each frame starts with the default light",
+          "[render][gpu][light]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const Vec4 color{0.2F, 0.4F, 0.6F, 1.0F};
+    const Rgb unchanged{51, 102, 153};
+    const MeshHandle mesh = upload(renderer, attributedQuad(color, kTowardsViewer, false, 0.3F));
+    // Unlit materials need no normals.
+    const MeshHandle withoutNormals =
+        upload(renderer, attributedQuad(color, std::nullopt, false, 0.3F));
+    const MaterialHandle lit = litMaterial(renderer);
+    const MaterialHandle unlit = createMaterial(renderer, {1.0F, 1.0F, 1.0F, 1.0F});
+
+    // The default light leaves lit materials as they are.
+    const Image byDefault = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, lit); });
+    CHECK(near(pixelAt(byDefault, 0.5F, 0.5F), unchanged));
+
+    // No light at all: lit turns black, unlit and the default material do not.
+    const Image dark = renderFrame(gpu, [&](Renderer& r) {
+        r.setLight({.direction = kIntoScreen, .color = Vec3{0.0F}, .ambient = Vec3{0.0F}});
+        r.drawMesh(mesh, lit, at(-0.6F));
+        r.drawMesh(withoutNormals, unlit, at(0.0F));
+        r.drawMesh(mesh, at(0.6F));
+    });
+    INFO("lit " << describe(pixelAt(dark, 0.2F, 0.5F)) << ", unlit "
+                << describe(pixelAt(dark, 0.5F, 0.5F)) << ", default "
+                << describe(pixelAt(dark, 0.8F, 0.5F)));
+    CHECK(near(pixelAt(dark, 0.2F, 0.5F), Rgb{0, 0, 0}));
+    CHECK(near(pixelAt(dark, 0.5F, 0.5F), unchanged));
+    CHECK(near(pixelAt(dark, 0.8F, 0.5F), unchanged));
+
+    // beginFrame resets the light.
+    const Image next = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, lit); });
+    CHECK(near(pixelAt(next, 0.5F, 0.5F), unchanged));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("Normals follow rotation and non-uniform scale", "[render][gpu][light]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MaterialHandle lit = litMaterial(renderer);
+    const LightDesc light{.direction = kIntoScreen, .color = Vec3{1.0F}, .ambient = Vec3{0.0F}};
+
+    // A face in the plane x = z, turned 45 degrees from the light: normal
+    // (1, 0, -1) / sqrt(2), brightness cos 45 = 0.71.
+    MeshData tilted;
+    tilted.positions = {
+        {-0.5F, -0.5F, -0.5F}, {0.5F, -0.5F, 0.5F}, {0.5F, 0.5F, 0.5F}, {-0.5F, 0.5F, -0.5F}};
+    tilted.colors.assign(4, Vec4{1.0F});
+    tilted.normals.assign(4, glm::normalize(Vec3{1.0F, 0.0F, -1.0F}));
+    tilted.indices = {0, 1, 2, 0, 2, 3};
+    const MeshHandle tiltedMesh = upload(renderer, tilted);
+    const auto centerWith = [&](MeshHandle mesh, const Mat4& model) {
+        const Image image = renderFrame(gpu, [&](Renderer& r) {
+            r.setLight(light);
+            r.drawMesh(mesh, lit, model);
+        });
+        return pixelAt(image, 0.5F, 0.5F);
+    };
+
+    const Rgb plain = centerWith(tiltedMesh, Mat4{1.0F});
+    INFO("plain " << describe(plain));
+    CHECK(near(plain, Rgb{180, 180, 180}));
+
+    // Stretched 2x along X the face turns towards the light: its normal is
+    // (1, 0, -2) / sqrt(5), brightness 0.89. Transforming the normal with the
+    // model matrix itself would give (2, 0, -1) / sqrt(5), brightness 0.45.
+    const Rgb stretched = centerWith(tiltedMesh, glm::scale(Mat4{1.0F}, Vec3{2.0F, 1.0F, 1.0F}));
+    INFO("stretched " << describe(stretched));
+    CHECK(near(stretched, Rgb{228, 228, 228}));
+
+    // A face towards the light, turned 60 degrees about Y: cos 60 = 0.5.
+    const MeshHandle facing =
+        upload(renderer, attributedQuad(Vec4{1.0F}, kTowardsViewer, false, 0.5F));
+    const Rgb rotated =
+        centerWith(facing, glm::rotate(Mat4{1.0F}, glm::radians(60.0F), Vec3{0.0F, 1.0F, 0.0F}));
+    INFO("rotated " << describe(rotated));
+    CHECK(near(rotated, Rgb{128, 128, 128}));
+    CHECK(renderer.errorCount() == 0);
+}
+
+TEST_CASE("A lit material on a mesh without normals draws nothing and counts an error",
+          "[render][gpu][light]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MaterialHandle lit = litMaterial(renderer);
+    const MaterialHandle unlit = createMaterial(renderer, {1.0F, 1.0F, 1.0F, 1.0F});
+    const Vec4 red{1.0F, 0.0F, 0.0F, 1.0F};
+    const MeshHandle mesh = upload(renderer, attributedQuad(red, std::nullopt, false));
+
+    const Image skipped = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, lit); });
+    CHECK(near(pixelAt(skipped, 0.5F, 0.5F), kClearRgb));
+    CHECK(renderer.errorCount() == 1);
+    CHECK(renderer.lastFrameStats().drawCalls == 0);
+    (void)renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, lit); });
+    CHECK(renderer.errorCount() == 2);
+
+    const Image plain = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, unlit); });
+    CHECK(near(pixelAt(plain, 0.5F, 0.5F), kRed));
+    CHECK(renderer.errorCount() == 2);
+
+    // Once an update adds normals, the lit draw works.
+    REQUIRE_FALSE(
+        renderer.updateMesh(mesh, attributedQuad(red, kTowardsViewer, false)).has_value());
+    const Image drawn = renderFrame(gpu, [&](Renderer& r) { r.drawMesh(mesh, lit); });
+    CHECK(near(pixelAt(drawn, 0.5F, 0.5F), kRed));
+    CHECK(renderer.lastFrameStats().drawCalls == 1);
+    CHECK(renderer.errorCount() == 2);
+}
+
+TEST_CASE("setLight ignores an invalid light and counts an error", "[render][gpu][light]")
+{
+    auto gpu = createRenderer();
+    Renderer& renderer = *gpu.renderer;
+    const MaterialHandle lit = litMaterial(renderer);
+    const MeshHandle mesh = upload(renderer, attributedQuad(Vec4{1.0F}, kTowardsViewer, false));
+
+    const Image image = renderFrame(gpu, [&](Renderer& r) {
+        r.setLight({.direction = kIntoScreen, .color = Vec3{0.0F}, .ambient = Vec3{0.25F}});
+        r.setLight({.direction = Vec3{0.0F}}); // ignored
+        r.setLight({.color = Vec3{-1.0F}});    // ignored
+        r.drawMesh(mesh, lit);
+    });
+    // The first light stays: ambient only.
+    INFO("center " << describe(pixelAt(image, 0.5F, 0.5F)));
+    CHECK(near(pixelAt(image, 0.5F, 0.5F), Rgb{64, 64, 64}));
+    CHECK(renderer.errorCount() == 2);
+    CHECK(renderer.lastFrameStats().drawCalls == 1);
 }

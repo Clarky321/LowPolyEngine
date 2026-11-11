@@ -45,6 +45,9 @@ public:
 
     [[nodiscard]] std::uint32_t indexCount() const noexcept { return indexCount_; }
 
+    // Whether the current data has normals (lit materials need them).
+    [[nodiscard]] bool hasNormals() const noexcept { return hasNormals_; }
+
     // Whether the current data has UVs (textured materials need them).
     [[nodiscard]] bool hasUvs() const noexcept { return hasUvs_; }
 
@@ -60,6 +63,7 @@ private:
     std::uint32_t vertexCapacity_ = 0;
     std::uint32_t indexCapacity_ = 0;
     std::uint32_t indexCount_ = 0;
+    bool hasNormals_ = false;
     bool hasUvs_ = false;
 };
 

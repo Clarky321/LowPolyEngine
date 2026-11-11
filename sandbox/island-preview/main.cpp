@@ -1,6 +1,6 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
 // So far: engine loop, input, free-fly camera (M1) and a static test scene
-// drawn with materials and a texture (M2).
+// drawn with materials, a texture and a directional light (M2).
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
@@ -114,6 +114,7 @@ public:
     {
         auto& renderer = context.renderer();
         const island_preview::TestScene scene = island_preview::buildTestScene();
+        light_ = scene.light;
         for (const auto& mesh : scene.meshes) {
             auto handle = renderer.createMesh(mesh);
             if (!handle) {
@@ -225,6 +226,7 @@ public:
             .projection = engine::camera::projectionMatrix(
                 camera_, engine::camera::aspectRatio(size.width, size.height)),
         });
+        renderer.setLight(light_);
         for (const auto& object : objects_) {
             engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, object.position);
             if (object.spinRadiansPerSecond != 0.0F) {
@@ -280,6 +282,7 @@ private:
     // Used by the objects' materials; destroyed after them.
     std::vector<engine::render::TextureHandle> textures_;
     std::vector<SceneObject> objects_;
+    engine::render::LightDesc light_;
     engine::camera::Camera camera_ = initialCamera();
     engine::camera::FreeFlyController controller_;
     bool mouseLook_ = false;

@@ -21,6 +21,7 @@ add_executable(lpe_unit_tests
     unit/platform/input_state_test.cpp
     unit/platform/window_desc_test.cpp
     unit/render/handle_pool_test.cpp
+    unit/render/light_test.cpp
     unit/render/material_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)

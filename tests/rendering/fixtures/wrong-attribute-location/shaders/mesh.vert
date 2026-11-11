@@ -8,11 +8,14 @@ layout(location = 1) in vec4 aColor;
 layout(location = 4) in vec3 aNormal;
 
 uniform mat4 uModelViewProjection;
+uniform mat3 uNormalMatrix;
 
 layout(location = 0) out vec4 vColor;
+layout(location = 2) out vec3 vNormal;
 
 void main()
 {
     vColor = vec4(aColor.rgb * abs(aNormal), aColor.a);
+    vNormal = uNormalMatrix * aNormal;
     gl_Position = uModelViewProjection * vec4(aPosition, 1.0);
 }

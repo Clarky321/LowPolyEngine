@@ -4,12 +4,29 @@
 // renderer needs for textured materials (shader interface test): the texture
 // is left out.
 layout(location = 0) in vec4 vColor;
+layout(location = 2) in vec3 vNormal;
 
 uniform vec4 uBaseColor;
+// World space, unit length: from the surface towards the light.
+uniform vec3 uDirectionToLight;
+uniform vec3 uLightColor;
+uniform vec3 uAmbientColor;
 
 layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    fragColor = vColor * uBaseColor;
+    vec4 color = vColor * uBaseColor;
+
+    // Lambert diffuse from the interpolated normal, normalized here; it is the
+    // same on a whole face of a flat-shaded mesh. A zero normal (a mesh
+    // without normals, drawn unlit) gets no diffuse light instead of NaN.
+    float lengthSquared = dot(vNormal, vNormal);
+    float diffuse = lengthSquared > 0.0
+                        ? max(dot(vNormal, uDirectionToLight), 0.0) * inversesqrt(lengthSquared)
+                        : 0.0;
+    vec3 light = uAmbientColor + uLightColor * diffuse;
+
+    // Alpha is not lit.
+    fragColor = vec4(color.rgb * light, color.a);
 }

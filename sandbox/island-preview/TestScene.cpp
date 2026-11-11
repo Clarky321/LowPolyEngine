@@ -15,33 +15,36 @@ using engine::geometry::makePyramid;
 using engine::math::Vec3;
 using engine::math::Vec4;
 using engine::render::Color;
+using engine::render::LightDesc;
 using engine::render::MaterialDesc;
+using engine::render::Shading;
 using engine::render::TextureDesc;
 using engine::render::TextureFilter;
 
-Vec4 gray(float brightness)
+// Shapes keep white vertex colors: the hue comes from the material, the
+// brightness of each face from the light.
+template <std::size_t Faces>
+std::array<Vec4, Faces> white()
 {
-    return Vec4(Vec3(brightness), 1.0F);
-}
-
-// Until the renderer has lighting (M2.8), faces get fixed brightness factors as
-// if lit from above and in front: top brightest, bottom darkest. They are gray
-// vertex colors; the material's base color multiplies in the hue.
-std::array<Vec4, 6> boxShades()
-{
-    // BoxFace order: +X, -X, +Y, -Y, +Z, -Z.
-    return {gray(0.80F), gray(0.62F), gray(1.0F), gray(0.45F), gray(0.90F), gray(0.70F)};
-}
-
-std::array<Vec4, 5> pyramidShades()
-{
-    // Sides +X, -X, +Z, -Z, then the base.
-    return {gray(0.80F), gray(0.62F), gray(0.95F), gray(0.70F), gray(0.45F)};
+    std::array<Vec4, Faces> colors{};
+    colors.fill(Vec4{1.0F});
+    return colors;
 }
 
 MaterialDesc material(const Color& baseColor)
 {
-    return MaterialDesc{.baseColor = baseColor};
+    return MaterialDesc{.baseColor = baseColor, .shading = Shading::Lit};
+}
+
+// Sunlight from above, in front (+Z) and slightly from the right (+X), chosen by
+// eye to stay close to the fixed brightness factors the scene used before
+// lighting (M1 to M2.7): the ground and box tops at about 0.92, box fronts
+// 0.87, right sides 0.64, the pyramid's front 1.0 and right side 0.83, faces
+// turned away 0.6 (ambient).
+LightDesc sunlight()
+{
+    return LightDesc{
+        .direction = {-0.1F, -0.75F, -0.62F}, .color = Vec3{0.42F}, .ambient = Vec3{0.6F}};
 }
 
 const Vec4 kGrassLight{0.47F, 0.70F, 0.38F, 1.0F};
@@ -73,13 +76,13 @@ TestScene buildTestScene()
 
     // 80 x 80 m ground of 2 m cells: big enough to see motion and perspective.
     const auto ground = addMesh(makeCheckerPlane(40, 2.0F, kGrassLight, kGrassDark));
-    const auto pyramid = addMesh(makePyramid(4.5F, 6.0F, pyramidShades()));
-    const auto cube = addMesh(makeBox(Vec3{1.0F}, boxShades()));
-    const auto tower = addMesh(makeBox({1.0F, 2.5F, 1.0F}, boxShades()));
-    const auto smallCube = addMesh(makeBox(Vec3{0.75F}, boxShades()));
-    const auto bar = addMesh(makeBox({3.0F, 0.6F, 0.6F}, boxShades()));
-    const auto pillar = addMesh(makeBox({1.0F, 5.0F, 1.0F}, boxShades()));
-    const auto swatch = addMesh(makeBox(Vec3{0.6F}, boxShades()));
+    const auto pyramid = addMesh(makePyramid(4.5F, 6.0F, white<5>()));
+    const auto cube = addMesh(makeBox(Vec3{1.0F}, white<6>()));
+    const auto tower = addMesh(makeBox({1.0F, 2.5F, 1.0F}, white<6>()));
+    const auto smallCube = addMesh(makeBox(Vec3{0.75F}, white<6>()));
+    const auto bar = addMesh(makeBox({3.0F, 0.6F, 0.6F}, white<6>()));
+    const auto pillar = addMesh(makeBox({1.0F, 5.0F, 1.0F}, white<6>()));
+    const auto swatch = addMesh(makeBox(Vec3{0.6F}, white<6>()));
 
     add(ground, kWhite, Vec3{0.0F});
     add(pyramid, kSand, Vec3{0.0F});
@@ -87,8 +90,9 @@ TestScene buildTestScene()
     add(tower, kTeal, {-10.0F, 2.5F, -7.0F});
     add(smallCube, kChalk, {6.5F, 0.75F, 8.0F});
     add(bar, kViolet, {13.0F, 0.6F, 3.0F});
-    // Floating and spinning: shows that update() and frame time drive the scene.
-    // Shares its mesh with the coral cube.
+    // Floating and spinning: shows that update() and frame time drive the scene,
+    // and that the light stays put while the faces turn. Shares its mesh with
+    // the coral cube.
     add(cube, kMustard, {-7.0F, 3.0F, 5.0F}, 0.8F);
 
     // Pillars at the ground corners help with orientation while flying; one mesh.
@@ -104,14 +108,16 @@ TestScene buildTestScene()
         add(swatch, swatchColors[i], {-13.0F + 2.5F * static_cast<float>(i), 0.6F, 10.0F});
     }
 
-    // A crate: the 16x16 pixel-art texture times the cube's gray shades and a
-    // white base color. Nearest filtering keeps its texels crisp.
+    // A crate: the 16x16 pixel-art texture, lit, with a white base color.
+    // Nearest filtering keeps its texels crisp.
     scene.textures.push_back(
         {.file = "crate.png", .desc = TextureDesc{.filter = TextureFilter::Nearest}});
     scene.objects.push_back({.mesh = cube,
                              .material = material(kWhite),
                              .position = {3.5F, 1.0F, 5.5F},
                              .texture = scene.textures.size() - 1});
+
+    scene.light = sunlight();
     return scene;
 }
 

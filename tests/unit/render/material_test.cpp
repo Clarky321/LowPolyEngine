@@ -27,7 +27,7 @@ MaterialDesc withColor(float r, float g, float b, float a)
 
 } // namespace
 
-TEST_CASE("The default material is white, untextured and valid", "[render][material]")
+TEST_CASE("The default material is white, untextured, unlit and valid", "[render][material]")
 {
     const MaterialDesc desc;
     CHECK(desc.baseColor.r == 1.0F);
@@ -35,6 +35,7 @@ TEST_CASE("The default material is white, untextured and valid", "[render][mater
     CHECK(desc.baseColor.b == 1.0F);
     CHECK(desc.baseColor.a == 1.0F);
     CHECK(desc.baseColorTexture.isNull());
+    CHECK(desc.shading == engine::render::Shading::Unlit);
     CHECK_FALSE(validate(desc).has_value());
 }
 

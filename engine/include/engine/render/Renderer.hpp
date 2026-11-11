@@ -83,9 +83,18 @@ struct MaterialHandle {
     friend bool operator==(const MaterialHandle&, const MaterialHandle&) = default;
 };
 
-// Surface appearance of a draw (ADR 0010): output color = base color texture
-// at the mesh's UV x vertex color x base color, alpha included. A later M2
-// step adds lit/unlit shading.
+// Whether a material reacts to the frame's light (ADR 0011).
+enum class Shading {
+    // The material color as it is: overlays, debug drawing, emissive things.
+    Unlit,
+    // The material color times (ambient + light color x Lambert diffuse) from
+    // the mesh's normals; meshes drawn with it need normals.
+    Lit,
+};
+
+// Surface appearance of a draw (ADR 0010): material color = base color
+// texture at the mesh's UV x vertex color x base color, alpha included; lit
+// materials then multiply its RGB with the light (ADR 0011).
 struct MaterialDesc {
     // RGBA, each component in [0, 1]. Multiplies the mesh's vertex colors, so
     // white keeps them; alpha matters with BlendMode::Alpha. Display-space
@@ -96,12 +105,38 @@ struct MaterialDesc {
     // texture and does not own it: destroying the texture makes draws with
     // this material fail (counted in Renderer::errorCount()).
     TextureHandle baseColorTexture{};
+    // Unlit by default, so a material shows its colors unchanged unless it
+    // asks for lighting.
+    Shading shading = Shading::Unlit;
 };
 
 // Checks that every base color component is finite and in [0, 1]. The error
 // names the first offending component. GPU-free, so it cannot check the
 // texture handle; Renderer::createMaterial does that.
 [[nodiscard]] std::optional<core::Error> validate(const MaterialDesc& desc);
+
+// The frame's directional light, like sunlight (ADR 0011). A lit surface gets
+// ambient + color x max(0, cos(angle between its normal and the direction to
+// the light)), per RGB channel. Display-space values (ADR 0009); results above
+// 1 saturate.
+//
+// The defaults light everything fully from all sides (white ambient, no direct
+// light), so lit materials look unlit until a light is set.
+struct LightDesc {
+    // World-space direction the light travels in, e.g. (0, -1, 0) for light
+    // from straight above. Any length except zero; it is normalized.
+    math::Vec3 direction{0.0F, -1.0F, 0.0F};
+    // RGB, each component finite and >= 0.
+    math::Vec3 color{0.0F};
+    // Light every lit surface gets, whatever its orientation. RGB, each
+    // component finite and >= 0.
+    math::Vec3 ambient{1.0F};
+};
+
+// Checks that the direction is finite and not zero and that every color and
+// ambient component is finite and >= 0. The error names the first offending
+// value. GPU-free.
+[[nodiscard]] std::optional<core::Error> validate(const LightDesc& desc);
 
 enum class DepthMode {
     // Nearer surfaces hide farther ones (3D scenes).
@@ -182,12 +217,18 @@ public:
 
     [[nodiscard]] bool isValid(TextureHandle handle) const noexcept;
 
-    // Sets the viewport to the framebuffer size, clears color and depth and
-    // resets the view to identity matrices (normalized device coordinates).
+    // Sets the viewport to the framebuffer size, clears color and depth, resets
+    // the view to identity matrices (normalized device coordinates) and the
+    // light to LightDesc{}.
     void beginFrame(int framebufferWidth, int framebufferHeight, const Color& clearColor);
 
     // Camera matrices and depth/blend state for the following draw calls.
     void setView(const ViewDesc& view);
+
+    // The light for the following draw calls with lit materials. An invalid
+    // light (see validate(LightDesc)) is ignored and counts as an error; the
+    // previous light stays.
+    void setLight(const LightDesc& light);
 
     // Stores a material. Fails if the description does not pass validate() or
     // its base color texture is neither null nor a valid handle.
@@ -205,9 +246,12 @@ public:
     void drawMesh(MeshHandle handle, const math::Mat4& model = math::Mat4{1.0F});
 
     // Draws a mesh with a material: output color = texture x vertex color x
-    // base color (see MaterialDesc). Draws nothing and counts as one error if
-    // the mesh or material handle is invalid, the material's texture was
-    // destroyed, or the material has a texture and the mesh has no UVs.
+    // base color, lit if the material is (see MaterialDesc). Draws nothing and
+    // counts as one error if the mesh or material handle is invalid, the
+    // material's texture was destroyed, the material has a texture and the
+    // mesh has no UVs, or the material is lit and the mesh has no normals.
+    // Normals are transformed with the model matrix's cofactor matrix, so
+    // non-uniform scale keeps them perpendicular to their faces.
     void drawMesh(MeshHandle mesh, MaterialHandle material,
                   const math::Mat4& model = math::Mat4{1.0F});
 
