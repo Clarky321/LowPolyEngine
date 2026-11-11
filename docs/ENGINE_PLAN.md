@@ -201,7 +201,7 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** draw multiple flat-shaded meshes and at least one textured material; shader errors are surfaced clearly.
 
-**Status:** planned on the branch `milestone/m2-renderer-materials`; sub-milestones M2.1–M2.11 in `docs/milestones/m2-renderer-materials.md`. From M2 on, every milestone follows `docs/DEVELOPMENT_WORKFLOW.md`: one sub-milestone per task, merged into `main` through one pull request after acceptance.
+**Status:** done on the branch `milestone/m2-renderer-materials` (2026-11-11), waiting for the user's acceptance before its pull request is merged into `main`. Delivered as M2.1–M2.11 (`docs/milestones/m2-renderer-materials.md`, one sub-milestone per task as `docs/DEVELOPMENT_WORKFLOW.md` requires from M2 on): optional normals and UVs in `MeshData`, flat normals and UVs on the primitives and on the GPU; PNG decoding with stb_image (ADR 0008); GPU textures behind handles, colors in display space (ADR 0009); materials with a base color and an optional base color texture (ADR 0010); one directional light with ambient plus Lambert diffuse, flat shading from per-face normals and lit/unlit materials (ADR 0011); an own parser for a documented OBJ subset (ADR 0012), proven by a textured lighthouse model in island-preview. Exit criterion: the test scene draws many flat-shaded, lit meshes, a textured crate and the imported textured model; eight broken-shader fixtures show that compile, link, missing-file and shader-interface errors name the shader file and, where it applies, the variable. CI green on Windows MSVC and Linux GCC (Debug and Release); the GPU tier passes locally. Screenshots: `docs/screenshots/m2/`.
 
 ### M3 — Procedural island sandbox
 

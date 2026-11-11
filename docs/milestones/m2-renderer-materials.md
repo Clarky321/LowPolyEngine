@@ -24,7 +24,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.8 | Directional light and flat shading | done |
 | M2.9 | OBJ subset loader | done |
 | M2.10 | Textured model in island-preview | done |
-| M2.11 | Final verification and pull request | planned |
+| M2.11 | Final verification and pull request | in progress |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M2.x done (M2.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M2.x)"` finds the commits.
 
@@ -199,6 +199,14 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Every broken-shader fixture still names the shader file or variable.
 - `docs/screenshots/m2/README.md` complete; M2 status in `docs/ENGINE_PLAN.md`; `README.md` (current stage, assets); ADR statuses.
 - Pull request `milestone/m2-renderer-materials` → `main`, merged only after the user accepts M2.
+
+**Verification** (2026-11-11, Windows 11, MSVC, NVIDIA GeForce RTX 4060, driver 610.62):
+- Debug and Release with `LPE_WARNINGS_AS_ERRORS=ON`: no warnings. Headless tier 167/167 and GPU tier 58/58 in both configurations; format check: 92 files clean.
+- A fresh clone of the branch (outside the canonical checkout, deleted afterwards) builds in Debug with warnings as errors and passes both tiers, so every file the build and the tests need is committed (M2.10 had found `*.obj` ignored).
+- All eight broken-shader fixtures were run by hand: compile and link errors and the missing file name the shader files; `missing-uniform`, `missing-base-color`, `missing-base-color-texture`, `missing-lighting` and `wrong-attribute-location` name the program's files and the variable.
+- Exit criterion: the test scene draws many flat-shaded, lit meshes (`003-directional-light.png`), the textured crate (`002-textured-crate.png`) and the imported textured lighthouse (`004-imported-model.png`); GPU tests cover lighting, texture sampling and every draw error.
+- `docs/screenshots/m2/README.md` lists 001–004; `docs/ENGINE_PLAN.md` and `README.md` describe M2 as done and waiting for acceptance; ADRs 0007–0012 are accepted, with their amendments marked.
+- Not covered by checks: flying the camera by hand (needs the user), the GPU tier on Linux (no GPU runner).
 
 ## Risks and open questions
 

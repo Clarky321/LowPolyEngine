@@ -1,8 +1,8 @@
 # LowPolyEngine
 
-A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M2 — low-poly renderer and materials** is in progress on the branch `milestone/m2-renderer-materials`; its step-by-step plan and the status of each step are in `docs/milestones/m2-renderer-materials.md`. Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context) and M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay). See `docs/ENGINE_PLAN.md` for the roadmap.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M2 — low-poly renderer and materials** is done on the branch `milestone/m2-renderer-materials` and waits for acceptance before it is merged into `main`: normals and UVs, PNG textures, materials with a base color and an optional texture, one directional light with flat shading, and import of a documented OBJ subset (plan and status of each step: `docs/milestones/m2-renderer-materials.md`). Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context) and M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay). See `docs/ENGINE_PLAN.md` for the roadmap.
 
-![island-preview with the M1 debug overlay](docs/screenshots/m1/004-debug-overlay.png)
+![island-preview at the end of M2: lit, flat-shaded test scene with a textured crate and an imported lighthouse](docs/screenshots/m2/004-imported-model.png)
 
 ## Running the island preview
 
@@ -109,7 +109,7 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
   - `render/` — renderer API with mesh, texture and material handles and one directional light; OpenGL/GLAD only in `engine/src/render/opengl/`.
   - `camera/` — camera math and the free-fly controller.
   - `debug/` — built-in pixel font for on-screen diagnostics.
-- `sandbox/island-preview/` — first executable: free-fly test scene with debug overlay (see above; `assets/` is found relative to the working directory).
+- `sandbox/island-preview/` — first executable: free-fly test scene, lit and partly textured, with an imported model and a debug overlay (see above; `assets/` is found relative to the working directory).
 - `assets/shaders/` — GLSL sources loaded at runtime.
 - `assets/textures/` — textures of the test scene (PNG, made for the project; origin in `docs/references/THIRD_PARTY_NOTICES.md`).
 - `assets/models/` — models of the test scene (OBJ subset, ADR 0012; made for the project). A missing or broken asset is logged and the rest of the scene runs.
