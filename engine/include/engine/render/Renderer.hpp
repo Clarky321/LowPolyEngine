@@ -40,6 +40,104 @@ struct MeshHandle {
     friend bool operator==(const MeshHandle&, const MeshHandle&) = default;
 };
 
+// Identifies a texture uploaded to the GPU; null and stale handles behave like
+// MeshHandle's.
+struct TextureHandle {
+    std::uint32_t index = 0;
+    std::uint32_t generation = 0;
+
+    [[nodiscard]] bool isNull() const noexcept { return generation == 0; }
+    friend bool operator==(const TextureHandle&, const TextureHandle&) = default;
+};
+
+enum class TextureFilter {
+    // The closest texel: hard pixel edges.
+    Nearest,
+    // Blends neighboring texels (and mip levels): smooth.
+    Linear,
+};
+
+enum class TextureWrap {
+    // UVs outside [0, 1] tile the texture.
+    Repeat,
+    // UVs outside [0, 1] repeat the border texels.
+    ClampToEdge,
+};
+
+// How a texture is sampled. Defaults suit color textures on 3D surfaces.
+struct TextureDesc {
+    TextureFilter filter = TextureFilter::Linear;
+    TextureWrap wrap = TextureWrap::Repeat;
+    // A full mip chain down to 1x1, generated from the image, avoids shimmering
+    // when the texture is drawn smaller than its size.
+    bool mipmaps = true;
+};
+
+// Identifies a material owned by the renderer; null and stale handles behave
+// like MeshHandle's.
+struct MaterialHandle {
+    std::uint32_t index = 0;
+    std::uint32_t generation = 0;
+
+    [[nodiscard]] bool isNull() const noexcept { return generation == 0; }
+    friend bool operator==(const MaterialHandle&, const MaterialHandle&) = default;
+};
+
+// Whether a material reacts to the frame's light (ADR 0011).
+enum class Shading {
+    // The material color as it is: overlays, debug drawing, emissive things.
+    Unlit,
+    // The material color times (ambient + light color x Lambert diffuse) from
+    // the mesh's normals; meshes drawn with it need normals.
+    Lit,
+};
+
+// Surface appearance of a draw (ADR 0010): material color = base color
+// texture at the mesh's UV x vertex color x base color, alpha included; lit
+// materials then multiply its RGB with the light (ADR 0011).
+struct MaterialDesc {
+    // RGBA, each component in [0, 1]. Multiplies the mesh's vertex colors, so
+    // white keeps them; alpha matters with BlendMode::Alpha. Display-space
+    // values, like vertex colors (ADR 0009).
+    Color baseColor{1.0F, 1.0F, 1.0F, 1.0F};
+    // Optional; a null handle means no texture (as if it were white). A
+    // textured material needs meshes with UVs. The material refers to the
+    // texture and does not own it: destroying the texture makes draws with
+    // this material fail (counted in Renderer::errorCount()).
+    TextureHandle baseColorTexture{};
+    // Unlit by default, so a material shows its colors unchanged unless it
+    // asks for lighting.
+    Shading shading = Shading::Unlit;
+};
+
+// Checks that every base color component is finite and in [0, 1]. The error
+// names the first offending component. GPU-free, so it cannot check the
+// texture handle; Renderer::createMaterial does that.
+[[nodiscard]] std::optional<core::Error> validate(const MaterialDesc& desc);
+
+// The frame's directional light, like sunlight (ADR 0011). A lit surface gets
+// ambient + color x max(0, cos(angle between its normal and the direction to
+// the light)), per RGB channel. Display-space values (ADR 0009); results above
+// 1 saturate.
+//
+// The defaults light everything fully from all sides (white ambient, no direct
+// light), so lit materials look unlit until a light is set.
+struct LightDesc {
+    // World-space direction the light travels in, e.g. (0, -1, 0) for light
+    // from straight above. Any length except zero; it is normalized.
+    math::Vec3 direction{0.0F, -1.0F, 0.0F};
+    // RGB, each component finite and >= 0.
+    math::Vec3 color{0.0F};
+    // Light every lit surface gets, whatever its orientation. RGB, each
+    // component finite and >= 0.
+    math::Vec3 ambient{1.0F};
+};
+
+// Checks that the direction is finite and not zero and that every color and
+// ambient component is finite and >= 0. The error names the first offending
+// value. GPU-free.
+[[nodiscard]] std::optional<core::Error> validate(const LightDesc& desc);
+
 enum class DepthMode {
     // Nearer surfaces hide farther ones (3D scenes).
     TestAndWrite,
@@ -83,7 +181,7 @@ struct RenderStats {
 //
 // Uses the OpenGL context that is current on the calling thread: create, use
 // and destroy the renderer on that thread, and destroy it before the context.
-// Destroying the renderer releases all meshes it still owns.
+// Destroying the renderer releases all meshes and textures it still owns.
 class Renderer {
 public:
     [[nodiscard]] static core::Result<Renderer> create(const RendererDesc& desc);
@@ -107,16 +205,55 @@ public:
 
     [[nodiscard]] bool isValid(MeshHandle handle) const noexcept;
 
-    // Sets the viewport to the framebuffer size, clears color and depth and
-    // resets the view to identity matrices (normalized device coordinates).
+    // Uploads an image (RGB8 or RGBA8) as a texture. Fails if the image does
+    // not pass core::validate(). Image rows run top to bottom; the upload puts
+    // the bottom row at V = 0, so UV (0, 0) is the image's bottom-left corner
+    // (ADR 0007, 0009). Texel values are used as stored: no sRGB decoding.
+    [[nodiscard]] core::Result<TextureHandle> createTexture(const core::Image& image,
+                                                            const TextureDesc& desc = {});
+
+    // Releases the texture. Null and already destroyed handles are ignored.
+    void destroyTexture(TextureHandle handle) noexcept;
+
+    [[nodiscard]] bool isValid(TextureHandle handle) const noexcept;
+
+    // Sets the viewport to the framebuffer size, clears color and depth, resets
+    // the view to identity matrices (normalized device coordinates) and the
+    // light to LightDesc{}.
     void beginFrame(int framebufferWidth, int framebufferHeight, const Color& clearColor);
 
     // Camera matrices and depth/blend state for the following draw calls.
     void setView(const ViewDesc& view);
 
-    // Draws a mesh with a model (object-to-world) matrix. Drawing an invalid
-    // handle draws nothing and counts as an error (see errorCount()).
+    // The light for the following draw calls with lit materials. An invalid
+    // light (see validate(LightDesc)) is ignored and counts as an error; the
+    // previous light stays.
+    void setLight(const LightDesc& light);
+
+    // Stores a material. Fails if the description does not pass validate() or
+    // its base color texture is neither null nor a valid handle.
+    [[nodiscard]] core::Result<MaterialHandle> createMaterial(const MaterialDesc& desc);
+
+    // Forgets the material. Null and already destroyed handles are ignored.
+    void destroyMaterial(MaterialHandle handle) noexcept;
+
+    [[nodiscard]] bool isValid(MaterialHandle handle) const noexcept;
+
+    // Draws a mesh with a model (object-to-world) matrix and the built-in
+    // default material (white base color: the vertex colors as they are).
+    // Drawing an invalid handle draws nothing and counts as an error (see
+    // errorCount()).
     void drawMesh(MeshHandle handle, const math::Mat4& model = math::Mat4{1.0F});
+
+    // Draws a mesh with a material: output color = texture x vertex color x
+    // base color, lit if the material is (see MaterialDesc). Draws nothing and
+    // counts as one error if the mesh or material handle is invalid, the
+    // material's texture was destroyed, the material has a texture and the
+    // mesh has no UVs, or the material is lit and the mesh has no normals.
+    // Normals are transformed with the model matrix's cofactor matrix, so
+    // non-uniform scale keeps them perpendicular to their faces.
+    void drawMesh(MeshHandle mesh, MaterialHandle material,
+                  const math::Mat4& model = math::Mat4{1.0F});
 
     // Checks the OpenGL error flag. Call once per frame after drawing.
     void endFrame();

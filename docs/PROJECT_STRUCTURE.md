@@ -7,9 +7,10 @@ lowpoly-engine/
 ├── CLAUDE.md
 ├── AGENTS.md
 ├── .claude/
-│   └── skills/
-│       └── engine-dev/
-│           └── SKILL.md
+│   ├── skills/               # tracked: shared Claude Code skills
+│   │   └── engine-dev/
+│   │       └── SKILL.md
+│   └── worktrees/            # ignored; worktrees are not used (DEVELOPMENT_WORKFLOW.md)
 ├── CMakeLists.txt
 ├── CMakePresets.json
 ├── conanfile.py
@@ -28,7 +29,7 @@ lowpoly-engine/
 │   │   ├── app/              # Application lifecycle and frame loop (M1)
 │   │   ├── core/             # Clock, Log, Result, files, images, math aliases
 │   │   ├── platform/         # Engine-facing window/input interfaces
-│   │   ├── geometry/         # CPU MeshData and primitive builders (M1, ADR 0007)
+│   │   ├── geometry/         # CPU MeshData, primitive builders (M1, ADR 0007), OBJ subset import (M2.9, ADR 0012)
 │   │   ├── render/           # RHI-facing types and renderer interfaces
 │   │   ├── scene/            # Entity, components, world, prefab, document
 │   │   ├── assets/           # Asset IDs, handles, registry interfaces
@@ -106,6 +107,9 @@ lowpoly-engine/
 │   ├── TECH_STACK.md
 │   ├── PROJECT_STRUCTURE.md
 │   ├── TESTING_AND_CI.md
+│   ├── DEVELOPMENT_WORKFLOW.md  # branches, one sub-milestone per task, commits, reports
+│   ├── milestones/           # step-by-step plan per milestone (mN-<name>.md)
+│   ├── screenshots/          # engine-made captures per milestone (mN/), with README
 │   ├── references/
 │   └── adr/
 ├── .github/

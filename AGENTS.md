@@ -71,7 +71,7 @@ This repository is a custom low-poly 3D engine and editor. It is not a game proj
 
 ## 9. Required implementation workflow
 
-1. Inspect `git status`, the target module, related interfaces, tests and current docs before editing.
+1. Confirm you are in the canonical checkout on the milestone branch with a clean `git status` (§12), then inspect the target module, related interfaces, tests and current docs before editing.
 2. Restate the requested scope in one or two sentences and identify the smallest useful change.
 3. For cross-module or architectural work, present a short plan before coding. Preserve existing conventions unless a reasoned ADR changes them.
 4. Implement a vertical slice, not speculative scaffolding for future milestones.
@@ -90,3 +90,15 @@ This repository is a custom low-poly 3D engine and editor. It is not a game proj
 ## 11. First milestone guardrail
 
 Until the initial island-preview milestone is accepted, do not implement character controllers, NPC AI, quests, inventory, networking, multiplayer, full physics, animation editor, terrain sculpting, material graph, Vulkan or Direct3D backends. Keep the code ready for extension without implementing these systems prematurely.
+
+## 12. Milestones, branches and task size
+
+The full rules are in `docs/DEVELOPMENT_WORKFLOW.md`. In short:
+
+- Work in the canonical checkout (the `LowPolyEngine/` folder with `.git/`) using ordinary branches. Do not create Git worktrees (`git worktree add`, `.claude/worktrees/`).
+- `main` is the stable integration branch. Each milestone has one branch `milestone/mN-<name>`, created from `main` and merged back only through a pull request after the user accepts the milestone.
+- Each milestone is split into numbered sub-milestones (`MN.1`, `MN.2`, …) in `docs/milestones/mN-<name>.md`.
+- **One task implements exactly one sub-milestone.** Do not implement two together, start the next one, or add code that only a later step needs, however small. If two steps must land together, the plan is changed first in a separate docs commit approved by the user; until then they stay separate tasks.
+- A sub-milestone ends with the checks in `docs/TESTING_AND_CI.md` §8, one Conventional Commit `type(scope): summary (MN.x)` for the change (plan status `in progress`), a push to the milestone branch and green CI; then a separate commit `docs(milestones): mark MN.x done (MN.x)`, also pushed with green CI, and the report from `docs/DEVELOPMENT_WORKFLOW.md` §7.
+- The report ends by asking whether to continue with the next sub-milestone of the plan. Then stop. On "yes", start exactly that one, using the plan and the recorded decisions as the task; do not ask the user for a separate prompt. On "no", stay stopped until the next instruction. Never start the next sub-milestone without that "yes", and never put two sub-milestones in one commit.
+- Do not rewrite published history or discard work: no force-push, no amending or rebasing pushed commits, no `git reset --hard`, `git clean -fd`/`-fdx` or forced worktree removal.

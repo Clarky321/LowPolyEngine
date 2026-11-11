@@ -1,5 +1,7 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
-// M1 scope: engine loop, input, free-fly camera and a static test scene.
+// So far: engine loop, input, free-fly camera (M1) and a static test scene
+// drawn with materials, textures and a directional light, including a model
+// imported from an OBJ file (M2).
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
@@ -11,11 +13,15 @@
 #include "engine/app/Application.hpp"
 #include "engine/camera/Camera.hpp"
 #include "engine/camera/FreeFlyController.hpp"
+#include "engine/core/FileSystem.hpp"
+#include "engine/core/Image.hpp"
 #include "engine/core/Log.hpp"
 #include "engine/core/Version.hpp"
+#include "engine/geometry/ObjImport.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <cstdio>
@@ -55,6 +61,8 @@ struct Options {
     std::filesystem::path assetDirectory = "assets";
     // Save the last frame as PNG and exit.
     std::optional<std::filesystem::path> screenshotPath;
+    // OBJ file loaded instead of the scene's model file (tests use broken ones).
+    std::optional<std::filesystem::path> modelPath;
 };
 
 std::optional<std::uint64_t> parsePositiveInt(std::string_view text)
@@ -82,6 +90,8 @@ std::optional<Options> parseOptions(int argc, char** argv)
             options.assetDirectory = argv[++i];
         } else if (arg == "--screenshot" && hasValue) {
             options.screenshotPath = std::filesystem::path(argv[++i]);
+        } else if (arg == "--model" && hasValue) {
+            options.modelPath = std::filesystem::path(argv[++i]);
         } else {
             return std::nullopt;
         }
@@ -109,12 +119,52 @@ public:
 
     std::optional<engine::core::Error> start(engine::app::AppContext& context) override
     {
-        for (auto& object : island_preview::buildTestScene()) {
-            auto handle = context.renderer().createMesh(object.mesh);
+        auto& renderer = context.renderer();
+        const island_preview::TestScene scene = island_preview::buildTestScene();
+        light_ = scene.light;
+        for (const auto& mesh : scene.meshes) {
+            auto handle = renderer.createMesh(mesh);
             if (!handle) {
                 return handle.error();
             }
-            meshes_.push_back({handle.value(), object.position, object.spinRadiansPerSecond});
+            meshes_.push_back(handle.value());
+        }
+        // A texture that cannot be loaded stays a null handle: the materials
+        // that use it are drawn without it.
+        for (const auto& texture : scene.textures) {
+            textures_.push_back(loadTexture(
+                renderer, options_.assetDirectory / "textures" / texture.file, texture.desc));
+        }
+        for (const auto& object : scene.objects) {
+            engine::render::MaterialDesc desc = object.material;
+            if (object.texture) {
+                desc.baseColorTexture = textures_.at(*object.texture);
+            }
+            auto material = renderer.createMaterial(desc);
+            if (!material) {
+                return material.error();
+            }
+            objects_.push_back({meshes_.at(object.mesh), material.value(), object.position,
+                                object.spinRadiansPerSecond});
+        }
+        // A model that cannot be loaded is left out; the rest of the scene runs.
+        for (const auto& model : scene.models) {
+            const auto path =
+                options_.modelPath.value_or(options_.assetDirectory / "models" / model.file);
+            const engine::render::MeshHandle mesh = loadModel(renderer, path);
+            if (mesh.isNull()) {
+                continue;
+            }
+            meshes_.push_back(mesh);
+            engine::render::MaterialDesc desc = model.material;
+            if (model.texture) {
+                desc.baseColorTexture = textures_.at(*model.texture);
+            }
+            auto material = renderer.createMaterial(desc);
+            if (!material) {
+                return material.error();
+            }
+            objects_.push_back({mesh, material.value(), model.position, 0.0F});
         }
         // Rebuilt every frame; starts empty.
         auto overlay = context.renderer().createMesh(engine::geometry::MeshData{});
@@ -122,19 +172,29 @@ public:
             return overlay.error();
         }
         overlay_ = overlay.value();
+        const auto loadedTextures = std::ranges::count_if(
+            textures_, [](engine::render::TextureHandle texture) { return !texture.isNull(); });
         engine::core::logInfo("app",
-                              "test scene: {} meshes; hold the right mouse button to look "
-                              "around, WASD to fly, Escape to quit",
-                              meshes_.size());
+                              "test scene: {} objects, {} meshes, {} textures; hold the right "
+                              "mouse button to look around, WASD to fly, Escape to quit",
+                              objects_.size(), meshes_.size(), loadedTextures);
         return std::nullopt;
     }
 
     void stop(engine::app::AppContext& context) override
     {
-        for (const auto& mesh : meshes_) {
-            context.renderer().destroyMesh(mesh.handle);
+        for (const auto& object : objects_) {
+            context.renderer().destroyMaterial(object.material);
+        }
+        objects_.clear();
+        for (const auto mesh : meshes_) {
+            context.renderer().destroyMesh(mesh);
         }
         meshes_.clear();
+        for (const auto texture : textures_) {
+            context.renderer().destroyTexture(texture);
+        }
+        textures_.clear();
         context.renderer().destroyMesh(overlay_);
         context.window().setRelativeMouseMode(false);
     }
@@ -185,13 +245,14 @@ public:
             .projection = engine::camera::projectionMatrix(
                 camera_, engine::camera::aspectRatio(size.width, size.height)),
         });
-        for (const auto& mesh : meshes_) {
-            engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, mesh.position);
-            if (mesh.spinRadiansPerSecond != 0.0F) {
-                model = glm::rotate(model, mesh.spinRadiansPerSecond * sceneSeconds_,
+        renderer.setLight(light_);
+        for (const auto& object : objects_) {
+            engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, object.position);
+            if (object.spinRadiansPerSecond != 0.0F) {
+                model = glm::rotate(model, object.spinRadiansPerSecond * sceneSeconds_,
                                     engine::camera::kWorldUp);
             }
-            renderer.drawMesh(mesh.handle, model);
+            renderer.drawMesh(object.mesh, object.material, model);
         }
 
         if (showOverlay_) {
@@ -200,6 +261,45 @@ public:
     }
 
 private:
+    // Loads a PNG as a texture. Failures are logged; the result is then null.
+    static engine::render::TextureHandle loadTexture(engine::render::Renderer& renderer,
+                                                     const std::filesystem::path& path,
+                                                     const engine::render::TextureDesc& desc)
+    {
+        auto image = engine::core::readPng(path);
+        if (!image) {
+            engine::core::logError("app", "{}; it is not used", image.error().message);
+            return {};
+        }
+        auto texture = renderer.createTexture(image.value(), desc);
+        if (!texture) {
+            engine::core::logError("app", "texture '{}': {}; it is not used",
+                                   engine::core::toUtf8(path), texture.error().message);
+            return {};
+        }
+        return texture.value();
+    }
+
+    // Loads an OBJ model as a mesh. Failures are logged; the result is then null.
+    static engine::render::MeshHandle loadModel(engine::render::Renderer& renderer,
+                                                const std::filesystem::path& path)
+    {
+        auto model = engine::geometry::readObj(path);
+        if (!model) {
+            engine::core::logError("app", "{}; the model is left out", model.error().message);
+            return {};
+        }
+        auto mesh = renderer.createMesh(model.value().mesh);
+        if (!mesh) {
+            engine::core::logError("app", "model '{}': {}; the model is left out",
+                                   engine::core::toUtf8(path), mesh.error().message);
+            return {};
+        }
+        engine::core::logInfo("app", "model '{}': {} triangles", engine::core::toUtf8(path),
+                              model.value().mesh.triangleCount());
+        return mesh.value();
+    }
+
     // Screen-space text on top of the scene: no depth test, alpha blending.
     void renderOverlay(engine::app::AppContext& context)
     {
@@ -227,14 +327,20 @@ private:
         renderer.drawMesh(overlay_);
     }
 
-    struct SceneMesh {
-        engine::render::MeshHandle handle;
+    struct SceneObject {
+        engine::render::MeshHandle mesh;
+        engine::render::MaterialHandle material;
         engine::math::Vec3 position{0.0F};
         float spinRadiansPerSecond = 0.0F;
     };
 
     Options options_;
-    std::vector<SceneMesh> meshes_;
+    // Shared by several objects; destroyed after them.
+    std::vector<engine::render::MeshHandle> meshes_;
+    // Used by the objects' materials; destroyed after them.
+    std::vector<engine::render::TextureHandle> textures_;
+    std::vector<SceneObject> objects_;
+    engine::render::LightDesc light_;
     engine::camera::Camera camera_ = initialCamera();
     engine::camera::FreeFlyController controller_;
     bool mouseLook_ = false;
@@ -251,7 +357,8 @@ int main(int argc, char** argv)
     const auto options = parseOptions(argc, argv);
     if (!options) {
         std::fprintf(stderr,
-                     "usage: island-preview [--frames N] [--assets DIR] [--screenshot FILE.png]\n");
+                     "usage: island-preview [--frames N] [--assets DIR] [--screenshot FILE.png] "
+                     "[--model FILE.obj]\n");
         return kExitUsage;
     }
 

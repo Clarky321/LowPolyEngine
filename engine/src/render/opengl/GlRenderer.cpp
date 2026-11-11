@@ -1,13 +1,16 @@
 #include "../HandlePool.hpp"
+#include "../Lighting.hpp"
 #include "GlDiagnostics.hpp"
 #include "GlHandle.hpp"
 #include "GlMesh.hpp"
 #include "GlShaderProgram.hpp"
+#include "GlTexture.hpp"
 
 #include "engine/core/FileSystem.hpp"
 #include "engine/core/Log.hpp"
 #include "engine/render/Renderer.hpp"
 
+#include <glm/geometric.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
@@ -21,6 +24,7 @@ namespace {
 
 using opengl::GlMesh;
 using opengl::GlShaderProgram;
+using opengl::GlTexture;
 
 constexpr int kRequiredGlMajor = 4;
 constexpr int kRequiredGlMinor = 5;
@@ -29,8 +33,39 @@ constexpr int kRequiredGlMinor = 5;
 constexpr const char* kMeshVertexShader = "mesh.vert";
 constexpr const char* kMeshFragmentShader = "mesh.frag";
 constexpr const char* kMvpUniform = "uModelViewProjection";
+constexpr const char* kBaseColorUniform = "uBaseColor";
+constexpr const char* kBaseColorTextureUniform = "uBaseColorTexture";
+constexpr const char* kNormalMatrixUniform = "uNormalMatrix";
+constexpr const char* kDirectionToLightUniform = "uDirectionToLight";
+constexpr const char* kLightColorUniform = "uLightColor";
+constexpr const char* kAmbientColorUniform = "uAmbientColor";
+
+// The texture unit uBaseColorTexture reads; set once at startup.
+constexpr GLuint kBaseColorTextureUnit = 0;
+
+// The built-in material of drawMesh(mesh, model): white, untextured, unlit,
+// so the vertex colors show unchanged.
+constexpr MaterialDesc kDefaultMaterial{};
+
+// Unlit draws use the lighting formula with white ambient and no direct
+// light: ambient + color x diffuse = 1, whatever the normal.
+constexpr math::Vec3 kUnlitAmbient{1.0F};
+constexpr math::Vec3 kUnlitLightColor{0.0F};
+
+// Uniform locations of the mesh program, found once at startup.
+struct MeshUniforms {
+    GLint modelViewProjection = -1;
+    GLint baseColor = -1;
+    GLint baseColorTexture = -1;
+    GLint normalMatrix = -1;
+    GLint directionToLight = -1;
+    GLint lightColor = -1;
+    GLint ambientColor = -1;
+};
 constexpr const char* kPositionAttribute = "aPosition";
 constexpr const char* kColorAttribute = "aColor";
+constexpr const char* kNormalAttribute = "aNormal";
+constexpr const char* kUvAttribute = "aUv";
 
 struct LoadedProgram {
     GlShaderProgram program;
@@ -63,10 +98,22 @@ core::Result<LoadedProgram> loadProgram(const std::filesystem::path& directory,
 
 // The mesh program must expose the interface GlMesh and drawMesh rely on.
 // Catches renamed or unused (optimized away) variables with a clear message
-// instead of a silently black or empty frame.
-std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, GLint& mvpLocation)
+// instead of a silently black or empty frame. Normals and UVs are optional:
+// the compiler removes inputs a shader does not use, so they may be inactive,
+// but an active one must sit at its GlMesh location.
+std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, MeshUniforms& uniforms)
 {
     const GLuint program = loaded.program.name();
+    const auto checkOptionalAttribute = [&](const char* name,
+                                            GLuint location) -> std::optional<core::Error> {
+        const GLint actual = glGetAttribLocation(program, name);
+        if (actual < 0 || actual == static_cast<GLint>(location)) {
+            return std::nullopt;
+        }
+        return core::Error{"shader program " + loaded.description + ": vertex input '" + name +
+                           "' must be at location " + std::to_string(location) + " (found at " +
+                           std::to_string(actual) + ")"};
+    };
     const auto requireAttribute = [&](const char* name,
                                       GLuint location) -> std::optional<core::Error> {
         const GLint actual = glGetAttribLocation(program, name);
@@ -84,15 +131,67 @@ std::optional<core::Error> checkMeshInterface(const LoadedProgram& loaded, GLint
     if (auto error = requireAttribute(kColorAttribute, opengl::kColorLocation)) {
         return error;
     }
-    mvpLocation = glGetUniformLocation(program, kMvpUniform);
-    if (mvpLocation < 0) {
-        return core::Error{"shader program " + loaded.description + ": uniform mat4 '" +
-                           kMvpUniform + "' is missing or unused"};
+    if (auto error = checkOptionalAttribute(kNormalAttribute, opengl::kNormalLocation)) {
+        return error;
+    }
+    if (auto error = checkOptionalAttribute(kUvAttribute, opengl::kUvLocation)) {
+        return error;
+    }
+    const auto requireUniform = [&](const char* type, const char* name,
+                                    GLint& location) -> std::optional<core::Error> {
+        location = glGetUniformLocation(program, name);
+        if (location < 0) {
+            return core::Error{"shader program " + loaded.description + ": uniform " + type + " '" +
+                               name + "' is missing or unused"};
+        }
+        return std::nullopt;
+    };
+    if (auto error = requireUniform("mat4", kMvpUniform, uniforms.modelViewProjection)) {
+        return error;
+    }
+    if (auto error = requireUniform("vec4", kBaseColorUniform, uniforms.baseColor)) {
+        return error;
+    }
+    if (auto error =
+            requireUniform("sampler2D", kBaseColorTextureUniform, uniforms.baseColorTexture)) {
+        return error;
+    }
+    if (auto error = requireUniform("mat3", kNormalMatrixUniform, uniforms.normalMatrix)) {
+        return error;
+    }
+    if (auto error = requireUniform("vec3", kDirectionToLightUniform, uniforms.directionToLight)) {
+        return error;
+    }
+    if (auto error = requireUniform("vec3", kLightColorUniform, uniforms.lightColor)) {
+        return error;
+    }
+    if (auto error = requireUniform("vec3", kAmbientColorUniform, uniforms.ambientColor)) {
+        return error;
     }
     return std::nullopt;
 }
 
+// Bound for materials without a texture, so the shader always samples one
+// texture and needs no branch: white leaves the other factors unchanged.
+core::Result<GlTexture> createWhiteTexture()
+{
+    const core::Image white{1, 1, {255, 255, 255}, core::PixelFormat::Rgb8};
+    return GlTexture::create(white, TextureDesc{.filter = TextureFilter::Nearest,
+                                                .wrap = TextureWrap::Repeat,
+                                                .mipmaps = false});
+}
+
 detail::PoolHandle toPoolHandle(MeshHandle handle) noexcept
+{
+    return detail::PoolHandle{handle.index, handle.generation};
+}
+
+detail::PoolHandle toPoolHandle(TextureHandle handle) noexcept
+{
+    return detail::PoolHandle{handle.index, handle.generation};
+}
+
+detail::PoolHandle toPoolHandle(MaterialHandle handle) noexcept
 {
     return detail::PoolHandle{handle.index, handle.generation};
 }
@@ -118,8 +217,9 @@ RendererInfo queryInfo()
 } // namespace
 
 struct Renderer::Impl {
-    Impl(GlShaderProgram program, GLint mvp, bool debugOutput)
-        : meshProgram(std::move(program)), mvpLocation(mvp), debugOutputEnabled(debugOutput)
+    Impl(GlShaderProgram program, MeshUniforms locations, GlTexture white, bool debugOutput)
+        : meshProgram(std::move(program)), uniforms(locations), whiteTexture(std::move(white)),
+          debugOutputEnabled(debugOutput)
     {
     }
 
@@ -133,13 +233,156 @@ struct Renderer::Impl {
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
 
+    // The mesh of a draw call; an invalid handle is counted as an error and
+    // logged once (it usually repeats every frame).
+    const GlMesh* meshForDraw(MeshHandle handle)
+    {
+        const GlMesh* mesh = meshes.find(toPoolHandle(handle));
+        if (mesh == nullptr) {
+            ++errorCount;
+            if (!invalidMeshDrawLogged) {
+                invalidMeshDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: invalid or destroyed mesh handle (index {}, "
+                               "generation {}); further invalid draws are only counted",
+                               handle.index, handle.generation);
+            }
+        }
+        return mesh;
+    }
+
+    // The material of a draw call; like meshForDraw.
+    const MaterialDesc* materialForDraw(MaterialHandle handle)
+    {
+        const MaterialDesc* material = materials.find(toPoolHandle(handle));
+        if (material == nullptr) {
+            ++errorCount;
+            if (!invalidMaterialDrawLogged) {
+                invalidMaterialDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: invalid or destroyed material handle (index {}, "
+                               "generation {}); further invalid draws are only counted",
+                               handle.index, handle.generation);
+            }
+        }
+        return material;
+    }
+
+    // The base color texture of a draw: the white texture for an untextured
+    // material. A destroyed texture, or a texture on a mesh without UVs, is
+    // counted as an error and logged once per kind; the draw is skipped.
+    const GlTexture* textureForDraw(MeshHandle meshHandle, const GlMesh& mesh,
+                                    MaterialHandle materialHandle, const MaterialDesc& material)
+    {
+        if (material.baseColorTexture.isNull()) {
+            return &whiteTexture;
+        }
+        const TextureHandle handle = material.baseColorTexture;
+        const GlTexture* texture = textures.find(toPoolHandle(handle));
+        if (texture == nullptr) {
+            ++errorCount;
+            if (!invalidTextureDrawLogged) {
+                invalidTextureDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: material (index {}, generation {}) uses an invalid or "
+                               "destroyed base color texture (index {}, generation {}); further "
+                               "such draws are only counted",
+                               materialHandle.index, materialHandle.generation, handle.index,
+                               handle.generation);
+            }
+            return nullptr;
+        }
+        if (!mesh.hasUvs()) {
+            ++errorCount;
+            if (!missingUvsDrawLogged) {
+                missingUvsDrawLogged = true;
+                core::logError("render",
+                               "drawMesh: material (index {}, generation {}) has a base color "
+                               "texture, but mesh (index {}, generation {}) has no UVs; further "
+                               "such draws are only counted",
+                               materialHandle.index, materialHandle.generation, meshHandle.index,
+                               meshHandle.generation);
+            }
+            return nullptr;
+        }
+        return texture;
+    }
+
+    // Whether a draw has the normals its material needs: a lit material on a
+    // mesh without normals is counted as an error and logged once; the draw
+    // is skipped.
+    bool normalsForDraw(MeshHandle meshHandle, const GlMesh& mesh, MaterialHandle materialHandle,
+                        const MaterialDesc& material)
+    {
+        if (material.shading != Shading::Lit || mesh.hasNormals()) {
+            return true;
+        }
+        ++errorCount;
+        if (!missingNormalsDrawLogged) {
+            missingNormalsDrawLogged = true;
+            core::logError("render",
+                           "drawMesh: material (index {}, generation {}) is lit, but mesh (index "
+                           "{}, generation {}) has no normals; further such draws are only counted",
+                           materialHandle.index, materialHandle.generation, meshHandle.index,
+                           meshHandle.generation);
+        }
+        return false;
+    }
+
+    // Stores a valid light and uploads its direction, which is the same for
+    // every draw of the frame.
+    void applyLight(const LightDesc& desc)
+    {
+        light = desc;
+        const math::Vec3 toLight = -glm::normalize(desc.direction);
+        glProgramUniform3f(meshProgram.name(), uniforms.directionToLight, toLight.x, toLight.y,
+                           toLight.z);
+    }
+
+    void draw(const GlMesh& mesh, const GlTexture& baseColorTexture, const MaterialDesc& material,
+              const math::Mat4& model)
+    {
+        const GLuint program = meshProgram.name();
+        const math::Mat4 modelViewProjection = viewProjection * model;
+        glProgramUniformMatrix4fv(program, uniforms.modelViewProjection, 1, GL_FALSE,
+                                  glm::value_ptr(modelViewProjection));
+        const glm::mat3 normals = normalMatrix(model);
+        glProgramUniformMatrix3fv(program, uniforms.normalMatrix, 1, GL_FALSE,
+                                  glm::value_ptr(normals));
+        const Color& baseColor = material.baseColor;
+        glProgramUniform4f(program, uniforms.baseColor, baseColor.r, baseColor.g, baseColor.b,
+                           baseColor.a);
+        const bool lit = material.shading == Shading::Lit;
+        const math::Vec3& lightColor = lit ? light.color : kUnlitLightColor;
+        const math::Vec3& ambient = lit ? light.ambient : kUnlitAmbient;
+        glProgramUniform3f(program, uniforms.lightColor, lightColor.r, lightColor.g, lightColor.b);
+        glProgramUniform3f(program, uniforms.ambientColor, ambient.r, ambient.g, ambient.b);
+        baseColorTexture.bind(kBaseColorTextureUnit);
+        mesh.draw();
+
+        ++currentFrame.drawCalls;
+        currentFrame.triangles += mesh.indexCount() / 3;
+    }
+
     GlShaderProgram meshProgram;
-    GLint mvpLocation = -1;
+    MeshUniforms uniforms;
+    // Not in the pool: no handle can reach or destroy it.
+    GlTexture whiteTexture;
     RendererInfo info = queryInfo();
     detail::HandlePool<GlMesh> meshes;
+    detail::HandlePool<GlTexture> textures;
+    // Materials are plain data: no GPU object, uploaded as uniforms per draw.
+    detail::HandlePool<MaterialDesc> materials;
     bool debugOutputEnabled = false;
     std::uint32_t errorCount = 0;
-    bool invalidDrawLogged = false;
+    bool invalidMeshDrawLogged = false;
+    bool invalidMaterialDrawLogged = false;
+    bool invalidTextureDrawLogged = false;
+    bool missingUvsDrawLogged = false;
+    bool missingNormalsDrawLogged = false;
+    bool invalidLightLogged = false;
+    // Set by beginFrame() and setLight(); always valid.
+    LightDesc light;
     // Size passed to the last beginFrame(); 0 before the first frame.
     int frameWidth = 0;
     int frameHeight = 0;
@@ -184,9 +427,16 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
     if (!loaded) {
         return failSetup(loaded.error());
     }
-    GLint mvpLocation = -1;
-    if (auto error = checkMeshInterface(loaded.value(), mvpLocation)) {
+    MeshUniforms uniforms;
+    if (auto error = checkMeshInterface(loaded.value(), uniforms)) {
         return failSetup(std::move(*error));
+    }
+    glProgramUniform1i(loaded.value().program.name(), uniforms.baseColorTexture,
+                       static_cast<GLint>(kBaseColorTextureUnit));
+    auto white = createWhiteTexture();
+    if (!white) {
+        return failSetup(
+            core::Error{"creating the white texture failed: " + white.error().message});
     }
 
     // Fixed pipeline state for the forward renderer. Front faces are
@@ -196,8 +446,12 @@ core::Result<Renderer> Renderer::create(const RendererDesc& desc)
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     glDepthFunc(GL_LESS);
+    // What the shader reads for normals or UVs a mesh does not have.
+    opengl::setMissingAttributeDefaults();
 
-    auto impl = std::make_unique<Impl>(std::move(loaded).value().program, mvpLocation, debugOutput);
+    auto impl = std::make_unique<Impl>(std::move(loaded).value().program, uniforms,
+                                       std::move(white).value(), debugOutput);
+    impl->applyLight(LightDesc{});
     impl->errorCount += opengl::checkGlErrors("renderer setup");
     return Renderer{std::move(impl)};
 }
@@ -246,6 +500,30 @@ bool Renderer::isValid(MeshHandle handle) const noexcept
     return impl_->meshes.find(toPoolHandle(handle)) != nullptr;
 }
 
+core::Result<TextureHandle> Renderer::createTexture(const core::Image& image,
+                                                    const TextureDesc& desc)
+{
+    if (auto error = core::validate(image)) {
+        return core::Error{"createTexture: " + error->message};
+    }
+    auto glTexture = GlTexture::create(image, desc);
+    if (!glTexture) {
+        return core::Error{"createTexture: " + glTexture.error().message};
+    }
+    const detail::PoolHandle handle = impl_->textures.insert(std::move(glTexture).value());
+    return TextureHandle{handle.index, handle.generation};
+}
+
+void Renderer::destroyTexture(TextureHandle handle) noexcept
+{
+    (void)impl_->textures.erase(toPoolHandle(handle));
+}
+
+bool Renderer::isValid(TextureHandle handle) const noexcept
+{
+    return impl_->textures.find(toPoolHandle(handle)) != nullptr;
+}
+
 void Renderer::beginFrame(int framebufferWidth, int framebufferHeight, const Color& clearColor)
 {
     impl_->frameWidth = framebufferWidth;
@@ -255,6 +533,7 @@ void Renderer::beginFrame(int framebufferWidth, int framebufferHeight, const Col
 
     // glClear respects the depth write mask, so restore it before clearing.
     setView(ViewDesc{});
+    impl_->applyLight(LightDesc{});
     glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     impl_->meshProgram.use();
@@ -280,29 +559,68 @@ void Renderer::setView(const ViewDesc& view)
     }
 }
 
-void Renderer::drawMesh(MeshHandle handle, const math::Mat4& model)
+void Renderer::setLight(const LightDesc& light)
 {
-    const GlMesh* glMesh = impl_->meshes.find(toPoolHandle(handle));
-    if (glMesh == nullptr) {
+    if (auto error = validate(light)) {
         ++impl_->errorCount;
-        // Usually happens every frame once it happens; one message is enough.
-        if (!impl_->invalidDrawLogged) {
-            impl_->invalidDrawLogged = true;
+        if (!impl_->invalidLightLogged) {
+            impl_->invalidLightLogged = true;
             core::logError("render",
-                           "drawMesh: invalid or destroyed mesh handle (index {}, "
-                           "generation {}); further invalid draws are only counted",
-                           handle.index, handle.generation);
+                           "setLight: {}; the previous light stays, further invalid lights are "
+                           "only counted",
+                           error->message);
         }
         return;
     }
+    impl_->applyLight(light);
+}
 
-    const math::Mat4 modelViewProjection = impl_->viewProjection * model;
-    glProgramUniformMatrix4fv(impl_->meshProgram.name(), impl_->mvpLocation, 1, GL_FALSE,
-                              glm::value_ptr(modelViewProjection));
-    glMesh->draw();
+core::Result<MaterialHandle> Renderer::createMaterial(const MaterialDesc& desc)
+{
+    if (auto error = validate(desc)) {
+        return core::Error{"createMaterial: " + error->message};
+    }
+    const TextureHandle texture = desc.baseColorTexture;
+    if (!texture.isNull() && !isValid(texture)) {
+        return core::Error{"createMaterial: base color texture (index " +
+                           std::to_string(texture.index) + ", generation " +
+                           std::to_string(texture.generation) + ") is invalid or destroyed"};
+    }
+    const detail::PoolHandle handle = impl_->materials.insert(desc);
+    return MaterialHandle{handle.index, handle.generation};
+}
 
-    ++impl_->currentFrame.drawCalls;
-    impl_->currentFrame.triangles += glMesh->indexCount() / 3;
+void Renderer::destroyMaterial(MaterialHandle handle) noexcept
+{
+    (void)impl_->materials.erase(toPoolHandle(handle));
+}
+
+bool Renderer::isValid(MaterialHandle handle) const noexcept
+{
+    return impl_->materials.find(toPoolHandle(handle)) != nullptr;
+}
+
+void Renderer::drawMesh(MeshHandle handle, const math::Mat4& model)
+{
+    if (const GlMesh* glMesh = impl_->meshForDraw(handle)) {
+        impl_->draw(*glMesh, impl_->whiteTexture, kDefaultMaterial, model);
+    }
+}
+
+void Renderer::drawMesh(MeshHandle mesh, MaterialHandle material, const math::Mat4& model)
+{
+    const GlMesh* glMesh = impl_->meshForDraw(mesh);
+    if (glMesh == nullptr) {
+        return;
+    }
+    const MaterialDesc* desc = impl_->materialForDraw(material);
+    if (desc == nullptr) {
+        return;
+    }
+    const GlTexture* texture = impl_->textureForDraw(mesh, *glMesh, material, *desc);
+    if (texture != nullptr && impl_->normalsForDraw(mesh, *glMesh, material, *desc)) {
+        impl_->draw(*glMesh, *texture, *desc, model);
+    }
 }
 
 void Renderer::endFrame()

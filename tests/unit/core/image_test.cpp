@@ -93,6 +93,39 @@ TEST_CASE("encodePng writes a PNG signature and the image size", "[core][image]"
     CHECK(readBigEndian32(bytes, 20) == 3);
 }
 
+TEST_CASE("Images are RGB by default and may be RGBA", "[core][image]")
+{
+    using engine::core::channelCount;
+    using engine::core::PixelFormat;
+    CHECK(channelCount(PixelFormat::Rgb8) == 3);
+    CHECK(channelCount(PixelFormat::Rgba8) == 4);
+    CHECK(Image{}.format == PixelFormat::Rgb8);
+
+    const Image rgba{2, 2, std::vector<std::uint8_t>(16, 7), PixelFormat::Rgba8};
+    CHECK_FALSE(validate(rgba).has_value());
+    // The same bytes as RGB are too many.
+    CHECK(validate(Image{2, 2, rgba.pixels}).has_value());
+
+    Image tooShort = rgba;
+    tooShort.pixels.resize(12);
+    const auto error = validate(tooShort);
+    REQUIRE(error.has_value());
+    CHECK(error->message.find("expected 16 for 2x2 RGBA") != std::string::npos);
+}
+
+TEST_CASE("encodePng writes RGB and RGBA color types", "[core][image]")
+{
+    // IHDR color type (byte 25 of the file): 2 = RGB, 6 = RGBA.
+    const auto rgb = encodePng(solidImage(2, 2, 1, 2, 3));
+    REQUIRE(rgb.hasValue());
+    CHECK(rgb.value()[25] == 2);
+
+    const auto rgba = encodePng(
+        Image{2, 2, std::vector<std::uint8_t>(16, 200), engine::core::PixelFormat::Rgba8});
+    REQUIRE(rgba.hasValue());
+    CHECK(rgba.value()[25] == 6);
+}
+
 TEST_CASE("encodePng compresses flat images", "[core][image]")
 {
     // Screenshots of flat-shaded scenes must stay small enough for the repository.

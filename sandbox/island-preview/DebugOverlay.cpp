@@ -38,7 +38,7 @@ void buildOverlay(engine::debug::TextMeshBuilder& builder, const OverlayData& da
     const Vec2 titleSize = measureText(title, kTitleScale);
     builder.addText(title, {std::max(0.0F, (width - titleSize.x) * 0.5F), 28.0F},
                     TextStyle{.scale = kTitleScale, .color = kTextColor});
-    const std::string subtitle = "M1  ENGINE LOOP / INPUT / CAMERA / MESHES";
+    const std::string subtitle = "M2  RENDERER / MATERIALS";
     const Vec2 subtitleSize = measureText(subtitle, kTextScale);
     builder.addText(subtitle, {std::max(0.0F, (width - subtitleSize.x) * 0.5F), 84.0F},
                     TextStyle{.scale = kTextScale, .color = kAccentColor});
