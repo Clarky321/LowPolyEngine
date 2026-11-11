@@ -237,7 +237,8 @@ TEST_CASE("Malformed lines are reported with their line number", "[geometry][obj
         {"v 1 2 3 4 5", "line 8: 'v' expects 3 or 4 numbers, got 5"},
         {"v 1 x 3", "line 8: 'x' is not a number"},
         {"v 1 2 3abc", "line 8: '3abc' is not a number"},
-        {"v 1 2 \x01\x02", "line 8: '??' is not a number"},
+        // "?\?": two question marks in a row would form a trigraph sequence.
+        {"v 1 2 \x01\x02", "line 8: '?\?' is not a number"},
         {"v 1 2 " + std::string(60, '7') + "z",
          "line 8: '" + std::string(40, '7') + "...' is not a number"},
         {"vt", "line 8: 'vt' expects 1 to 3 numbers, got 0"},
