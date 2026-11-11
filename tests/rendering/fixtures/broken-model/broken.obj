@@ -1,0 +1,6 @@
+# Broken on purpose (island-preview smoke test, M2.10): the face uses a
+# position that does not exist, so the model must be left out with the line.
+v 0 0 0
+v 1 0 0
+v 0 1 0
+f 1 2 4

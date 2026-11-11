@@ -21,6 +21,8 @@ Every committed asset that is not code (textures, models) is listed with its ori
 | File | Origin | Added in |
 |---|---|---|
 | `assets/textures/crate.png` | Made for this project: 16×16 RGB pixel-art crate (frame, nails, planks, diagonal brace), its pixels set by a short script written during M2.7; no external source. | M2.7 |
+| `assets/models/lighthouse.obj` | Made for this project: octagonal low-poly lighthouse (plinth, striped tower, gallery, lantern, roof), its vertices, UVs and normals computed by a short script written during M2.10; no external source. | M2.10 |
+| `assets/textures/lighthouse.png` | Made for this project: 32×32 RGB texture atlas for the lighthouse (brick stripes with a window, lantern glass, roof, stone), its pixels set by the same script; no external source. | M2.10 |
 
 ## Developer tools (not linked, not shipped)
 

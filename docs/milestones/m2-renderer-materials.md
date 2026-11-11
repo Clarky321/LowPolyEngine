@@ -23,7 +23,7 @@ M1 draws vertex-colored meshes through generation-checked handles; the brightnes
 | M2.7 | Texture sampling | done |
 | M2.8 | Directional light and flat shading | done |
 | M2.9 | OBJ subset loader | done |
-| M2.10 | Textured model in island-preview | planned |
+| M2.10 | Textured model in island-preview | in progress |
 | M2.11 | Final verification and pull request | planned |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M2.x done (M2.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M2.x)"` finds the commits.
@@ -181,12 +181,14 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** prove the import path end to end.
 
-**Scope:**
-- A small model and texture made for the project, or with a redistributable license, in `assets/models/` and `assets/textures/`, with their origin documented.
-- island-preview loads them at startup and shows them with a lit, textured material next to the test scene. A missing or broken file logs a clear error and the rest of the scene still runs.
-- GPU smoke test: island-preview with the model runs without OpenGL errors; a broken-asset fixture produces the expected message.
+**Scope** (decisions taken while implementing):
+- A small model and texture made for the project, or with a redistributable license, in `assets/models/` and `assets/textures/`, with their origin documented: an octagonal lighthouse, `assets/models/lighthouse.obj` (7.8 m tall, 45 faces as quads, triangles and octagons with `v/vt/vn`, 102 triangles, only statements of the subset), and a 32×32 texture atlas `assets/textures/lighthouse.png` (brick stripes with a window, lantern glass, roof, stone), both written by a script during M2.10 (`docs/references/THIRD_PARTY_NOTICES.md`).
+- `.gitignore` ignored `*.obj` for MSVC object files; OBJ models under `assets/` and in test fixtures are now excepted.
+- island-preview loads them at startup and shows them with a lit, textured material (white base color, nearest filtering) next to the test scene, at (13, 0, -10) right of the red cube. A missing or broken file logs a clear error and the rest of the scene still runs: a model that cannot be loaded is left out, a texture that cannot be loaded leaves its materials untextured. This also replaces M2.7's rule that a missing `crate.png` stops the start. `--model FILE.obj` loads another OBJ file instead of the scene's model, so tests need no copy of the shaders.
+- GPU smoke test: island-preview with the model runs without OpenGL errors and now fails on any logged error (`FAIL_REGULAR_EXPRESSION "\[error\]"`), so a broken committed asset is caught; a broken-asset fixture (`tests/rendering/fixtures/broken-model/broken.obj`) produces the expected message with the line and still exits 0; a missing model file is named.
+- Headless (runs in CI, unlike the GPU tier): `tests/unit/sandbox/island_preview_assets_test.cpp` checks that the committed textures decode and that the lighthouse loads without skipped statements, with UVs in [0, 1], within its documented bounds and with normals that agree with the counter-clockwise winding.
 
-**Visual check:** screenshot.
+**Visual check:** screenshot `docs/screenshots/m2/004-imported-model.png`.
 
 ### M2.11 — Final verification and pull request
 

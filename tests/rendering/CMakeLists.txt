@@ -29,8 +29,11 @@ function(lpe_add_gpu_test name)
     )
 endfunction()
 
-# Context, shaders, buffers and frames run without any OpenGL error (exit code 0).
+# Context, shaders, buffers and frames run without any OpenGL error (exit code 0),
+# and every scene asset loads: island-preview logs no error at all.
 lpe_add_gpu_test(island_preview_render_smoke island-preview --frames 30)
+set_tests_properties(island_preview_render_smoke PROPERTIES
+    FAIL_REGULAR_EXPRESSION "\\[error\\]")
 
 # The --screenshot path used for docs/screenshots works end to end.
 lpe_add_gpu_test(island_preview_screenshot
@@ -86,3 +89,16 @@ lpe_add_gpu_test(island_preview_shader_wrong_attribute_location
     island-preview --frames 1 --assets "${fixtures}/wrong-attribute-location")
 set_tests_properties(island_preview_shader_wrong_attribute_location PROPERTIES
     PASS_REGULAR_EXPRESSION "vertex input 'aNormal' must be at location 2 \\(found at 4\\)")
+
+# A broken or missing model file is logged with the file and the reason, and
+# the rest of the scene still runs (M2.10): the second test passes on exit code 0.
+lpe_add_gpu_test(island_preview_broken_model
+    island-preview --frames 5 --model "${fixtures}/broken-model/broken.obj")
+set_tests_properties(island_preview_broken_model PROPERTIES
+    PASS_REGULAR_EXPRESSION "cannot read OBJ '[^']*broken\\.obj': line 6: position index 4 is out of range")
+lpe_add_gpu_test(island_preview_broken_model_runs
+    island-preview --frames 5 --model "${fixtures}/broken-model/broken.obj")
+lpe_add_gpu_test(island_preview_missing_model
+    island-preview --frames 5 --model "${fixtures}/broken-model/does-not-exist.obj")
+set_tests_properties(island_preview_missing_model PROPERTIES
+    PASS_REGULAR_EXPRESSION "cannot open file '[^']*does-not-exist\\.obj'")

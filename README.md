@@ -22,7 +22,7 @@ scripts\windows\run.bat debug
 | F12 | save a screenshot to `screenshots/` (ignored by Git) |
 | Escape | quit |
 
-Keys are physical positions, so WASD works on any keyboard layout. Command-line options: `island-preview [--frames N] [--assets DIR] [--screenshot FILE.png]`; `--screenshot` saves the last frame (frame 120 unless `--frames` is given) and exits. This is how the images in `docs/screenshots/` are made (ADR 0006).
+Keys are physical positions, so WASD works on any keyboard layout. Command-line options: `island-preview [--frames N] [--assets DIR] [--screenshot FILE.png] [--model FILE.obj]`; `--screenshot` saves the last frame (frame 120 unless `--frames` is given) and exits; `--model` loads another OBJ file instead of the scene's lighthouse (used by tests). This is how the images in `docs/screenshots/` are made (ADR 0006).
 
 ## Building on Windows
 
@@ -112,6 +112,7 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
 - `sandbox/island-preview/` — first executable: free-fly test scene with debug overlay (see above; `assets/` is found relative to the working directory).
 - `assets/shaders/` — GLSL sources loaded at runtime.
 - `assets/textures/` — textures of the test scene (PNG, made for the project; origin in `docs/references/THIRD_PARTY_NOTICES.md`).
+- `assets/models/` — models of the test scene (OBJ subset, ADR 0012; made for the project). A missing or broken asset is logged and the rest of the scene runs.
 - `tests/` — Catch2/CTest tiers: `unit/` (headless), `integration/` (SDL dummy video driver, headless), `rendering/` (label `gpu`, real OpenGL, frame readback).
 - `docs/screenshots/` — captured screenshots per milestone, with how they were made.
 - `third_party/glad/` — generated OpenGL loader; regenerate with `scripts/python/generate_glad.py` (ADR 0005).

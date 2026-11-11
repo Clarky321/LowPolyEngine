@@ -117,6 +117,15 @@ TestScene buildTestScene()
                              .position = {3.5F, 1.0F, 5.5F},
                              .texture = scene.textures.size() - 1});
 
+    // A lighthouse made for the project as an OBJ file with a 32x32 texture
+    // atlas (stripes, glass, roof, stone), to the right of the red cube.
+    scene.textures.push_back(
+        {.file = "lighthouse.png", .desc = TextureDesc{.filter = TextureFilter::Nearest}});
+    scene.models.push_back({.file = "lighthouse.obj",
+                            .material = material(kWhite),
+                            .position = {13.0F, 0.0F, -10.0F},
+                            .texture = scene.textures.size() - 1});
+
     scene.light = sunlight();
     return scene;
 }
