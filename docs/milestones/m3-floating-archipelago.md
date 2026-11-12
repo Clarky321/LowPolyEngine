@@ -34,7 +34,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.1 | Deterministic randomness | done |
 | M3.2 | Noise | done |
 | M3.3 | World generation settings | done |
-| M3.4 | Island placement in 3D | in progress |
+| M3.4 | Island placement in 3D | done |
 | M3.5 | Island shape: top surface and underside | planned |
 | M3.6 | Island mesh | planned |
 | M3.7 | Island palettes | planned |
