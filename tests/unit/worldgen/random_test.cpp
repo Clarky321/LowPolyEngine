@@ -77,9 +77,11 @@ TEST_CASE("mix64 is the SplitMix64 finalizer", "[worldgen][random]")
 TEST_CASE("Every input bit of mix64 changes about half of the output bits", "[worldgen][random]")
 {
     constexpr int inputs = 256;
+    constexpr std::uint64_t step = 0x9E3779B97F4A7C15ULL;
     std::array<int, 64> flipsPerBit{};
+    std::uint64_t value = 0;
     for (int i = 0; i < inputs; ++i) {
-        const std::uint64_t value = static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ULL;
+        value += step;
         for (std::size_t bit = 0; bit < flipsPerBit.size(); ++bit) {
             const std::uint64_t flipped = value ^ (std::uint64_t{1} << bit);
             flipsPerBit[bit] += std::popcount(mix64(value) ^ mix64(flipped));
