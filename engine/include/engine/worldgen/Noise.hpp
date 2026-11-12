@@ -33,6 +33,8 @@ struct FractalNoiseParams {
     float lacunarity = 2.0F;
     // Amplitude factor from one octave to the next, [0, 1].
     float persistence = 0.5F;
+
+    friend bool operator==(const FractalNoiseParams&, const FractalNoiseParams&) = default;
 };
 
 // Gradient (Perlin) noise in [-1, 1]: 0 at every lattice point, smooth in

@@ -10,6 +10,7 @@ find_package(glm REQUIRED CONFIG)
 set(worldgen_sources
     src/worldgen/Noise.cpp
     src/worldgen/Random.cpp
+    src/worldgen/WorldGenSettings.cpp
 )
 set_source_files_properties(${worldgen_sources} PROPERTIES
     COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>"

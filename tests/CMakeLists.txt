@@ -28,6 +28,7 @@ add_executable(lpe_unit_tests
     unit/sandbox/island_preview_assets_test.cpp
     unit/worldgen/noise_test.cpp
     unit/worldgen/random_test.cpp
+    unit/worldgen/world_gen_settings_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
 # GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.

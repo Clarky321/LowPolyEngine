@@ -33,7 +33,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 |---|---|---|
 | M3.1 | Deterministic randomness | done |
 | M3.2 | Noise | done |
-| M3.3 | World generation settings | planned |
+| M3.3 | World generation settings | in progress |
 | M3.4 | Island placement in 3D | planned |
 | M3.5 | Island shape: top surface and underside | planned |
 | M3.6 | Island mesh | planned |
@@ -106,12 +106,18 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** one versioned description of a world.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0013):
 - `WorldGenSettings`: seed, generator version, island count, world bounds X/Y/Z, vertical altitude range, island size range, minimum horizontal and vertical spacing, shape parameters, elevation parameters, noise parameters, local water settings, cloud settings, mesh resolution.
 - Documented defaults and a validation and clamping policy per field (reject or clamp, as `docs/ENGINE_PLAN.md` §6 asks), shared later by the JSON loader (M3.11) and the UI (M3.12).
 - No world sea level: the concept is removed.
+- `engine/include/engine/worldgen/WorldGenSettings.hpp` and `engine/src/worldgen/WorldGenSettings.cpp`. Groups follow the JSON of ADR 0004: `bounds`, `islands` (count, rim altitude, radius, spacings), `shape`, `elevation`, `underside`, `noise` (frequency, `FractalNoiseParams`, warp), `water`, `clouds`, `mesh`. 44 numeric fields plus seed, generator version and the water switch; the table with defaults and ranges is in ADR 0013.
+- Defaults are member initializers; inclusive ranges are public constants in `engine::worldgen::limits`. `kGeneratorVersion` is 1.
+- Policy: `validate()` rejects a wrong generator version, any numeric field outside its range (NaN and infinities included) and inconsistent combinations, returning the first problem in a fixed order with a message that starts with the field path; `clampToLimits()` moves single fields into their range (NaN to the default) and never repairs combinations.
+- Combinations: each bounds axis spans at least 20 m; the bounds' diagonal is at most 1000 m (camera far plane); every range has min <= max; the largest island fits the bounds horizontally and, at the highest and lowest altitude, vertically (top `maxHeightRatio · radius`, underside `depthRatio.max · radius`); spacings are not larger than the world; cloud altitudes lie inside the bounds.
+- Units: metres, wind direction in degrees (0 = +X, 90 = +Z), heights and depths as fractions of the island radius. An island is anchored at the centre of its rim.
+- `FractalNoiseParams` gained a defaulted `operator==` so the settings compare as a whole.
 
-**Tests (headless):** defaults are valid; every field below, at and above its limits; inconsistent combinations (altitude range outside the Y bounds, size range that cannot fit the bounds, spacing larger than the world) are rejected with a message naming the field.
+**Tests (headless):** defaults are valid; every field below, at and above its limits; inconsistent combinations (altitude range outside the Y bounds, size range that cannot fit the bounds, spacing larger than the world) are rejected with a message naming the field. Implemented in `tests/unit/worldgen/world_gen_settings_test.cpp`, with the ranges written out from ADR 0013: for every float field the next float below and above each limit, NaN and both infinities are range problems naming the field, both limits pass the range check (and validate completely where no other field depends on them); every integer field likewise with limit ± 1 and the int extremes; exact messages for counts, small floats and NaN; the generator version; any seed; the fixed order of problems; 18 combinations rejected with their field path, among them altitude ranges above and below the Y bounds, a size range that cannot fit, spacings larger than the world, and a diagonal beyond the far plane; combinations exactly at their limits pass; `clampToLimits` moves every field to its limit or default and changes nothing else, keeps valid settings, and leaves combinations, seed, version and the water switch alone.
 
 **Done when:** every field has a default, a documented range and a test.
 
