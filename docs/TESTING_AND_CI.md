@@ -13,7 +13,7 @@ Initial high-value test groups:
 - Render (GPU-free parts): handle pool, material and light validation, the normal matrix (implemented, `tests/unit/render/`).
 - Sandbox assets: the textures and the model island-preview loads decode and load cleanly (implemented, `tests/unit/sandbox/`), since island-preview itself only logs a broken asset.
 - Geometry: `MeshData` validation and appending, primitives, face normals, OBJ subset import with inline fixtures for every face form, negative indices, polygons, missing normals, malformed lines with their line number, out-of-range indices, limits, NaN/Inf, empty input and CRLF (implemented, `tests/unit/geometry/`).
-- WorldGen: seeded PRNG, stable seed derivation, noise edge cases, island masks, height bounds, mesh construction, biome selection, placement bounds.
+- WorldGen: seeded PRNG, stable seed derivation, noise edge cases, island masks, top and underside height bounds, closed island meshes, palette selection, 3D placement bounds and spacing, local water placement, cloud placement.
 - Scene: stable ID uniqueness, component add/remove, hierarchy validation, serialization round-trip.
 - Assets: path normalization, stable handle validation, missing-file behavior.
 - Lua: valid binding calls, invalid arguments, runtime errors, expired entity handles.

@@ -6,15 +6,15 @@
 
 ## 1. Product vision
 
-Create a focused engine for stylized low-poly 3D games. The engine should make it easy to build colorful environments with readable silhouettes, flat-shaded geometry, vertex-color palettes and selective textures. Visual references include Journey, ABZÛ, Stray, Ori and the Blind Forest, Stardew Valley and The Witness. These references guide mood, color, composition and clarity; they are not feature requirements to clone.
+Create a focused engine for stylized low-poly 3D games. The engine should make it easy to build colorful environments with readable silhouettes, flat-shaded geometry, vertex-color palettes and selective textures. The main visual reference is *AER: Memories of Old*; *Journey*, *ABZÛ* and *The Witness* are references for atmosphere, color and composition. These references guide mood, color, composition and clarity; they are not feature requirements to clone, and no assets, characters or level designs are copied. The style stays stylized: no photorealism, heavy PBR, photorealistic clouds or high-resolution textures.
 
-The first deliverable is not a game. It is an **island-generation sandbox** running inside an engine application:
+The first deliverable is not a game. It is a **procedural floating sky archipelago** sandbox running inside an engine application:
 
 - Starts as a native desktop application.
-- Generates several distinct islands from a reproducible seed.
+- Generates an archipelago of independent floating islands in open 3D sky from a reproducible seed: islands at different altitudes, with different sizes and shapes, uneven tops (hills, mountains, cliffs, plateaus), rocky undersides and their own palettes. There is no world ocean.
 - Uses low-poly terrain geometry, vertex colors and a small number of materials/textures.
-- Draws water and simple low-poly cloud formations.
-- Has a first-person free-fly camera (WASD + mouse, vertical movement, speed control).
+- Draws local water on islands (lakes, ponds, streams, waterfalls over island edges), simple low-poly cloud clusters around and between the islands, and a stylized sky.
+- Has a first-person free-fly camera (WASD + mouse, vertical movement, speed control) that moves freely through the whole 3D space.
 - Allows changing generation parameters and regenerating the scene.
 - Can save/load the seed and generation settings.
 - Has automated tests for deterministic generation and core data structures.
@@ -45,7 +45,7 @@ Application
  │   └─ OpenGL 4.5 backend (first implementation)
  ├─ Scene (world, entity, components, transform, prefab, serialization)
  ├─ Assets (registry, handles, import, cache, virtual paths)
- ├─ WorldGen (noise, island profiles, terrain mesh, biome palette, clouds)
+ ├─ WorldGen (noise, 3D island placement, island top and underside, palettes, local water, clouds)
  ├─ Scripting (Lua VM, engine bindings, script lifecycle)
  └─ Optional future systems (physics, audio, animation)
 
@@ -77,47 +77,53 @@ Keep engine and editor as separate CMake targets and applications. The engine mu
 
 Define the minimum RHI surface needed by the actual first renderer. Do not define a large speculative API. Vulkan is the next candidate. D3D12 comes after the project has a clear Windows-specific need or a strong portability requirement. If multi-backend support is a launch requirement, prototype BGFX before writing the renderer: it advertises OpenGL 4.3+, Vulkan, Direct3D 11/12 and Metal. This changes the project from “implement graphics APIs” to “build an engine above a backend library.”
 
-## 6. Procedural island generation
+## 6. Procedural floating-island generation
+
+The world is an archipelago of independent floating islands in 3D space. There is no world sea level and no global water plane; water exists only on islands. M3 implements this in the steps of `docs/milestones/m3-floating-archipelago.md`.
 
 ### Generator inputs
 
 - Master seed and generator version.
-- Island count and placement bounds.
+- Island count, world bounds in X/Y/Z and the vertical altitude range.
+- Island size range and minimum horizontal and vertical spacing between islands.
 - Per-island derived seed.
-- Shape profile: radius, ellipticity, orientation, coastline roughness.
-- Elevation profile: central mass, ridges/peaks, plateau/terrace options.
+- Shape profile: radius, ellipticity, orientation, outline roughness.
+- Elevation profile of the top: central mass, ridges/peaks, cliffs, plateau/terrace options.
+- Underside profile: depth, ledges, protrusions, roughness.
 - Noise parameters: scale, octave count, persistence, lacunarity and domain-warp strength.
-- Biome palette and elevation/slope thresholds.
+- Palettes and elevation/slope thresholds (grass, soil, sand, rock, snow, stone underside).
+- Local water settings (lakes, ponds, streams, waterfalls) and cloud settings (count, size, density, altitude, wind).
 - Mesh resolution or target triangle count.
-- Water level and cloud parameters.
 
 ### Determinism
 
-PRNG, seed derivation, distributions and floating-point rules are fixed in [ADR 0003](adr/0003-deterministic-generation.md): SplitMix64 for seed mixing, PCG32 for random sequences, project-owned distributions, no `std::hash`/standard distributions. WorldGen is a pure CPU module that outputs mesh/world data; it does not depend on the renderer.
+PRNG, seed derivation, distributions and floating-point rules are fixed in [ADR 0003](adr/0003-deterministic-generation.md): SplitMix64 for seed mixing, PCG32 for random sequences, project-owned distributions, no `std::hash`/standard distributions. WorldGen is a pure CPU module that outputs mesh/world data; it does not depend on the renderer. Each new random use (island layout, island shape, terrain, local water, clouds, …) gets its own random stream.
 
 ### Baseline algorithm (implement in stages)
 
-1. Derive an independent deterministic seed for each island using a stable hash of `(masterSeed, islandIndex, generatorVersion)`.
-2. Generate island centers and overall shapes with a bounded placement algorithm. Keep island spacing and world bounds explicit.
+1. Derive an independent deterministic seed for each island using a stable hash of `(masterSeed, stream, islandIndex, generatorVersion)`.
+2. Place islands in X/Y/Z inside the world bounds and the altitude range, with sizes from the size range, using a bounded placement algorithm. Each island has a bounding volume; neighbors keep the minimum horizontal or vertical spacing, so their geometry cannot intersect.
 3. Build an island mask using normalized elliptical distance and smooth radial falloff. Add low-frequency shape noise/domain warping to avoid perfectly circular islands.
-4. Evaluate elevation from a combination of island mask, fractal Brownian motion (fBm), ridge noise and optional terrace quantization. Clamp/validate final height values.
-5. First mesh implementation: a jittered grid with alternating triangle diagonals. It is easy to debug and deterministic. Consider Poisson-disc samples + Delaunay triangulation later if the grid looks too regular.
-6. Assign vertex colors from elevation, slope, biome and a deterministic palette. Keep palette data outside shader source.
-7. Generate a coastline/shore band and place a water surface at configured sea level.
-8. Generate clouds as deterministic clusters of low-poly meshes/instances; drift them using a separate wind/time system. Do not start with expensive volumetric cloud rendering.
-9. Store generation parameters and seed in project/scene data. Optionally cache generated mesh data only after profiling shows generation time requires it.
+4. Evaluate the top surface from the mask, fractal Brownian motion (fBm), ridge noise, domain warp and optional plateaus/terraces: hills, mountains, cliffs. Clamp/validate final height values.
+5. Build the underside: a rocky mass below the outline with varying depth, ledges, protrusions and pronounced faces — not a flat disc or a plain inverted cone.
+6. First mesh implementation: a jittered grid with alternating triangle diagonals for the top, rings or strips for the underside, closed along the rim, flat-shaded. It is easy to debug and deterministic. Consider Poisson-disc samples + Delaunay triangulation later if the grid looks too regular.
+7. Assign vertex colors from elevation, slope and position using deterministic palettes per island. Keep palette data outside shader source.
+8. Add local water: lakes and ponds in basins of the top, streams running downhill, waterfalls where a stream reaches the rim.
+9. Generate clouds as deterministic clusters of low-poly meshes around and between islands at different altitudes; drift them using a separate wind/time system. Do not start with expensive volumetric cloud rendering.
+10. Store generation parameters and seed in project/scene data. Optionally cache generated mesh data only after profiling shows generation time requires it.
 
-### Water
+### Local water
 
-Begin with a water plane/grid, subtle vertex displacement and a simple stylized shader. Later add depth-based shoreline fade, Fresnel blending, reflection/refraction and underwater color absorption. ThinMatrix's water shader is useful as an algorithm reference because it demonstrates depth sampling, Fresnel-style blending and soft shore edges; do not transplant its old Java/LWJGL pipeline.
+Water is local to islands: small lakes and ponds, streams and waterfalls, each placed deterministically from its own random stream. Begin with flat-shaded, translucent, stylized surfaces drawn after opaque geometry, and low-poly ribbons for waterfalls. Later add subtle motion, depth-based shore fade and Fresnel blending. ThinMatrix's water shader is useful as an algorithm reference because it demonstrates depth sampling, Fresnel-style blending and soft shore edges; do not transplant its old Java/LWJGL pipeline.
 
 ### Variation and determinism tests
 
 - Same seed + same version + same settings => same vertex/index output or same stable mesh hash.
-- Different seeds => meaningful differences, not merely a color swap.
+- Different seeds => meaningful differences (layout, altitudes, sizes, shapes, palettes), not merely a color swap.
 - No NaN/Inf positions or normals; all indices are in range.
-- All generated heights stay within configured bounds.
-- Island placement remains inside world bounds and respects minimum spacing within tolerance.
+- All generated heights and underside depths stay within configured bounds.
+- Island placement remains inside world bounds and keeps the minimum horizontal/vertical spacing within tolerance; island volumes do not intersect.
+- Each island mesh is closed along its rim; local water stays on its island; clouds keep clearance from islands.
 - Zero/negative/out-of-range settings are rejected or clamped by a documented policy.
 
 ## 7. Scene, entities and authoring model
@@ -160,7 +166,7 @@ First panels:
 1. Viewport: rendered scene, fly camera, select entity.
 2. Hierarchy: list/create/delete/rename scene entities.
 3. Inspector: view/edit Transform and basic components.
-4. WorldGen: seed, island count, noise, height, biome palette, regenerate.
+4. WorldGen: seed, island count, altitude and size ranges, spacing, noise, height, palettes, local water, clouds, regenerate.
 5. Console: logs, script errors and diagnostics.
 6. Project/assets: browse assets and open/save project.
 
@@ -201,16 +207,19 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** draw multiple flat-shaded meshes and at least one textured material; shader errors are surfaced clearly.
 
-**Status:** done on the branch `milestone/m2-renderer-materials` (2026-11-11), waiting for the user's acceptance before its pull request is merged into `main`. Delivered as M2.1–M2.11 (`docs/milestones/m2-renderer-materials.md`, one sub-milestone per task as `docs/DEVELOPMENT_WORKFLOW.md` requires from M2 on): optional normals and UVs in `MeshData`, flat normals and UVs on the primitives and on the GPU; PNG decoding with stb_image (ADR 0008); GPU textures behind handles, colors in display space (ADR 0009); materials with a base color and an optional base color texture (ADR 0010); one directional light with ambient plus Lambert diffuse, flat shading from per-face normals and lit/unlit materials (ADR 0011); an own parser for a documented OBJ subset (ADR 0012), proven by a textured lighthouse model in island-preview. Exit criterion: the test scene draws many flat-shaded, lit meshes, a textured crate and the imported textured model; eight broken-shader fixtures show that compile, link, missing-file and shader-interface errors name the shader file and, where it applies, the variable. CI green on Windows MSVC and Linux GCC (Debug and Release); the GPU tier passes locally. Screenshots: `docs/screenshots/m2/`.
+**Status:** done (2026-11-11); accepted by the user and merged into `main` through pull request #3 (`6d61fba`). Delivered as M2.1–M2.11 (`docs/milestones/m2-renderer-materials.md`, one sub-milestone per task as `docs/DEVELOPMENT_WORKFLOW.md` requires from M2 on): optional normals and UVs in `MeshData`, flat normals and UVs on the primitives and on the GPU; PNG decoding with stb_image (ADR 0008); GPU textures behind handles, colors in display space (ADR 0009); materials with a base color and an optional base color texture (ADR 0010); one directional light with ambient plus Lambert diffuse, flat shading from per-face normals and lit/unlit materials (ADR 0011); an own parser for a documented OBJ subset (ADR 0012), proven by a textured lighthouse model in island-preview. Exit criterion: the test scene draws many flat-shaded, lit meshes, a textured crate and the imported textured model; eight broken-shader fixtures show that compile, link, missing-file and shader-interface errors name the shader file and, where it applies, the variable. CI green on Windows MSVC and Linux GCC (Debug and Release); the GPU tier passes locally. Screenshots: `docs/screenshots/m2/`.
 
-### M3 — Procedural island sandbox
+### M3 — Procedural floating sky archipelago
 
-- Deterministic seeded islands with distinct geometry and palettes.
-- Water surface and simple cloud clusters.
+- Deterministic seeded archipelago of floating islands placed in X/Y/Z at different altitudes, with distinct sizes, shapes, uneven tops, rocky undersides and palettes; no world ocean.
+- Local water on islands (lakes, ponds, streams, waterfalls) and low-poly cloud clusters around and between islands; a stylized sky background.
 - WorldGen UI controls and repeatable regeneration. Dear ImGui enters here as a development/debug UI in the sandbox; the full editor is M5.
 - Save/load seed and generator parameters as versioned JSON ([ADR 0004](adr/0004-serialization-format.md)).
+- Not in M3: ECS/entities, game scenes, vegetation, characters, objects and buildings (M4 and later).
 
-**Exit:** several visibly different islands are generated; same seed repeats; generation tests pass; free-fly camera works.
+**Exit:** several visibly different archipelagos are generated; same seed repeats; generation tests pass; the free-fly camera moves freely through the 3D space.
+
+**Status:** planned on the branch `milestone/m3-floating-archipelago` as M3.1–M3.13 in `docs/milestones/m3-floating-archipelago.md`; not started.
 
 ### M4 — Scene document and data model
 
