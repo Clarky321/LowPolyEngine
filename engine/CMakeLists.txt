@@ -8,6 +8,7 @@ find_package(glm REQUIRED CONFIG)
 # fused multiply-add on CPUs that have one. MSVC's default /fp:precise does not
 # contract. Every worldgen source belongs in this list.
 set(worldgen_sources
+    src/worldgen/IslandLayout.cpp
     src/worldgen/Noise.cpp
     src/worldgen/Random.cpp
     src/worldgen/WorldGenSettings.cpp

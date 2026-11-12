@@ -1,6 +1,6 @@
 # ADR 0013: World generation settings
 
-- **Status:** Accepted
+- **Status:** Accepted; amended for M3.4 (Amendment 1)
 - **Date:** 2026-11-13
 - **Related:** ADR 0003 (generator version, determinism), ADR 0004 (JSON envelope, validation after loading), `docs/milestones/m3-floating-archipelago.md` M3.3, M3.11 and M3.12, `docs/ENGINE_PLAN.md` §6
 
@@ -72,3 +72,14 @@ The noise ranges are those of the noise functions (`kMaxNoiseOctaves`, `kMaxNois
 - A range admits values that only some combinations accept (for example `bounds.min.x = 500` can never have room above it); per-field limits stay simple, and `validate` explains the combination.
 - `validate` reports one problem at a time; fixing it may reveal the next. That is enough for the loader's error message and the panel's status line.
 - No feasibility check of the island count: it depends on the random sizes, so placement handles it.
+
+## Amendment 1: island placement (M3.4, 2026-11-13)
+
+M3.4 turns the `islands` settings into a layout: `placeIslands(settings)` in `engine/worldgen/IslandLayout.hpp` returns an `IslandLayout` (the placed islands, the requested count and a warning) or `validate`'s error for invalid settings. The procedure below is part of the save-compatibility contract (ADR 0003): changing it changes worlds and needs a generator version bump.
+
+- **Island volume.** A placed island has an index (the number of the requested island, 0 to `islands.count − 1`), its rim anchor, a radius, `topHeight = elevation.maxHeightRatio · radius` and `undersideDepth = d · radius` with d drawn from `underside.depthRatio`. Its volume is the vertical cylinder of that radius from `anchor.y − undersideDepth` to `anchor.y + topHeight`.
+- **Spacing.** Two islands are far enough apart when the horizontal distance between their cylinders is at least `islands.minHorizontalSpacing` or the gap between their height intervals is at least `islands.minVerticalSpacing`. Either keeps their geometry apart.
+- **Streams.** Requested island k draws from its own `Pcg32(deriveSeed(seed, RandomStream::IslandLayout, k, generatorVersion))`, so its candidates do not depend on how many attempts earlier islands needed; its shape seed is `deriveSeed(seed, RandomStream::IslandShape, k, generatorVersion)`. A layout with more islands therefore starts with the islands of a layout with fewer, as long as they all fit.
+- **Candidates.** Each attempt draws, in this order, the radius from `islands.radius`, the depth ratio from `underside.depthRatio`, x from `[bounds.min.x + radius, bounds.max.x − radius)`, z likewise and the rim altitude from `islands.altitude`, all with `nextFloat` (one output each). Decision 6 guarantees that every such candidate lies inside the bounds, vertically too. The first candidate that keeps the spacing to every island placed before it is taken.
+- **When islands do not fit.** After `kPlacementAttemptsPerIsland` (100) attempts without a fitting candidate, the island is left out and the next one is tried; the layout keeps the indices of the placed islands, and its warning reads, for example, `placed 8 of 40 islands: 32 found no position that keeps the spacing in 100 attempts each`. Placement is pure, so the caller logs the warning. The first island always fits, so a layout is never empty, and the work is bounded by `islands.count × 100` attempts.
+- **Arithmetic.** Distances are compared squared in double (no square root); all values come from correctly rounded IEEE operations, so layouts match bit for bit across platforms (golden tests).

@@ -34,7 +34,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.1 | Deterministic randomness | done |
 | M3.2 | Noise | done |
 | M3.3 | World generation settings | done |
-| M3.4 | Island placement in 3D | planned |
+| M3.4 | Island placement in 3D | in progress |
 | M3.5 | Island shape: top surface and underside | planned |
 | M3.6 | Island mesh | planned |
 | M3.7 | Island palettes | planned |
@@ -127,13 +127,17 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** deterministic positions, sizes and seeds for all islands.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0013 Amendment 1):
 - Place island centers in X/Y/Z inside the world bounds and the altitude range, with sizes drawn from the size range.
 - Each island gets a bounding volume (horizontal radius, top height, underside depth). Two islands must keep the minimum horizontal spacing between their volumes or the minimum vertical spacing between them, so their geometry cannot intersect.
 - Bounded attempts in a fixed order; if the requested count does not fit, a documented policy applies (fewer islands and a warning, never an endless loop).
 - Every island gets its own derived seed (`RandomStream::IslandLayout` for placement, per-island streams for its shape).
+- `engine/include/engine/worldgen/IslandLayout.hpp` and `engine/src/worldgen/IslandLayout.cpp`: `placeIslands(settings)` returns `core::Result<IslandLayout>`; invalid settings give `validate`'s error. `PlacedIsland` holds the index of the requested island, the rim anchor, the radius, `topHeight = maxHeightRatio · radius`, `undersideDepth` (a ratio drawn from `underside.depthRatio`, times the radius) and the shape seed.
+- The volume is a vertical cylinder; spacing is checked with squared distances in double.
+- Requested island k draws from its own generator, `deriveSeed(seed, IslandLayout, k, version)`: per attempt radius, depth ratio, x, z, rim altitude, in that order. Its shape seed is `deriveSeed(seed, IslandShape, k, version)`. Because each island has its own generator, a layout with more islands starts with the layout with fewer when all fit.
+- Policy when islands do not fit: 100 attempts per island (`kPlacementAttemptsPerIsland`); an island without a fitting candidate is left out, the placed islands keep their indices, and `IslandLayout::warning` says how many were left out, for the caller to log. The first island always fits, so a layout is never empty.
 
-**Tests (headless):** determinism (same settings, same layout bitwise); all islands inside the bounds; no pair violates the clearance rule; altitudes and sizes vary over a seed corpus; different seeds give different layouts; per-island seeds are distinct; impossible settings follow the documented policy.
+**Tests (headless):** determinism (same settings, same layout bitwise); all islands inside the bounds; no pair violates the clearance rule; altitudes and sizes vary over a seed corpus; different seeds give different layouts; per-island seeds are distinct; impossible settings follow the documented policy. Implemented in `tests/unit/worldgen/island_layout_test.cpp`: golden layouts (exact bit patterns of the first islands for two seeds, from an independent implementation); 200 seeds with the default settings and 200 with 40 smaller islands and larger spacings, all placed, inside the bounds and the altitude range, with volumes that match the settings and every pair spaced (checked with their own formulas); the same settings give equal layouts; rim altitudes and radii cover their ranges, and no world has its islands within 40 m of height; different seeds give different layouts; all shape seeds distinct and equal to their derivation; 6 islands are the start of 12; a crowded request places 8 of 40 with the expected indices and warning; bounds exactly one island wide stack the islands vertically; invalid settings give `validate`'s message.
 
 **Done when:** placement passes the tests above for a corpus of seeds.
 
