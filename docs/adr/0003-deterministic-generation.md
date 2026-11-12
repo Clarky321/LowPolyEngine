@@ -1,6 +1,6 @@
 # ADR 0003: Deterministic procedural generation
 
-- **Status:** Accepted
+- **Status:** Accepted; amended for M3.1 (Amendment 1)
 - **Date:** 2026-11-09
 - **Related:** `docs/ENGINE_PLAN.md` §6, `docs/TESTING_AND_CI.md` §2, AGENTS.md §3
 
@@ -57,3 +57,22 @@ Use project-owned code in `engine/worldgen` (no OpenGL, SDL or ImGui dependency)
 - About 100–150 lines of PRNG/hash code to own and test; no new dependency.
 - `RandomStream` values and the `deriveSeed` formula are part of the save-compatibility contract: changing them requires a `generatorVersion` bump.
 - Exact cross-compiler equality of float geometry is not guaranteed; the contract is "same logical result", verified with tolerances and quantized hashes.
+
+## Amendment 1: exact formulas (M3.1, 2026-11-12)
+
+M3.1 implements the decision in `engine/worldgen/Random.hpp` (namespace `engine::worldgen`). The formulas below, the `RandomStream` values and the number of generator outputs each call consumes are part of the save-compatibility contract: changing any of them requires a `generatorVersion` bump.
+
+- **`mix64`** is the SplitMix64 finalizer: `z = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9`, `z = (z ^ (z >> 27)) * 0x94D049BB133111EB`, result `z ^ (z >> 31)`.
+- **`deriveSeed`.** With `fold(h, x) = mix64((h ^ x) + 0x9E3779B97F4A7C15)` (SplitMix64's gamma), `deriveSeed(masterSeed, stream, index, generatorVersion) = fold(fold(fold(fold(0, masterSeed), stream), index), generatorVersion)`. `index` is a `std::uint64_t`, `generatorVersion` a `std::uint32_t`. Each fold is a bijection of either argument while the other is fixed, so changing any single input always changes the seed. `fold(0, m)` equals the first output of SplitMix64 seeded with `m`, which ties the code to SplitMix64's published reference outputs.
+- **`RandomStream`** has exactly the values listed in the decision (`IslandLayout = 1`, `IslandShape = 2`, `Terrain = 3`, `Vegetation = 4`, `Clouds = 5`). A further stream (local water, M3.9) gets the next free value in the step that introduces it.
+- **`Pcg32`** is seeded as in the reference `pcg32_srandom_r(seed, sequence)`: increment `(sequence << 1) | 1`, one step, add the seed, one step. The outputs of the reference demo (seed 42, sequence 54) are therefore golden values. The default sequence `0x0A02BDBF7BB3C0A7` gives the increment 1442695040888963407, the default of `pcg32` in the reference C++ library. Generators compare with `==`; copies continue the same sequence.
+- **Distributions and consumed outputs.** A draw consumes a fixed number of outputs wherever possible, so changing one range in the settings does not shift the later draws of the same stream:
+  - `nextFloat01()` = `(next() >> 8) * 2^-24`, exact, in [0, 1); one output.
+  - `nextBounded(n)`: Lemire's multiply-shift, rejecting while the low 32 bits of `next() * n` are below `2^32 mod n` (computed only when the low word is below `n`). One output plus one per rejection. `n = 0` is an empty range: result 0, one output.
+  - `nextFloat(min, max)` = `float(double(min) + (double(max) - double(min)) * double(nextFloat01()))`, replaced by the largest float below `max` when rounding reaches `max`; the result is in [min, max). Exactly one output, also for an empty or invalid range (`min >= max`, or a non-finite end), which returns `min` unchanged. The double arithmetic cannot overflow for finite floats.
+  - `nextInt(min, max)` includes both ends: `min + nextBounded(max - min + 1)`, or `min + next()` for the whole int32 range. `max < min` counts as `max == min`.
+  - `nextBool(p)` = `nextFloat01() < p`, one output: always false for `p <= 0` or NaN, always true for `p >= 1`.
+- **Floating-point build rules.** Worldgen sources are listed in `worldgen_sources` in `engine/CMakeLists.txt`, which gives them `-ffp-contract=off` on GCC and Clang. `engine/src/worldgen/Random.cpp` stops the build with `#error` if `__FAST_MATH__`, `_M_FP_FAST` or `_M_FP_CONTRACT` is defined. The float results above come from a few correctly rounded IEEE operations on x64 (SSE2; there is no x87 target), so they are tested bit for bit on every platform.
+- **Module.** WorldGen is part of the `engine` static library (`engine/src/worldgen/`), like the other domains (`docs/PROJECT_STRUCTURE.md`); its sources include no renderer, SDL or ImGui headers.
+
+`tests/unit/worldgen/random_test.cpp` checks SplitMix64 and PCG32 against their reference outputs and every other formula against golden values from an independent implementation, plus ranges, bias and consumed outputs.

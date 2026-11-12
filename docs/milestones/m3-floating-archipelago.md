@@ -31,7 +31,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 
 | ID | Title | Status |
 |---|---|---|
-| M3.1 | Deterministic randomness | planned |
+| M3.1 | Deterministic randomness | in progress |
 | M3.2 | Noise | planned |
 | M3.3 | World generation settings | planned |
 | M3.4 | Island placement in 3D | planned |
@@ -66,12 +66,17 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** the reproducible random foundation of ADR 0003.
 
-**Scope:**
-- New module `engine/worldgen` (library code only, no rendering).
+**Scope** (decisions taken while implementing, ADR 0003 Amendment 1):
+- New module `engine/worldgen` (library code only, no rendering): `engine/include/engine/worldgen/Random.hpp` and `engine/src/worldgen/Random.cpp`, namespace `engine::worldgen`, part of the `engine` static library like the other domains.
 - `mix64` (SplitMix64 finalizer), `deriveSeed(masterSeed, stream, index, generatorVersion)`, `enum class RandomStream` with fixed values, `Pcg32` (XSH-RR, 64-bit state) as a value type, `nextFloat01()` and `nextBounded(n)` (Lemire with rejection), ranges and booleans built on them.
-- `-ffp-contract=off` for worldgen sources on GCC/Clang; no fast-math anywhere.
+- `deriveSeed` folds its four inputs with `fold(h, x) = mix64((h ^ x) + 0x9E3779B97F4A7C15)`, starting from 0. Every fold is a bijection of either argument, so changing any single input always changes the seed; the first fold is SplitMix64's first output. `index` is 64-bit, `generatorVersion` 32-bit.
+- `RandomStream` has exactly the five values of ADR 0003 (`IslandLayout = 1` … `Clouds = 5`); later streams get the next free value in their own step.
+- `Pcg32(seed, sequence = kDefaultSequence)` seeds like the reference `pcg32_srandom_r`; the default sequence gives the increment of `pcg32` in pcg-cpp.
+- Ranges and booleans: `nextFloat(min, max)` in [min, max), computed in double; `nextInt(min, max)` with both ends included, over the whole int32 range if asked; `nextBool(p = 0.5)`. `nextFloat01`, `nextFloat` and `nextBool` always consume exactly one output, also for empty or invalid ranges (which return `min`), so changing one range in the settings does not shift later draws. `nextBounded(0)` returns 0.
+- `-ffp-contract=off` for worldgen sources on GCC/Clang (the `worldgen_sources` list in `engine/CMakeLists.txt`); no fast-math anywhere: `Random.cpp` stops the build if fast-math or floating-point contraction is enabled (`__FAST_MATH__`, `_M_FP_FAST`, `_M_FP_CONTRACT`).
+- The generator version itself (a constant and a settings field) comes with the settings in M3.3; no world generation code uses the module yet.
 
-**Tests (headless):** exact golden values for `mix64`, `deriveSeed`, the first outputs of `Pcg32` for fixed seeds and `nextBounded`, identical on Windows and Linux in CI; `nextFloat01` stays in [0, 1); `nextBounded` covers its range without bias on a large sample; different streams and indices give different seeds.
+**Tests (headless):** exact golden values for `mix64`, `deriveSeed`, the first outputs of `Pcg32` for fixed seeds and `nextBounded`, identical on Windows and Linux in CI; `nextFloat01` stays in [0, 1); `nextBounded` covers its range without bias on a large sample; different streams and indices give different seeds. Implemented in `tests/unit/worldgen/random_test.cpp`: SplitMix64 (seed 0) and PCG32 (seed 42, sequence 54) match the published outputs of their reference implementations; `deriveSeed`, the default sequence, `nextBounded` (including the outputs its rejections consume), `nextFloat` (bit patterns), `nextInt` and `nextBool` match values from an independent implementation; mix64 avalanche; 15000 stream/index/version combinations per master seed give distinct seeds; copies and sequences of `Pcg32`; a chi-square test of `nextBounded(6)` and a test at bound 3·2^30 that a modulo reduction would fail; range ends, empty and invalid ranges, and the number of outputs each call consumes.
 
 **Done when:** the golden tests pass in CI on all four jobs.
 

@@ -219,7 +219,7 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** several visibly different archipelagos are generated; same seed repeats; generation tests pass; the free-fly camera moves freely through the 3D space.
 
-**Status:** planned on the branch `milestone/m3-floating-archipelago` as M3.1–M3.13 in `docs/milestones/m3-floating-archipelago.md`; not started.
+**Status:** in progress on the branch `milestone/m3-floating-archipelago`, in the steps M3.1–M3.13 of `docs/milestones/m3-floating-archipelago.md`, whose status table records each finished step.
 
 ### M4 — Scene document and data model
 

@@ -3,6 +3,17 @@
 find_package(SDL3 REQUIRED CONFIG)
 find_package(glm REQUIRED CONFIG)
 
+# World generation (src/worldgen/) must give the same float results with every
+# compiler (ADR 0003): GCC and Clang may otherwise contract a * b + c into a
+# fused multiply-add on CPUs that have one. MSVC's default /fp:precise does not
+# contract. Every worldgen source belongs in this list.
+set(worldgen_sources
+    src/worldgen/Random.cpp
+)
+set_source_files_properties(${worldgen_sources} PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>"
+)
+
 add_library(engine STATIC
     src/app/Application.cpp
     src/camera/Camera.cpp
@@ -30,6 +41,7 @@ add_library(engine STATIC
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
     src/render/opengl/GlTexture.cpp
+    ${worldgen_sources}
 )
 
 target_include_directories(engine PUBLIC
