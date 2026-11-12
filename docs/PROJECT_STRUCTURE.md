@@ -33,7 +33,7 @@ lowpoly-engine/
 │   │   ├── render/           # RHI-facing types and renderer interfaces
 │   │   ├── scene/            # Entity, components, world, prefab, document
 │   │   ├── assets/           # Asset IDs, handles, registry interfaces
-│   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness (M3.1, ADR 0003)
+│   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness and noise (M3.1, M3.2, ADR 0003)
 │   │   ├── scripting/        # Script runtime facade
 │   │   ├── camera/           # Camera and camera-controller types
 │   │   └── debug/            # On-screen diagnostics (pixel-font text, M1)

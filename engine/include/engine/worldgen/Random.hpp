@@ -26,13 +26,18 @@ enum class RandomStream : std::uint64_t {
     Clouds = 5,
 };
 
+// SplitMix64's increment: 2^64 divided by the golden ratio, odd. Adding it to a
+// state again and again and mixing each state with mix64 gives the SplitMix64
+// sequence of that state.
+inline constexpr std::uint64_t kSplitMix64Gamma = 0x9E3779B97F4A7C15ULL;
+
 // SplitMix64 finalizer: a bijective 64-bit mix in which every input bit
 // affects every output bit. mix64(0) is 0.
 [[nodiscard]] std::uint64_t mix64(std::uint64_t value);
 
 // Seed of one random sequence, derived from the world's master seed, a stream,
 // an index within the stream (an island number, for example) and the generator
-// version. With fold(h, x) = mix64((h ^ x) + 0x9E3779B97F4A7C15):
+// version. With fold(h, x) = mix64((h ^ x) + kSplitMix64Gamma):
 //
 //   deriveSeed = fold(fold(fold(fold(0, masterSeed), stream), index), generatorVersion)
 //

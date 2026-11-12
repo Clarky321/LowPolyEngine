@@ -1,30 +1,21 @@
 #include "engine/worldgen/Random.hpp"
 
+#include "FloatingPointRules.hpp"
+
 #include <cmath>
 #include <cstdint>
 #include <limits>
 
-// ADR 0003: generation code is never compiled with fast-math or with
-// floating-point contraction into fused multiply-add, which would change float
-// results between compilers and CPUs. GCC and Clang get -ffp-contract=off from
-// engine/CMakeLists.txt; MSVC's default /fp:precise does not contract.
-#if defined(__FAST_MATH__) || defined(_M_FP_FAST) || defined(_M_FP_CONTRACT)
-#error "worldgen must be compiled without fast-math and floating-point contraction (ADR 0003)"
-#endif
-
 namespace engine::worldgen {
 
 namespace {
-
-// 2^64 divided by the golden ratio, odd: SplitMix64's increment.
-constexpr std::uint64_t kGoldenGamma = 0x9E3779B97F4A7C15ULL;
 
 // PCG's 64-bit LCG multiplier (reference implementation).
 constexpr std::uint64_t kPcgMultiplier = 6364136223846793005ULL;
 
 std::uint64_t fold(std::uint64_t hash, std::uint64_t value)
 {
-    return mix64((hash ^ value) + kGoldenGamma);
+    return mix64((hash ^ value) + kSplitMix64Gamma);
 }
 
 } // namespace

@@ -1,6 +1,6 @@
 # ADR 0003: Deterministic procedural generation
 
-- **Status:** Accepted; amended for M3.1 (Amendment 1)
+- **Status:** Accepted; amended for M3.1 (Amendment 1) and M3.2 (Amendment 2)
 - **Date:** 2026-11-09
 - **Related:** `docs/ENGINE_PLAN.md` §6, `docs/TESTING_AND_CI.md` §2, AGENTS.md §3
 
@@ -76,3 +76,16 @@ M3.1 implements the decision in `engine/worldgen/Random.hpp` (namespace `engine:
 - **Module.** WorldGen is part of the `engine` static library (`engine/src/worldgen/`), like the other domains (`docs/PROJECT_STRUCTURE.md`); its sources include no renderer, SDL or ImGui headers.
 
 `tests/unit/worldgen/random_test.cpp` checks SplitMix64 and PCG32 against their reference outputs and every other formula against golden values from an independent implementation, plus ranges, bias and consumed outputs.
+
+## Amendment 2: noise (M3.2, 2026-11-12)
+
+M3.2 adds `engine/worldgen/Noise.hpp`: 2D gradient noise, fBm, ridge noise and domain warp, pure functions of a seed, a position and parameters. Their formulas are part of the save-compatibility contract, like those of Amendment 1.
+
+- **No permutation table.** A lattice point packs its cell coordinates as `(uint32(iy) << 32) | uint32(ix)`. Its gradient is entry `mix64(key + packed) >> 60` of 16 unit vectors at multiples of 22.5 degrees, written as double literals (cos 22.5°, sin 22.5°, sqrt(1/2)), so no trigonometric function runs. Adding the key translates the lattice: a key selects a region of one unbounded pattern, which repeats every 2^32 cells per axis. `gradientNoise(seed, p)` uses the key `mix64(seed)`.
+- **Gradient noise.** Perlin interpolation of the four corner dot products with the quintic fade `t³(t(6t − 15) + 10)`, multiplied by sqrt(2) and clamped to [-1, 1]. With unit gradients the largest possible value is sqrt(1/2), at the centre of a cell (checked numerically over the whole cell before choosing the factor). The noise is 0 at every lattice point.
+- **Double inside, float outside.** Positions and parameters are floats (`math::Vec2`); all arithmetic runs in double, which keeps fractions exact for the large coordinates of high octaves, and each result is rounded to float once. Only +, −, ×, ÷, floor, abs and comparisons are used, so results are expected to match bit for bit on every platform; tests compare golden samples with a tolerance of 1e-6, as the M3 plan asks. A lattice sample whose coordinate magnitude reaches 2^52 (where floor and fraction stop being exact), or is not finite, is 0.
+- **Fractal functions.** `fbm` sums `params.octaves` layers. Octave k (from 0) has the key `mix64(seed + (k + 1) · kSplitMix64Gamma)` (the SplitMix64 sequence of the seed), an offset below one cell from 24 bits of the key per axis (the low 24 bits for x, the next 24 for y), the frequency lacunarity^k and the amplitude persistence^k, both by repeated multiplication. The sum is divided by the sum of the amplitudes, so the result stays in [-1, 1]. The offsets keep the lattice points of the octaves apart; without them, fbm with lacunarity 2 would be 0 at every integer position. `ridgeNoise` folds each octave value n into (1 − |n|)² before summing and stays in [0, 1]. `domainWarp` returns `position + strength · (fbm(s1, position), fbm(s2, position))`, where s1 and s2 are the first two outputs of the SplitMix64 sequence of the seed.
+- **Parameters are clamped, not rejected:** octaves to [1, 12], lacunarity to [1, 4], persistence to [0, 1], warp strength to [0, 64], with NaN counting as the lower end; strength 0 returns the position unchanged. The limits are constants in `Noise.hpp` (`kMaxNoiseOctaves`, `kMaxNoiseLacunarity`, `kMaxWarpStrength`). Positions are in noise cells; callers scale world positions by a frequency first, so the functions have no frequency parameter.
+- **Shared rules.** The fast-math guard of Amendment 1 moved from `Random.cpp` into the internal header `engine/src/worldgen/FloatingPointRules.hpp`, which every worldgen source includes. `kSplitMix64Gamma` is public in `Random.hpp`, because the noise walks SplitMix64 sequences with it.
+
+`tests/unit/worldgen/noise_test.cpp` checks golden samples of every function against an independent implementation, the ranges, zeros at lattice points, continuity over small steps, bit-for-bit repetition, differences between seeds, octave offsets, parameter clamping, zero warp and samples outside the domain.

@@ -26,6 +26,7 @@ add_executable(lpe_unit_tests
     unit/render/light_test.cpp
     unit/render/material_test.cpp
     unit/sandbox/island_preview_assets_test.cpp
+    unit/worldgen/noise_test.cpp
     unit/worldgen/random_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)

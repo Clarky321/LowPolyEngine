@@ -32,7 +32,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | ID | Title | Status |
 |---|---|---|
 | M3.1 | Deterministic randomness | done |
-| M3.2 | Noise | planned |
+| M3.2 | Noise | in progress |
 | M3.3 | World generation settings | planned |
 | M3.4 | Island placement in 3D | planned |
 | M3.5 | Island shape: top surface and underside | planned |
@@ -86,12 +86,17 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** deterministic noise for shapes and relief.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0003 Amendment 2):
 - 2D gradient noise with a polynomial fade curve, seeded through M3.1 (no global permutation table).
 - fBm (octaves, persistence, lacunarity; amplitudes by repeated multiplication instead of `std::pow`), ridge noise, domain warp.
 - Pure functions of position, seed and parameters.
+- `engine/include/engine/worldgen/Noise.hpp` and `engine/src/worldgen/Noise.cpp`: `gradientNoise(seed, position)` in [-1, 1], `fbm` in [-1, 1], `ridgeNoise` in [0, 1] (each octave folded into (1 − |n|)²), `domainWarp(seed, position, strength, params)` returning the moved position; `FractalNoiseParams` holds octaves, lacunarity and persistence. Positions are `math::Vec2` in noise cells, with no frequency parameter: callers scale world positions first.
+- Each lattice point's gradient is one of 16 unit vectors written as literals, chosen by `mix64(key + packed coordinates)`; the key is `mix64(seed)`, or for octave k the k-th output of the seed's SplitMix64 sequence. Every octave also gets an offset below one cell from its key, so octave lattices do not line up. The scale factor sqrt(2) maps the largest possible value sqrt(1/2) to 1 (checked numerically before choosing it).
+- Arithmetic in double from the float inputs, one rounding to float at the end; coordinates whose magnitude reaches 2^52, and non-finite ones, sample as 0.
+- Parameters are clamped, not rejected: octaves [1, 12], lacunarity [1, 4], persistence [0, 1], warp strength [0, 64], NaN to the lower end (constants in `Noise.hpp`). Validation and clamping of the world settings stay in M3.3.
+- The M3.1 fast-math guard moved into the internal header `engine/src/worldgen/FloatingPointRules.hpp`, included by every worldgen source; `kSplitMix64Gamma` became public in `Random.hpp`. M3.1's results are unchanged (its golden tests pass).
 
-**Tests (headless):** output ranges for every function; continuity (small steps give small changes); bitwise repeatability in the same binary; stored samples compared with a tolerance across platforms; parameter edge cases (one octave, zero warp).
+**Tests (headless):** output ranges for every function; continuity (small steps give small changes); bitwise repeatability in the same binary; stored samples compared with a tolerance across platforms; parameter edge cases (one octave, zero warp). Implemented in `tests/unit/worldgen/noise_test.cpp`: golden samples of all four functions (several seeds and parameter sets) against an independent implementation, tolerance 1e-6; ranges over 100000 positions, including extreme parameters, and that the range is actually used; gradient noise is 0 at lattice points; changes over steps of 1e-3 cells stay below a slope of 11; two evaluations give identical bits; different seeds give clearly different values; fbm is not 0 at integer positions (octave offsets); out-of-range parameters behave like their clamped values, one octave ignores lacunarity and persistence, persistence 0 equals one octave; warp strength 0, negative or NaN returns the position bit for bit, and each coordinate moves by at most the strength; samples outside the domain are 0, and the lattice repeats every 2^32 cells.
 
 **Done when:** all noise functions are covered by range, repeatability and golden-sample tests.
 
