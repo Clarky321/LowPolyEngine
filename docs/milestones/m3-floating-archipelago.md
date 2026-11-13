@@ -35,7 +35,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.2 | Noise | done |
 | M3.3 | World generation settings | done |
 | M3.4 | Island placement in 3D | done |
-| M3.5 | Island shape: top surface and underside | planned |
+| M3.5 | Island shape: top surface and underside | in progress |
 | M3.6 | Island mesh | planned |
 | M3.7 | Island palettes | planned |
 | M3.8 | Floating world preview | planned |
@@ -147,12 +147,18 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** the shape of one island as height data, top and bottom.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0014):
 - Top surface: island mask (normalized elliptical distance, smooth falloff, low-frequency shape noise and domain warp for an irregular outline), elevation from the mask, fBm and ridge noise, optional plateaus and terraces, giving hills, mountains, cliffs and plateaus. Heights stay inside documented bounds.
 - Underside: a rocky mass below the outline whose depth and profile vary around the island, with ledges (steps in depth), protrusions and spurs, and pronounced faces. It is irregular low-poly rock, never a flat disc or a plain inverted cone; measurable criteria (variation of the profile around the island and along the depth) are fixed in this step.
 - Both parts meet at the island's rim.
+- `engine/include/engine/worldgen/IslandShape.hpp` and `engine/src/worldgen/IslandShape.cpp`: `makeIslandShape(island, settings)` draws an `IslandShape` once; `outlineRadius`, `outlineDistance`, `islandMask`, `topHeightAt` and `undersideDepthAt` evaluate it at island-local positions (metres in XZ from the rim anchor). Data only: functions to sample, no stored grids; M3.6 samples them.
+- Outline: an ellipse with a drawn long axis, its radius scaled per direction by `1 + k · noise`, where the noise is read on a circle around the origin of the noise plane, so the outline is a smooth, star-shaped closed curve without trigonometry. The long radius is `radius / (1 + k)`, so the outline never leaves the bounding circle.
+- Top: smooth mask, a central mass plus fBm hills and ridge crests at domain-warped positions; terraced islands (drawn with `plateauChance`) get flat plateaus (`terraceSteps = 0`) or terraces with steep rises.
+- Underside: a height field below the footprint with the profile `sqrt(1 − s) · (1 − 0.35 s)` (vertical at the rim, pointed tip under the anchor), ledges as steps in depth whose heights vary around the island, hanging spur crests and rock detail between rim and tip.
+- Seeds: outline, ledges, spurs and detail from the island's shape seed; the relief from `RandomStream::Terrain`, so relief changes leave outlines and undersides alone.
+- The criteria and their thresholds are in ADR 0014: mean depth ≥ 0.25 and deepest point ≥ 0.8 of the underside depth; depth spread around the island ≥ 0.08; the averaged profile at least 0.08 away from a straight cone; at least 2 shelves per direction; outline max/min ≥ 1.05.
 
-**Tests (headless):** height and depth bounds; mask is zero outside the footprint; the rim is shared by top and underside; the not-a-disc/not-a-cone criteria hold over a seed corpus; determinism and golden samples with tolerance.
+**Tests (headless):** height and depth bounds; mask is zero outside the footprint; the rim is shared by top and underside; the not-a-disc/not-a-cone criteria hold over a seed corpus; determinism and golden samples with tolerance. Implemented in `tests/unit/worldgen/island_shape_test.cpp`: golden samples (outline radius in three directions, top and underside at four points) for a terraced and a non-terraced island, from an independent implementation, tolerance 1e-4; outlines within (0.25, 1] of the radius over 30 seeds; mask, top and underside finite and within bounds on a grid over 30 seeds; all three exactly 0 beyond the outline and the bounding circle, full mask inside the falloff; top and underside below 0.5 % of their maximum just inside the rim; the criteria over 30 seeds (360 islands); without variation settings a round island, the same all around, still not a cone and still with ledges; plateau chance 0 and 1, terraces gathering on their levels, plateaus reaching the full height; bit-for-bit repetition; different shapes for different islands; relief settings leave outline and underside unchanged; non-finite positions and directions.
 
 **Done when:** top and underside data meet their bounds and shape criteria for a corpus of seeds.
 
