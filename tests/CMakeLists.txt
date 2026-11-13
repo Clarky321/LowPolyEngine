@@ -27,6 +27,7 @@ add_executable(lpe_unit_tests
     unit/render/material_test.cpp
     unit/sandbox/island_preview_assets_test.cpp
     unit/worldgen/island_layout_test.cpp
+    unit/worldgen/island_mesh_test.cpp
     unit/worldgen/island_shape_test.cpp
     unit/worldgen/noise_test.cpp
     unit/worldgen/random_test.cpp

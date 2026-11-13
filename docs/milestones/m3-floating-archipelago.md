@@ -36,7 +36,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.3 | World generation settings | done |
 | M3.4 | Island placement in 3D | done |
 | M3.5 | Island shape: top surface and underside | done |
-| M3.6 | Island mesh | planned |
+| M3.6 | Island mesh | in progress |
 | M3.7 | Island palettes | planned |
 | M3.8 | Floating world preview | planned |
 | M3.9 | Local island water | planned |
@@ -168,12 +168,18 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** a closed, flat-shaded mesh per island.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0014 Amendment 1):
 - Top surface from a jittered grid with alternating diagonals inside the outline (ENGINE_PLAN §6); underside from rings or strips following its profile; both as `MeshData` with per-face normals, indices and white or palette-ready vertex colors.
 - The two parts meet along the rim without gaps; the island is closed when seen from any direction.
 - A stable mesh hash of positions quantized to a documented grid (ADR 0003) for repeatability tests; triangle count bounded by the mesh resolution.
+- `engine/include/engine/worldgen/IslandMesh.hpp` and `engine/src/worldgen/IslandMesh.cpp`: `buildIslandMesh(shape, resolution)` returns `IslandMesh{top, underside}` in island-local coordinates (anchor at the origin); the caller places it at the anchor.
+- Top: n × n cells (n = `mesh.resolution`, clamped to 8–256) over the square [−1, 1]², interior vertices jittered by ±0.25 cell from key 6 of the shape seed, mapped onto the island by radial normalization (`s = max(|u|, |v|)` along the point's direction), so the grid border is the rim. A smooth square-to-disk map was tried first and dropped: it squeezed the cells next to the square's corners to about h² from the rim, and jitter folded them. Diagonals alternate; corner cells split through their rim corner; where the mapping bends along the square's diagonals, the other diagonal is taken if the alternating one would not face up.
+- Rim: the 4n border vertices at height 0, shared bit for bit by both parts. Underside: ceil(n / 2) rings at `s = 1 − k / m` through the rim directions, alternating diagonals, a fan to the tip.
+- Triangles: 2n² on top, 4n(2m − 1) underneath, at most 6n² (13 632 at the default 48). Each triangle has its own vertices, the face normal and white colours; no UVs. Minimum area `kMinIslandTriangleArea` = 1e−7 m².
+- `meshHash`: counts, coordinates rounded to 1/1024 m and indices, folded with `mix64`.
+- `subKey` moved from `IslandShape.cpp` into the internal header `engine/src/worldgen/SubKeys.hpp`; M3.5 results are unchanged.
 
-**Tests (headless):** `geometry::validate()` and the §2 invariants for both parts; outward-facing winding (counter-clockwise seen from outside) on top and underside; no gaps along the rim; triangle area above a documented epsilon; bounds; same seed gives the same hash, and the golden hash matches on Windows and Linux in CI.
+**Tests (headless):** `geometry::validate()` and the §2 invariants for both parts; outward-facing winding (counter-clockwise seen from outside) on top and underside; no gaps along the rim; triangle area above a documented epsilon; bounds; same seed gives the same hash, and the golden hash matches on Windows and Linux in CI. Implemented in `tests/unit/worldgen/island_mesh_test.cpp` over the 72 islands of seeds 0–5 (built once): `validate()` passes, own vertices per triangle, sequential indices, white colours, one normal per face, no UVs; triangle counts for resolutions 8, 9, 48, 101 and clamping of 2 and 1000; every top normal points up and every underside normal down; the 12 islands of seed 0 and resolutions 8 and 21 are closed (welded edges each matched by their reverse, none repeated, V − E + F = 2); the rim vertex sets of top and underside are equal and have 4n points; the smallest triangle is above 1e−7 m², also for a 4 m island at resolution 256; all vertices inside the island volume, the top above the rim, the underside reaching the tip; rebuilt meshes have equal positions and hashes, and all 144 part hashes differ; golden hashes for three islands of seed 42; `meshHash` ignores changes far below a step, sees two steps, order and non-finite values.
 
 **Done when:** every island of a seed corpus produces valid, closed meshes with stable hashes.
 

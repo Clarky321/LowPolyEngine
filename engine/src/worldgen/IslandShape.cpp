@@ -1,6 +1,7 @@
 #include "engine/worldgen/IslandShape.hpp"
 
 #include "FloatingPointRules.hpp"
+#include "SubKeys.hpp"
 
 #include "engine/worldgen/Random.hpp"
 
@@ -39,11 +40,7 @@ FractalNoiseParams shapeNoiseParams()
     return params;
 }
 
-// The index-th output of the SplitMix64 sequence of a seed.
-std::uint64_t subKey(std::uint64_t seed, std::uint64_t index)
-{
-    return mix64(seed + (index + 1U) * kSplitMix64Gamma);
-}
+using detail::subKey;
 
 double fade(double t)
 {

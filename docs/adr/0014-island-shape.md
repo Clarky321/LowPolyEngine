@@ -1,6 +1,6 @@
 # ADR 0014: Island shape — outline, top surface and underside
 
-- **Status:** Accepted
+- **Status:** Accepted; amended for M3.6 (Amendment 1)
 - **Date:** 2026-11-13
 - **Related:** ADR 0003 (determinism, noise in Amendment 2), ADR 0013 (settings, island anchor and volume, placement in Amendment 1), `docs/milestones/m3-floating-archipelago.md` M3.5 and M3.6, `docs/ENGINE_PLAN.md` §6
 
@@ -66,3 +66,17 @@ With ellipticity, outline roughness, underside roughness and protrusion all 0, a
 - The underside is a height field below the footprint: no overhangs. Ledges, spurs and faces come from its depth; M3.6 meshes it in rings of constant s, which keeps faces crisp.
 - The outline is star-shaped by construction, which keeps the rim one closed curve; bays that fold back on themselves are not possible.
 - The look is checked for the first time in M3.8; the constants may be tuned there with an amendment.
+
+## Amendment 1: island mesh (M3.6, 2026-11-13)
+
+`buildIslandMesh(shape, resolution)` in `engine/worldgen/IslandMesh.hpp` turns a shape into two `MeshData` parts, `top` and `underside`, in island-local coordinates (anchor at the origin, +Y up). The construction is part of the save-compatibility contract.
+
+- **Top: jittered grid with alternating diagonals.** n × n cells (n = `mesh.resolution`, clamped to 8–256) over the square [−1, 1]². Interior vertices move by up to ±0.25 cell per axis, drawn in row order from `Pcg32(key(6))` of the shape seed (a new key, so earlier keys are unchanged). A point (u, v) maps onto the island by radial normalization: it keeps its direction, and its normalized distance is `s = max(|u|, |v|)`, so every concentric square becomes a ring of constant s and the border becomes the rim; its position is `direction · s · outlineRadius(direction)`, its height `topHeightAt`. No trigonometry is needed. A smooth square-to-disk map was tried first and dropped: near the square's corners it moves the first interior vertex to within about h² of the rim, and jitter then folded cells. Diagonals alternate with (i + j) mod 2; a corner cell splits through its corner on the rim (whose two rim edges are nearly collinear); and where the map bends (along the square's diagonals) a jittered cell can become non-convex, so the other diagonal is taken when the alternating one would give a triangle that does not face up.
+- **Rim.** The 4n border vertices, in order of increasing angle in the XZ plane, at height exactly 0. They are computed once and used by both parts, so the parts share their rim vertices bit for bit.
+- **Underside: rings and a fan.** m = ceil(n / 2) rings at `s = 1 − k / m` (k = 0 is the rim) through the 4n rim directions, at depth `undersideDepthAt`; quads between rings split with diagonals alternating by (i + k) mod 2; the innermost ring closes with a fan to the tip `(0, −undersideDepth, 0)`.
+- **Counts.** The top has 2n² triangles and the underside 4n(2m − 1), at most 6n² together (13 632 at the default n = 48).
+- **Flat shading and colours.** Every triangle has its own three vertices with the face normal (`geometry::faceNormal`); indices run 0, 1, 2, …; vertex colours are white, to be replaced by palette colours (M3.7); there are no UVs.
+- **Orientation and closure.** Both parts are height fields over the footprint: the top faces up and the underside down, both counter-clockwise seen from outside. Together they are closed (every edge appears once in each direction, V − E + F = 2).
+- **Smallest triangle.** Every triangle has an area of at least `kMinIslandTriangleArea` = 1e−7 m². Measured: 0.0041 m² over the 72 islands of seeds 0–5 with the defaults, 1.06e−6 m² for a 4 m island at resolution 256 (the worst case of the limits).
+- **Mesh hash.** `meshHash(mesh)` folds the vertex and index counts, every coordinate rounded to a multiple of `kMeshHashStep` = 1/1024 m (non-finite or beyond 2^62 steps: one fixed value), and every index with `mix64((h ^ x) + kSplitMix64Gamma)`. Golden hashes recorded on Windows are checked on Linux in CI (ADR 0003).
+- `key(i)` of a seed now lives in the internal header `engine/src/worldgen/SubKeys.hpp`, shared by the shape and the mesh.
