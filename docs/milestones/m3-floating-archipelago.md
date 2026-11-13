@@ -37,7 +37,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.4 | Island placement in 3D | done |
 | M3.5 | Island shape: top surface and underside | done |
 | M3.6 | Island mesh | done |
-| M3.7 | Island palettes | planned |
+| M3.7 | Island palettes | in progress |
 | M3.8 | Floating world preview | planned |
 | M3.9 | Local island water | planned |
 | M3.10 | Clouds | planned |
@@ -189,12 +189,16 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** colors from data, different per island.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0015):
 - Palette data with separate colors for grass, soil, sand, rock surfaces, snow and the stone underside; selection by elevation, slope and position on the island, with documented thresholds.
 - Each island picks or varies a palette deterministically, so neighbors look different.
 - Colors are written as vertex colors; shaders contain no palette.
+- `engine/include/engine/worldgen/IslandPalette.hpp` and `engine/src/worldgen/IslandPalette.cpp`: `IslandPalette` (grass, soil, sand, rock, snow, stone, deepStone; display-space RGB) with `validate()`; six built-in palettes as code data (Meadow, Autumn, Teal moss, Sandstone, Lavender dusk, Alpine); no palette files in M3.
+- Choice: new stream `RandomStream::IslandPalette = 6`; per island a base palette, an alternative, a brightness (0.92–1.08) and a tint per channel (±0.05), always drawn in this order. The base differs from the base of the nearest island placed before it; the tint gives every island colours of its own. `choosePalettes(layout, settings)` returns base index and palette per island.
+- Painting, one colour per face: top by `classifyTop(elevation, normal.y, rim distance)` — rock if normal.y < 0.7, snow if elevation ≥ 0.82, sand if rim distance ≥ 0.88 and elevation < 0.1, soil if normal.y < 0.86, else grass; underside in four stone strata by depth, from `stone` to `deepStone`.
+- The random test now also covers the new stream (18000 stream/index/version combinations per master seed instead of 15000).
 
-**Tests (headless):** palette validation (finite components in [0, 1]); thresholds pick the expected entries; the underside uses the stone palette; different islands of a seed corpus get different palettes; determinism.
+**Tests (headless):** palette validation (finite components in [0, 1]); thresholds pick the expected entries; the underside uses the stone palette; different islands of a seed corpus get different palettes; determinism. Implemented in `tests/unit/worldgen/island_palette_test.cpp`: built-in palettes valid and distinct, darker towards the tip; `validate` messages for values above 1, below 0 and NaN, limits accepted; 17 threshold cases including every boundary; stone strata; golden base palettes and tinted colours for seed 42 from an independent implementation; over 100 seeds no island shares its base palette with its nearest earlier neighbour, all six palettes occur, every world uses at least three, and all 1200 islands have distinct colours; choice repeats and ignores shape settings; over 48 painted islands every face has one colour, top faces only their palette's surface colours and underside faces the stratum of their depth, and all five surfaces and four strata occur; painting is deterministic and changes colours only.
 
 **Done when:** every vertex of every island has a palette color and the variety test passes.
 

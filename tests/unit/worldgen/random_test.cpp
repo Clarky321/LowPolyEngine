@@ -32,8 +32,8 @@ constexpr std::int32_t kMinInt = std::numeric_limits<std::int32_t>::min();
 constexpr std::int32_t kMaxInt = std::numeric_limits<std::int32_t>::max();
 
 constexpr std::array kAllStreams{RandomStream::IslandLayout, RandomStream::IslandShape,
-                                 RandomStream::Terrain, RandomStream::Vegetation,
-                                 RandomStream::Clouds};
+                                 RandomStream::Terrain,      RandomStream::Vegetation,
+                                 RandomStream::Clouds,       RandomStream::IslandPalette};
 
 // The demo program of the PCG reference library seeds with pcg32_srandom_r(42, 54).
 Pcg32 referenceGenerator()
@@ -111,6 +111,7 @@ TEST_CASE("RandomStream values are fixed", "[worldgen][random]")
     CHECK(static_cast<std::uint64_t>(RandomStream::Terrain) == 3U);
     CHECK(static_cast<std::uint64_t>(RandomStream::Vegetation) == 4U);
     CHECK(static_cast<std::uint64_t>(RandomStream::Clouds) == 5U);
+    CHECK(static_cast<std::uint64_t>(RandomStream::IslandPalette) == 6U);
 }
 
 TEST_CASE("deriveSeed matches its golden values", "[worldgen][random]")

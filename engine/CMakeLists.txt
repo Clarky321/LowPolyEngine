@@ -10,6 +10,7 @@ find_package(glm REQUIRED CONFIG)
 set(worldgen_sources
     src/worldgen/IslandLayout.cpp
     src/worldgen/IslandMesh.cpp
+    src/worldgen/IslandPalette.cpp
     src/worldgen/IslandShape.cpp
     src/worldgen/Noise.cpp
     src/worldgen/Random.cpp

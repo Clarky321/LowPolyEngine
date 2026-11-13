@@ -24,6 +24,8 @@ enum class RandomStream : std::uint64_t {
     Terrain = 3,
     Vegetation = 4,
     Clouds = 5,
+    // Colours of the islands (M3.7).
+    IslandPalette = 6,
 };
 
 // SplitMix64's increment: 2^64 divided by the golden ratio, odd. Adding it to a
