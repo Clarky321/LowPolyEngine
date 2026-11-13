@@ -16,7 +16,7 @@ namespace {
 // Constants of the shape (ADR 0014). Changing any of them changes worlds.
 constexpr float kMaxOutlineVariation = 0.4F; // times shape.outlineRoughness
 constexpr double kOutlineCircle = 0.8;   // radius in noise cells of the circle read for the outline
-constexpr double kMaskFalloff = 0.25;    // outer share of the outline where the mask falls to 0
+constexpr double kMaskFalloff = 0.08;    // outer share of the outline where the mask falls to 0
 constexpr double kCoreWeight = 0.3;      // central mass in the top
 constexpr double kReliefWeight = 0.7;    // noise relief in the top
 constexpr double kPlateauLevel = 0.6;    // top value above which a plateau is flat

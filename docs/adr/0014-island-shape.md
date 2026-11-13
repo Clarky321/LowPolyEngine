@@ -1,6 +1,6 @@
 # ADR 0014: Island shape — outline, top surface and underside
 
-- **Status:** Accepted; amended for M3.6 (Amendment 1)
+- **Status:** Accepted; amended for M3.6 (Amendment 1) and M3.8 (Amendment 2)
 - **Date:** 2026-11-13
 - **Related:** ADR 0003 (determinism, noise in Amendment 2), ADR 0013 (settings, island anchor and volume, placement in Amendment 1), `docs/milestones/m3-floating-archipelago.md` M3.5 and M3.6, `docs/ENGINE_PLAN.md` §6
 
@@ -80,3 +80,8 @@ With ellipticity, outline roughness, underside roughness and protrusion all 0, a
 - **Smallest triangle.** Every triangle has an area of at least `kMinIslandTriangleArea` = 1e−7 m². Measured: 0.0041 m² over the 72 islands of seeds 0–5 with the defaults, 1.06e−6 m² for a 4 m island at resolution 256 (the worst case of the limits).
 - **Mesh hash.** `meshHash(mesh)` folds the vertex and index counts, every coordinate rounded to a multiple of `kMeshHashStep` = 1/1024 m (non-finite or beyond 2^62 steps: one fixed value), and every index with `mix64((h ^ x) + kSplitMix64Gamma)`. Golden hashes recorded on Windows are checked on Linux in CI (ADR 0003).
 - `key(i)` of a seed now lives in the internal header `engine/src/worldgen/SubKeys.hpp`, shared by the shape and the mesh.
+
+## Amendment 2: first look and the archipelago (M3.8, 2026-11-13)
+
+- **Narrower mask falloff.** The first rendered world (M3.8) showed a wide, nearly flat brim around every island: the mask fell from 1 to 0 over the outer quarter of the outline (`s` from 0.75 to 1), so the top sloped down to the rim there, and the beach rule of ADR 0015 painted that band in sand; islands looked like plates with a hat brim. The falloff is now 0.08: the mask is 1 up to `s = 0.92` and falls with `fade((1 − s) / 0.08)` to 0 at the outline. The top keeps its height almost to the edge and ends in a short, steep drop that the palette paints as rock, above the underside's cliff, which reads as the edge of a floating island. Sand remains only where the relief itself is low near the rim. The underside, the outline and the shape criteria do not use the mask and are unchanged; so are the golden shape samples of M3.5, which all lie inside `s = 0.75`. The golden hashes of the top meshes (M3.6) changed and were recorded again.
+- **Archipelago.** `generateArchipelago(settings)` in `engine/worldgen/Archipelago.hpp` runs placement (ADR 0013 Amendment 1), shape, mesh (Amendment 1) and painting (ADR 0015) for valid settings and returns the layout (with its warning) and one `GeneratedIsland` per placed island: its shape, its palette and top and underside appended into one painted, island-local `MeshData`. It is pure CPU data; island-preview uploads one mesh per island and draws it at the island's anchor.

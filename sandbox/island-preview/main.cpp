@@ -1,13 +1,14 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
-// So far: engine loop, input, free-fly camera (M1) and a static test scene
-// drawn with materials, textures and a directional light, including a model
-// imported from an OBJ file (M2).
+// By default it generates a floating archipelago from a seed (M3) and shows it
+// under a stylized sky; --test-scene shows the static test scene of M1/M2
+// instead (materials, textures, a directional light, an imported OBJ model).
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
 // debug overlay, F12 saves a screenshot to screenshots/, Escape quits.
 
 #include "DebugOverlay.hpp"
+#include "Sky.hpp"
 #include "TestScene.hpp"
 
 #include "engine/app/Application.hpp"
@@ -18,16 +19,22 @@
 #include "engine/core/Log.hpp"
 #include "engine/core/Version.hpp"
 #include "engine/geometry/ObjImport.hpp"
+#include "engine/worldgen/Archipelago.hpp"
+#include "engine/worldgen/WorldGenSettings.hpp"
 
+#include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 #include <charconv>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <vector>
@@ -40,7 +47,7 @@ constexpr bool kDebugBuild = false;
 constexpr bool kDebugBuild = true;
 #endif
 
-// Placeholder sky tone until the scene has real lighting.
+// Behind the sky dome (archipelago) or the test scene's horizon.
 constexpr engine::render::Color kClearColor{0.53F, 0.74F, 0.86F, 1.0F};
 
 // Frames rendered before a --screenshot is taken when --frames is not given.
@@ -61,15 +68,29 @@ struct Options {
     std::filesystem::path assetDirectory = "assets";
     // Save the last frame as PNG and exit.
     std::optional<std::filesystem::path> screenshotPath;
-    // OBJ file loaded instead of the scene's model file (tests use broken ones).
+    // Show the M1/M2 test scene instead of the generated archipelago.
+    bool testScene = false;
+    // Test scene only: OBJ file loaded instead of the scene's model file
+    // (tests use broken ones).
     std::optional<std::filesystem::path> modelPath;
+    // Archipelago only: the world seed instead of the default settings' one.
+    std::optional<std::uint64_t> seed;
 };
 
-std::optional<std::uint64_t> parsePositiveInt(std::string_view text)
+std::optional<std::uint64_t> parseUnsigned(std::string_view text)
 {
     std::uint64_t value = 0;
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-    if (error != std::errc{} || end != text.data() + text.size() || value == 0) {
+    if (error != std::errc{} || end != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+std::optional<std::uint64_t> parsePositiveInt(std::string_view text)
+{
+    const auto value = parseUnsigned(text);
+    if (!value || *value == 0) {
         return std::nullopt;
     }
     return value;
@@ -92,9 +113,20 @@ std::optional<Options> parseOptions(int argc, char** argv)
             options.screenshotPath = std::filesystem::path(argv[++i]);
         } else if (arg == "--model" && hasValue) {
             options.modelPath = std::filesystem::path(argv[++i]);
+        } else if (arg == "--seed" && hasValue) {
+            options.seed = parseUnsigned(argv[++i]);
+            if (!options.seed) {
+                return std::nullopt;
+            }
+        } else if (arg == "--test-scene") {
+            options.testScene = true;
         } else {
             return std::nullopt;
         }
+    }
+    // Each option belongs to one of the two scenes.
+    if ((options.modelPath && !options.testScene) || (options.seed && options.testScene)) {
+        return std::nullopt;
     }
     if (options.screenshotPath && !options.maxFrames) {
         options.maxFrames = kDefaultScreenshotFrames;
@@ -102,9 +134,9 @@ std::optional<Options> parseOptions(int argc, char** argv)
     return options;
 }
 
-// Starting view: front-right of the pyramid, slightly above, looking at its tip,
+// Test scene: front-right of the pyramid, slightly above, looking at its tip,
 // so two of its faces and the ground perspective are visible.
-engine::camera::Camera initialCamera()
+engine::camera::Camera testSceneCamera()
 {
     engine::camera::Camera camera;
     camera.position = {11.0F, 7.5F, 22.0F};
@@ -113,58 +145,66 @@ engine::camera::Camera initialCamera()
     return camera;
 }
 
+// A camera at `position` looking at `target`.
+engine::camera::Camera cameraLookingAt(const engine::math::Vec3& position,
+                                       const engine::math::Vec3& target)
+{
+    const engine::math::Vec3 direction = glm::normalize(target - position);
+    engine::camera::Camera camera;
+    camera.position = position;
+    // forwardDirection() is (-sin(yaw) cos(pitch), sin(pitch), -cos(yaw) cos(pitch)).
+    camera.yawRadians = std::atan2(-direction.x, -direction.z);
+    camera.pitchRadians = std::asin(std::clamp(direction.y, -1.0F, 1.0F));
+    return camera;
+}
+
+// Overview of the archipelago: from above and to the side of the islands'
+// centre, far enough to see all of them, looking at the centre.
+engine::camera::Camera archipelagoCamera(const engine::worldgen::Archipelago& archipelago)
+{
+    engine::math::Vec3 centre{0.0F};
+    for (const auto& island : archipelago.islands) {
+        centre += island.shape.island.anchor;
+    }
+    centre /= static_cast<float>(std::max<std::size_t>(archipelago.islands.size(), 1U));
+    float reach = 0.0F;
+    for (const auto& island : archipelago.islands) {
+        const engine::math::Vec3 offset = island.shape.island.anchor - centre;
+        reach = std::max(reach, std::sqrt(offset.x * offset.x + offset.z * offset.z) +
+                                    island.shape.island.radius);
+    }
+    const engine::math::Vec3 direction = glm::normalize(engine::math::Vec3{0.55F, 0.45F, 0.72F});
+    const engine::math::Vec3 target = centre - engine::math::Vec3{0.0F, 0.25F * reach, 0.0F};
+    return cameraLookingAt(centre + direction * (1.3F * reach + 60.0F), target);
+}
+
+// Test scene: sunlight chosen in M2.8 to match the earlier baked brightness.
+// Archipelago: a warm sun from above and to the side, and a cool ambient, so
+// tops are bright, cliffs shaded and undersides cool and darker (ADR 0011).
+engine::render::LightDesc archipelagoSunlight()
+{
+    return engine::render::LightDesc{.direction = {-0.45F, -0.78F, -0.43F},
+                                     .color = engine::math::Vec3{0.5F, 0.465F, 0.41F},
+                                     .ambient = engine::math::Vec3{0.5F, 0.53F, 0.62F}};
+}
+
+// Camera at the origin, only its rotation: the sky stays at infinity.
+engine::math::Mat4 rotationOnly(const engine::math::Mat4& view)
+{
+    engine::math::Mat4 rotation = view;
+    rotation[3] = engine::math::Vec4{0.0F, 0.0F, 0.0F, 1.0F};
+    return rotation;
+}
+
 class IslandPreview final : public engine::app::Application {
 public:
     explicit IslandPreview(const Options& options) : options_(options) {}
 
     std::optional<engine::core::Error> start(engine::app::AppContext& context) override
     {
-        auto& renderer = context.renderer();
-        const island_preview::TestScene scene = island_preview::buildTestScene();
-        light_ = scene.light;
-        for (const auto& mesh : scene.meshes) {
-            auto handle = renderer.createMesh(mesh);
-            if (!handle) {
-                return handle.error();
-            }
-            meshes_.push_back(handle.value());
-        }
-        // A texture that cannot be loaded stays a null handle: the materials
-        // that use it are drawn without it.
-        for (const auto& texture : scene.textures) {
-            textures_.push_back(loadTexture(
-                renderer, options_.assetDirectory / "textures" / texture.file, texture.desc));
-        }
-        for (const auto& object : scene.objects) {
-            engine::render::MaterialDesc desc = object.material;
-            if (object.texture) {
-                desc.baseColorTexture = textures_.at(*object.texture);
-            }
-            auto material = renderer.createMaterial(desc);
-            if (!material) {
-                return material.error();
-            }
-            objects_.push_back({meshes_.at(object.mesh), material.value(), object.position,
-                                object.spinRadiansPerSecond});
-        }
-        // A model that cannot be loaded is left out; the rest of the scene runs.
-        for (const auto& model : scene.models) {
-            const auto path =
-                options_.modelPath.value_or(options_.assetDirectory / "models" / model.file);
-            const engine::render::MeshHandle mesh = loadModel(renderer, path);
-            if (mesh.isNull()) {
-                continue;
-            }
-            meshes_.push_back(mesh);
-            engine::render::MaterialDesc desc = model.material;
-            if (model.texture) {
-                desc.baseColorTexture = textures_.at(*model.texture);
-            }
-            auto material = renderer.createMaterial(desc);
-            if (!material) {
-                return material.error();
-            }
-            objects_.push_back({mesh, material.value(), model.position, 0.0F});
+        auto error = options_.testScene ? startTestScene(context) : startArchipelago(context);
+        if (error) {
+            return error;
         }
         // Rebuilt every frame; starts empty.
         auto overlay = context.renderer().createMesh(engine::geometry::MeshData{});
@@ -172,30 +212,27 @@ public:
             return overlay.error();
         }
         overlay_ = overlay.value();
-        const auto loadedTextures = std::ranges::count_if(
-            textures_, [](engine::render::TextureHandle texture) { return !texture.isNull(); });
-        engine::core::logInfo("app",
-                              "test scene: {} objects, {} meshes, {} textures; hold the right "
-                              "mouse button to look around, WASD to fly, Escape to quit",
-                              objects_.size(), meshes_.size(), loadedTextures);
         return std::nullopt;
     }
 
     void stop(engine::app::AppContext& context) override
     {
+        auto& renderer = context.renderer();
+        // Objects may share a material; destroying it again is ignored.
         for (const auto& object : objects_) {
-            context.renderer().destroyMaterial(object.material);
+            renderer.destroyMaterial(object.material);
         }
         objects_.clear();
         for (const auto mesh : meshes_) {
-            context.renderer().destroyMesh(mesh);
+            renderer.destroyMesh(mesh);
         }
         meshes_.clear();
         for (const auto texture : textures_) {
-            context.renderer().destroyTexture(texture);
+            renderer.destroyTexture(texture);
         }
         textures_.clear();
-        context.renderer().destroyMesh(overlay_);
+        renderer.destroyMesh(sky_);
+        renderer.destroyMesh(overlay_);
         context.window().setRelativeMouseMode(false);
     }
 
@@ -240,11 +277,21 @@ public:
     {
         const auto size = context.framebufferSize();
         auto& renderer = context.renderer();
-        renderer.setView({
-            .view = engine::camera::viewMatrix(camera_),
-            .projection = engine::camera::projectionMatrix(
-                camera_, engine::camera::aspectRatio(size.width, size.height)),
-        });
+        const engine::math::Mat4 view = engine::camera::viewMatrix(camera_);
+        const engine::math::Mat4 projection = engine::camera::projectionMatrix(
+            camera_, engine::camera::aspectRatio(size.width, size.height));
+
+        // The sky first, behind everything: no depth test, no depth writes.
+        if (!sky_.isNull()) {
+            renderer.setView({
+                .view = rotationOnly(view),
+                .projection = projection,
+                .depth = engine::render::DepthMode::Off,
+            });
+            renderer.drawMesh(sky_);
+        }
+
+        renderer.setView({.view = view, .projection = projection});
         renderer.setLight(light_);
         for (const auto& object : objects_) {
             engine::math::Mat4 model = glm::translate(engine::math::Mat4{1.0F}, object.position);
@@ -261,6 +308,129 @@ public:
     }
 
 private:
+    std::optional<engine::core::Error> startArchipelago(engine::app::AppContext& context)
+    {
+        auto& renderer = context.renderer();
+        engine::worldgen::WorldGenSettings settings;
+        if (options_.seed) {
+            settings.seed = *options_.seed;
+        }
+
+        const auto started = std::chrono::steady_clock::now();
+        auto generated = engine::worldgen::generateArchipelago(settings);
+        const double milliseconds =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+                .count();
+        if (!generated) {
+            return engine::core::Error{
+                std::format("world generation failed: {}", generated.error().message)};
+        }
+        const engine::worldgen::Archipelago& archipelago = generated.value();
+        if (!archipelago.layout.warning.empty()) {
+            engine::core::logWarning("app", "archipelago: {}", archipelago.layout.warning);
+        }
+
+        // Island colours are vertex colours (palettes); one white lit material
+        // lets the sun shade them.
+        auto material = renderer.createMaterial(
+            {.baseColor = {1.0F, 1.0F, 1.0F, 1.0F}, .shading = engine::render::Shading::Lit});
+        if (!material) {
+            return material.error();
+        }
+        for (const auto& island : archipelago.islands) {
+            auto mesh = renderer.createMesh(island.mesh);
+            if (!mesh) {
+                return mesh.error();
+            }
+            meshes_.push_back(mesh.value());
+            objects_.push_back({mesh.value(), material.value(), island.shape.island.anchor, 0.0F});
+        }
+        auto sky =
+            renderer.createMesh(island_preview::buildSkyDome(island_preview::floatingWorldSky()));
+        if (!sky) {
+            return sky.error();
+        }
+        sky_ = sky.value();
+
+        light_ = archipelagoSunlight();
+        camera_ = archipelagoCamera(archipelago);
+        controller_ = engine::camera::FreeFlyController{{.moveSpeed = 30.0F}};
+        subtitle_ = "M3  FLOATING ARCHIPELAGO";
+        sceneLine_ = std::format("SEED: {}   ISLANDS: {} OF {}   TRIANGLES: {}   GEN: {:.0f} MS",
+                                 settings.seed, archipelago.islands.size(),
+                                 archipelago.layout.requestedCount, archipelago.triangleCount(),
+                                 milliseconds);
+        engine::core::logInfo("app",
+                              "archipelago: seed {}, {} of {} islands, {} triangles, generated "
+                              "in {:.1f} ms",
+                              settings.seed, archipelago.islands.size(),
+                              archipelago.layout.requestedCount, archipelago.triangleCount(),
+                              milliseconds);
+        engine::core::logInfo("app", "hold the right mouse button to look around, WASD to fly, "
+                                     "the mouse wheel to change speed, Escape to quit");
+        return std::nullopt;
+    }
+
+    std::optional<engine::core::Error> startTestScene(engine::app::AppContext& context)
+    {
+        auto& renderer = context.renderer();
+        const island_preview::TestScene scene = island_preview::buildTestScene();
+        light_ = scene.light;
+        camera_ = testSceneCamera();
+        subtitle_ = "TEST SCENE  (M2 RENDERER / MATERIALS)";
+        for (const auto& mesh : scene.meshes) {
+            auto handle = renderer.createMesh(mesh);
+            if (!handle) {
+                return handle.error();
+            }
+            meshes_.push_back(handle.value());
+        }
+        // A texture that cannot be loaded stays a null handle: the materials
+        // that use it are drawn without it.
+        for (const auto& texture : scene.textures) {
+            textures_.push_back(loadTexture(
+                renderer, options_.assetDirectory / "textures" / texture.file, texture.desc));
+        }
+        for (const auto& object : scene.objects) {
+            engine::render::MaterialDesc desc = object.material;
+            if (object.texture) {
+                desc.baseColorTexture = textures_.at(*object.texture);
+            }
+            auto material = renderer.createMaterial(desc);
+            if (!material) {
+                return material.error();
+            }
+            objects_.push_back({meshes_.at(object.mesh), material.value(), object.position,
+                                object.spinRadiansPerSecond});
+        }
+        // A model that cannot be loaded is left out; the rest of the scene runs.
+        for (const auto& model : scene.models) {
+            const auto path =
+                options_.modelPath.value_or(options_.assetDirectory / "models" / model.file);
+            const engine::render::MeshHandle mesh = loadModel(renderer, path);
+            if (mesh.isNull()) {
+                continue;
+            }
+            meshes_.push_back(mesh);
+            engine::render::MaterialDesc desc = model.material;
+            if (model.texture) {
+                desc.baseColorTexture = textures_.at(*model.texture);
+            }
+            auto material = renderer.createMaterial(desc);
+            if (!material) {
+                return material.error();
+            }
+            objects_.push_back({mesh, material.value(), model.position, 0.0F});
+        }
+        const auto loadedTextures = std::ranges::count_if(
+            textures_, [](engine::render::TextureHandle texture) { return !texture.isNull(); });
+        engine::core::logInfo("app",
+                              "test scene: {} objects, {} meshes, {} textures; hold the right "
+                              "mouse button to look around, WASD to fly, Escape to quit",
+                              objects_.size(), meshes_.size(), loadedTextures);
+        return std::nullopt;
+    }
+
     // Loads a PNG as a texture. Failures are logged; the result is then null.
     static engine::render::TextureHandle loadTexture(engine::render::Renderer& renderer,
                                                      const std::filesystem::path& path,
@@ -312,6 +482,8 @@ private:
                                                        .framebuffer = size,
                                                        .camera = camera_,
                                                        .moveSpeed = controller_.moveSpeed(),
+                                                       .subtitle = subtitle_,
+                                                       .scene = sceneLine_,
                                                    });
         if (auto error = renderer.updateMesh(overlay_, overlayText_.mesh())) {
             // Not fatal: the scene still renders. Log once, then hide the overlay.
@@ -339,12 +511,17 @@ private:
     std::vector<engine::render::MeshHandle> meshes_;
     // Used by the objects' materials; destroyed after them.
     std::vector<engine::render::TextureHandle> textures_;
+    // The test scene's objects have a material each; the archipelago's islands
+    // share one.
     std::vector<SceneObject> objects_;
+    engine::render::MeshHandle sky_;
     engine::render::LightDesc light_;
-    engine::camera::Camera camera_ = initialCamera();
+    engine::camera::Camera camera_;
     engine::camera::FreeFlyController controller_;
     bool mouseLook_ = false;
     float sceneSeconds_ = 0.0F;
+    std::string subtitle_;
+    std::string sceneLine_;
     engine::render::MeshHandle overlay_;
     engine::debug::TextMeshBuilder overlayText_;
     bool showOverlay_ = true;
@@ -356,9 +533,9 @@ int main(int argc, char** argv)
 {
     const auto options = parseOptions(argc, argv);
     if (!options) {
-        std::fprintf(stderr,
-                     "usage: island-preview [--frames N] [--assets DIR] [--screenshot FILE.png] "
-                     "[--model FILE.obj]\n");
+        std::fprintf(stderr, "usage: island-preview [--frames N] [--assets DIR] "
+                             "[--screenshot FILE.png] [--seed N] [--test-scene [--model "
+                             "FILE.obj]]\n");
         return kExitUsage;
     }
 

@@ -26,6 +26,9 @@ add_executable(lpe_unit_tests
     unit/render/light_test.cpp
     unit/render/material_test.cpp
     unit/sandbox/island_preview_assets_test.cpp
+    unit/sandbox/sky_test.cpp
+    ${PROJECT_SOURCE_DIR}/sandbox/island-preview/Sky.cpp
+    unit/worldgen/archipelago_test.cpp
     unit/worldgen/island_layout_test.cpp
     unit/worldgen/island_mesh_test.cpp
     unit/worldgen/island_palette_test.cpp
@@ -37,6 +40,8 @@ add_executable(lpe_unit_tests
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
 # GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
+# The sky of island-preview is built from data and tested headless (M3.8).
+target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
 # The committed assets island-preview loads are checked headless too.
 target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets")
 lpe_set_project_warnings(lpe_unit_tests)

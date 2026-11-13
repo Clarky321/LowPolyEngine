@@ -3,9 +3,9 @@
 #include <glm/trigonometric.hpp>
 
 #include <algorithm>
-#include <array>
 #include <format>
 #include <string>
+#include <vector>
 
 namespace island_preview {
 
@@ -38,14 +38,13 @@ void buildOverlay(engine::debug::TextMeshBuilder& builder, const OverlayData& da
     const Vec2 titleSize = measureText(title, kTitleScale);
     builder.addText(title, {std::max(0.0F, (width - titleSize.x) * 0.5F), 28.0F},
                     TextStyle{.scale = kTitleScale, .color = kTextColor});
-    const std::string subtitle = "M2  RENDERER / MATERIALS";
-    const Vec2 subtitleSize = measureText(subtitle, kTextScale);
-    builder.addText(subtitle, {std::max(0.0F, (width - subtitleSize.x) * 0.5F), 84.0F},
+    const Vec2 subtitleSize = measureText(data.subtitle, kTextScale);
+    builder.addText(data.subtitle, {std::max(0.0F, (width - subtitleSize.x) * 0.5F), 84.0F},
                     TextStyle{.scale = kTextScale, .color = kAccentColor});
 
     // Diagnostics panel in the bottom-left corner.
     const auto& camera = data.camera;
-    const std::array<std::string, 9> lines{
+    std::vector<std::string> lines{
         std::format("FPS: {:.0f}   FRAME: {:.2f} MS   MAX: {:.2f} MS", data.frame.framesPerSecond,
                     data.frame.averageFrameMs, data.frame.maxFrameMs),
         std::format("RENDERER: {}", data.renderer.api),
@@ -60,6 +59,10 @@ void buildOverlay(engine::debug::TextMeshBuilder& builder, const OverlayData& da
         "HOLD RMB: LOOK   WASD: MOVE   E/Q: UP/DOWN   SHIFT: FAST   WHEEL: SPEED",
         "F1: OVERLAY   F12: SCREENSHOT   ESC: QUIT",
     };
+    if (!data.scene.empty()) {
+        // After the frame statistics, before the renderer lines.
+        lines.insert(lines.begin() + 1, data.scene);
+    }
 
     float textWidth = 0.0F;
     for (const auto& line : lines) {

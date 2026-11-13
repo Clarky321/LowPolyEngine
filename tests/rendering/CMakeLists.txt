@@ -30,10 +30,35 @@ function(lpe_add_gpu_test name)
 endfunction()
 
 # Context, shaders, buffers and frames run without any OpenGL error (exit code 0),
-# and every scene asset loads: island-preview logs no error at all.
+# and the generated archipelago (the default scene, M3.8) logs no error at all.
 lpe_add_gpu_test(island_preview_render_smoke island-preview --frames 30)
 set_tests_properties(island_preview_render_smoke PROPERTIES
     FAIL_REGULAR_EXPRESSION "\\[error\\]")
+
+# The archipelago of the default seed: all islands placed, counts and
+# generation time in the log.
+lpe_add_gpu_test(island_preview_archipelago_log island-preview --frames 5)
+set_tests_properties(island_preview_archipelago_log PROPERTIES
+    PASS_REGULAR_EXPRESSION "archipelago: seed 1, 12 of 12 islands, [0-9]+ triangles, generated in [0-9.]+ ms")
+
+# Another world from the command line, also without errors.
+lpe_add_gpu_test(island_preview_seed_smoke island-preview --seed 42 --frames 30)
+set_tests_properties(island_preview_seed_smoke PROPERTIES
+    FAIL_REGULAR_EXPRESSION "\\[error\\]")
+
+# The M1/M2 test scene stays available behind a flag, and every one of its
+# assets loads.
+lpe_add_gpu_test(island_preview_test_scene_smoke island-preview --test-scene --frames 30)
+set_tests_properties(island_preview_test_scene_smoke PROPERTIES
+    FAIL_REGULAR_EXPRESSION "\\[error\\]")
+
+# Options of one scene are rejected for the other.
+lpe_add_gpu_test(island_preview_model_needs_test_scene island-preview --model unused.obj)
+set_tests_properties(island_preview_model_needs_test_scene PROPERTIES
+    PASS_REGULAR_EXPRESSION "usage: island-preview")
+lpe_add_gpu_test(island_preview_seed_not_for_test_scene island-preview --test-scene --seed 3)
+set_tests_properties(island_preview_seed_not_for_test_scene PROPERTIES
+    PASS_REGULAR_EXPRESSION "usage: island-preview")
 
 # The --screenshot path used for docs/screenshots works end to end.
 lpe_add_gpu_test(island_preview_screenshot
@@ -91,14 +116,14 @@ set_tests_properties(island_preview_shader_wrong_attribute_location PROPERTIES
     PASS_REGULAR_EXPRESSION "vertex input 'aNormal' must be at location 2 \\(found at 4\\)")
 
 # A broken or missing model file is logged with the file and the reason, and
-# the rest of the scene still runs (M2.10): the second test passes on exit code 0.
+# the rest of the test scene still runs (M2.10): the second test passes on exit code 0.
 lpe_add_gpu_test(island_preview_broken_model
-    island-preview --frames 5 --model "${fixtures}/broken-model/broken.obj")
+    island-preview --test-scene --frames 5 --model "${fixtures}/broken-model/broken.obj")
 set_tests_properties(island_preview_broken_model PROPERTIES
     PASS_REGULAR_EXPRESSION "cannot read OBJ '[^']*broken\\.obj': line 6: position index 4 is out of range")
 lpe_add_gpu_test(island_preview_broken_model_runs
-    island-preview --frames 5 --model "${fixtures}/broken-model/broken.obj")
+    island-preview --test-scene --frames 5 --model "${fixtures}/broken-model/broken.obj")
 lpe_add_gpu_test(island_preview_missing_model
-    island-preview --frames 5 --model "${fixtures}/broken-model/does-not-exist.obj")
+    island-preview --test-scene --frames 5 --model "${fixtures}/broken-model/does-not-exist.obj")
 set_tests_properties(island_preview_missing_model PROPERTIES
     PASS_REGULAR_EXPRESSION "cannot open file '[^']*does-not-exist\\.obj'")

@@ -38,7 +38,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.5 | Island shape: top surface and underside | done |
 | M3.6 | Island mesh | done |
 | M3.7 | Island palettes | done |
-| M3.8 | Floating world preview | planned |
+| M3.8 | Floating world preview | in progress |
 | M3.9 | Local island water | planned |
 | M3.10 | Clouds | planned |
 | M3.11 | Settings as versioned JSON | planned |
@@ -208,13 +208,20 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** see the archipelago and fly through it.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0014 Amendment 2):
 - island-preview shows the generated archipelago instead of the test scene; the test scene stays available behind a command-line flag.
 - A simple stylized sky background (a vertical color gradient from data, drawn with the existing renderer before the scene) and a sunlight that suits floating islands.
 - Islands at different altitudes with free space between them; a starting camera that overlooks the archipelago; the free-fly camera moves through the whole 3D space.
 - Generation time and island/triangle counts in the log and the debug overlay.
+- `engine/worldgen/Archipelago.hpp`: `generateArchipelago(settings)` runs placement, shapes, meshes and palettes and returns the layout and one painted, island-local mesh (top and underside appended) per island; pure CPU, tested headless.
+- island-preview: the archipelago is the default scene; `--test-scene` shows the M1/M2 scene (its `--model` option now needs it); `--seed N` generates another world (for the preview and the screenshots). Options of one scene are rejected for the other with the usage message. One white lit material for all islands (their colours are vertex colours); one mesh and draw per island, translated to its anchor.
+- Sky (`sandbox/island-preview/Sky.*`): a unit sphere with 16 latitude bands and 32 segments, vertex colours from a `SkyGradient` (stops by the sine of the elevation: deep blue abyss −1, lavender haze −0.3, warm horizon 0, light sky 0.25, zenith 1), every triangle facing the centre; drawn first with the camera's rotation only and `DepthMode::Off`, so it stays at infinity and never hides islands. No ground, no sea.
+- Light: a warm sun from above and to the side (direction (−0.45, −0.78, −0.43), colour (0.5, 0.465, 0.41)) and a cool ambient (0.5, 0.53, 0.62): bright tops, shaded cliffs, cooler and darker undersides.
+- Start camera: from above and to the side of the islands' centre (direction (0.55, 0.45, 0.72)), at 1.3 × the archipelago's horizontal reach + 60 m, looking at a point a quarter of the reach below the centre, so the whole archipelago sits above the overlay panel. Free-fly speed starts at 30 m/s (wheel 0.5–200).
+- Log and overlay: `archipelago: seed S, P of R islands, T triangles, generated in X ms` (and the placement warning, if any, as a warning); the overlay shows the same line under the frame statistics and the subtitle names the scene.
+- The first look showed a flat, sandy brim around every island; the mask falloff of ADR 0014 was narrowed from 0.25 to 0.08 of the outline (Amendment 2), which keeps the top up to the edge and gives a rocky edge above the underside. Shape goldens are unchanged; the three golden top-mesh hashes of M3.6 were recorded again.
 
-**Tests:** GPU smoke runs of the generated world without OpenGL errors and without logged errors; the test-scene flag still works; headless tests stay green.
+**Tests:** GPU smoke runs of the generated world without OpenGL errors and without logged errors; the test-scene flag still works; headless tests stay green. Implemented: headless `tests/unit/worldgen/archipelago_test.cpp` (12 islands with valid meshes of the expected size inside their bounding circles, palettes as chosen, meshes equal to painted island meshes, repeatable, other seeds differ, invalid settings and left-out islands reported) and `tests/unit/sandbox/sky_test.cpp` (gradient stops and interpolation, dome on the unit sphere with a horizon ring, gradient colours, inward faces); GPU tier: `island_preview_render_smoke` (default archipelago, 30 frames, no error), `island_preview_archipelago_log` (the log line for seed 1 with 12 of 12 islands), `island_preview_seed_smoke` (`--seed 42`), `island_preview_test_scene_smoke` (`--test-scene`, every asset loads), `island_preview_model_needs_test_scene` and `island_preview_seed_not_for_test_scene` (usage message), and the broken-model tests now with `--test-scene`.
 
 **Done when:** the archipelago renders from a default seed and the smoke tests pass.
 

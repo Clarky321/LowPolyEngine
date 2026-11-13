@@ -1,8 +1,8 @@
 # LowPolyEngine
 
-A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M3 — procedural floating sky archipelago** is in progress on the branch `milestone/m3-floating-archipelago`: a seeded archipelago of floating islands at different altitudes, with rocky undersides, their own palettes, local water (lakes, streams, waterfalls) and low-poly clouds between them, in the art direction of *AER: Memories of Old* (plan and status of each step: `docs/milestones/m3-floating-archipelago.md`; so far the deterministic random numbers, the noise, the validated world settings, the placement of the islands in 3D, their shapes, closed, flat-shaded island meshes and their palettes; nothing is drawn yet). Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context), M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay) and M2 (normals and UVs, PNG textures, materials with a base color and an optional texture, one directional light with flat shading, import of a documented OBJ subset; pull request #3). See `docs/ENGINE_PLAN.md` for the roadmap.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M3 — procedural floating sky archipelago** is in progress on the branch `milestone/m3-floating-archipelago`: a seeded archipelago of floating islands at different altitudes, with rocky undersides, their own palettes, local water (lakes, streams, waterfalls) and low-poly clouds between them, in the art direction of *AER: Memories of Old* (plan and status of each step: `docs/milestones/m3-floating-archipelago.md`; so far island-preview generates and shows the floating islands — placement in 3D, shapes, closed flat-shaded meshes, palettes — under a stylized sky; local water and clouds come next). Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context), M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay) and M2 (normals and UVs, PNG textures, materials with a base color and an optional texture, one directional light with flat shading, import of a documented OBJ subset; pull request #3). See `docs/ENGINE_PLAN.md` for the roadmap.
 
-![island-preview at the end of M2: lit, flat-shaded test scene with a textured crate and an imported lighthouse](docs/screenshots/m2/004-imported-model.png)
+![island-preview in M3.8: a generated archipelago of floating islands with their own palettes and rocky undersides under a pastel sky](docs/screenshots/m3/001-floating-archipelago.png)
 
 ## Running the island preview
 
@@ -22,7 +22,7 @@ scripts\windows\run.bat debug
 | F12 | save a screenshot to `screenshots/` (ignored by Git) |
 | Escape | quit |
 
-Keys are physical positions, so WASD works on any keyboard layout. Command-line options: `island-preview [--frames N] [--assets DIR] [--screenshot FILE.png] [--model FILE.obj]`; `--screenshot` saves the last frame (frame 120 unless `--frames` is given) and exits; `--model` loads another OBJ file instead of the scene's lighthouse (used by tests). This is how the images in `docs/screenshots/` are made (ADR 0006).
+Keys are physical positions, so WASD works on any keyboard layout. By default island-preview generates the archipelago of the default world settings (seed 1) and starts with a view over it; flying speed starts at 30 m/s. Command-line options: `island-preview [--frames N] [--assets DIR] [--screenshot FILE.png] [--seed N] [--test-scene [--model FILE.obj]]`; `--screenshot` saves the last frame (frame 120 unless `--frames` is given) and exits; `--seed` generates another world; `--test-scene` shows the M1/M2 test scene instead, where `--model` loads another OBJ file instead of the lighthouse (used by tests). This is how the images in `docs/screenshots/` are made (ADR 0006).
 
 ## Building on Windows
 
@@ -106,11 +106,11 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
   - `core/` — results, logging, frame clock, files, PNG images, math aliases (GLM).
   - `platform/` — window, OpenGL context, input; SDL3 only in `engine/src/platform/sdl3/`.
   - `geometry/` — CPU-side `MeshData`, primitive builders and OBJ subset import (ADR 0012); no GPU or SDL code.
-  - `worldgen/` — deterministic world generation, pure CPU: seeded random numbers (ADR 0003), 2D noise (ADR 0003 Amendment 2), the validated world settings (ADR 0013), island placement in 3D (ADR 0013 Amendment 1), island shapes: outline, top surface and underside (ADR 0014), closed island meshes (ADR 0014 Amendment 1) and island palettes as vertex colours (ADR 0015); no GPU, SDL or ImGui code.
+  - `worldgen/` — deterministic world generation, pure CPU: seeded random numbers (ADR 0003), 2D noise (ADR 0003 Amendment 2), the validated world settings (ADR 0013), island placement in 3D (ADR 0013 Amendment 1), island shapes: outline, top surface and underside (ADR 0014), closed island meshes (ADR 0014 Amendment 1) and island palettes as vertex colours (ADR 0015), and whole archipelagos (ADR 0014 Amendment 2); no GPU, SDL or ImGui code.
   - `render/` — renderer API with mesh, texture and material handles and one directional light; OpenGL/GLAD only in `engine/src/render/opengl/`.
   - `camera/` — camera math and the free-fly controller.
   - `debug/` — built-in pixel font for on-screen diagnostics.
-- `sandbox/island-preview/` — first executable: free-fly test scene, lit and partly textured, with an imported model and a debug overlay (see above; `assets/` is found relative to the working directory).
+- `sandbox/island-preview/` — first executable: the generated floating archipelago under a sky dome (default) or, with `--test-scene`, the lit, partly textured M1/M2 test scene with an imported model; free-fly camera and debug overlay (see above; `assets/` is found relative to the working directory).
 - `assets/shaders/` — GLSL sources loaded at runtime.
 - `assets/textures/` — textures of the test scene (PNG, made for the project; origin in `docs/references/THIRD_PARTY_NOTICES.md`).
 - `assets/models/` — models of the test scene (OBJ subset, ADR 0012; made for the project). A missing or broken asset is logged and the rest of the scene runs.

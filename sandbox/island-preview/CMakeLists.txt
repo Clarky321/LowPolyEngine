@@ -3,6 +3,7 @@
 add_executable(island-preview
     main.cpp
     DebugOverlay.cpp
+    Sky.cpp
     TestScene.cpp
 )
 

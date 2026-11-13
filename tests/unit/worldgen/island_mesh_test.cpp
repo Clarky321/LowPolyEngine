@@ -353,11 +353,11 @@ TEST_CASE("Island meshes match their golden hashes", "[worldgen][islandmesh]")
     const IslandMesh first = buildIslandMesh(shapes[0], settings.mesh.resolution);
     const IslandMesh third = buildIslandMesh(shapes[2], settings.mesh.resolution);
     const IslandMesh coarse = buildIslandMesh(shapes[5], 8);
-    CHECK(meshHash(first.top) == 0x36026768A1D1459FULL);
+    CHECK(meshHash(first.top) == 0xEA591653E390FCC6ULL);
     CHECK(meshHash(first.underside) == 0x91F1990C91B63E8FULL);
-    CHECK(meshHash(third.top) == 0x32E1922F14C37B48ULL);
+    CHECK(meshHash(third.top) == 0x3574A09F38E56FC3ULL);
     CHECK(meshHash(third.underside) == 0x23C3DD2C7351E3C8ULL);
-    CHECK(meshHash(coarse.top) == 0xA524224B9AB926A2ULL);
+    CHECK(meshHash(coarse.top) == 0xAD4388B0887AABDBULL);
     CHECK(meshHash(coarse.underside) == 0x420BAD2AAE6B6272ULL);
 }
 
