@@ -76,7 +76,9 @@ Limitations: the project must build its own higher-level editor architecture (do
 
 ### Raven — prototype candidate
 
-Raven describes itself as a lightweight multithreaded C GUI library for editors/tools, offers language bindings, a visual designer and viewport integration options. The public README shows viewport callbacks/native child window handles and has build options for tests/examples/tools. However, the README explicitly says it is under active development and its public API may change. Repository documentation also reports platform/testing caveats. I have inspected the public repository/README and selected documentation, but have **not built or run Raven locally**, so runtime compatibility with this engine is not established.
+Raven describes itself as a lightweight multithreaded C GUI library for editors/tools, offers language bindings, a visual designer and viewport integration options. The public README shows viewport callbacks/native child window handles and has build options for tests/examples/tools. However, the README explicitly says it is under active development and its public API may change. Repository documentation also reports platform/testing caveats.
+
+**Evaluated 2026-11-14** (`docs/experiments/raven-ui-evaluation.md`): Raven 0.2.3 at commit `7ab270df` in an isolated prototype on the engine's SDL3 window, OpenGL 4.5 context and renderer, Windows with MSVC — **conditional pass**. Raven has no desktop OpenGL backend, so the prototype brings its own; with it, the interface, a viewport drawn by the engine's renderer through Raven's draw callback, SDL3 input through Raven's host platform, single-thread operation and repeated start/stop work. Open conditions (backend ownership, host-platform gaps, engine event hook, packaging, API instability, Linux not run) are listed in ADR 0019, which is **proposed**, not accepted.
 
 Recommended proof-of-concept before adopting Raven:
 1. Build the smallest Raven sample with the same Windows compiler and CMake version as the engine.
@@ -85,7 +87,7 @@ Recommended proof-of-concept before adopting Raven:
 4. Test on at least Windows and one Linux desktop environment if both are targets.
 5. Verify API stability, licensing, integration model and how undo/redo/data binding would work.
 
-**Decision:** Dear ImGui for initial editor; Raven may replace it only after a documented prototype proves a meaningful advantage. Do not maintain two editor UI stacks in the production app.
+**Decision:** Dear ImGui for initial editor; Raven may replace it only after a documented prototype proves a meaningful advantage. Do not maintain two editor UI stacks in the production app. Whether the M5 editor uses Raven on the conditions of ADR 0019 is the user's decision before M5; until then this decision stands.
 
 Raven repository: <https://github.com/oscar-soirey/Raven>
 

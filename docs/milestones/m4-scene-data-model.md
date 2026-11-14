@@ -3,7 +3,7 @@
 - **Branch:** `milestone/m4-scene-data-model`, created from `main` at `0befa66` (M3 merged through pull request #4).
 - **Roadmap entry:** `docs/ENGINE_PLAN.md` §10, M4; data model in §7, Lua in §8.
 - **Workflow:** `docs/DEVELOPMENT_WORKFLOW.md`. One task implements exactly one sub-milestone below, then stops and reports.
-- **Separate experiment:** the Raven UI evaluation for M5 (`docs/experiments/raven-ui-evaluation.md`) is not part of M4, not a dependency of any M4 step and not an M4 exit criterion.
+- **Separate experiment:** the Raven UI evaluation for M5 (`docs/experiments/raven-ui-evaluation.md`) is not part of M4, not a dependency of any M4 step and not an M4 exit criterion. It ended on 2026-11-14 with a conditional pass on Windows and the proposed ADR 0019; its prototype stays on the branch `experiment/raven-ui-evaluation`.
 
 ## Goal and exit criterion
 
@@ -121,7 +121,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Documents follow ADR 0004: an envelope with `format` and `formatVersion`, 64-bit and larger IDs as strings, floats that read back bit for bit, non-throwing parsing, errors with the field path, explicit migrations, no library types in public headers. Each document kind gets its own format id and schema decision.
 - Every new public type and function gets headless unit tests for normal, boundary and failure cases; loaders get round-trip, missing-field, unknown-field, wrong-type, malformed-input, newer-version and limit tests.
 - New dependencies only in the steps that name them: EnTT in M4.2, Lua (and, if chosen, LuaBridge3) in M4.5.
-- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0019).
+- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0020; 0019 is the proposed editor UI decision of the Raven evaluation).
 - The editor, the Scene → renderer bridge and everything in *Out of scope* stay out, even where an API would make them easy.
 - No GPU tier is required for M4.1–M4.6 (no rendering, shader, windowing or loop code changes); the final step runs it as `docs/DEVELOPMENT_WORKFLOW.md` §8 requires. A step that unexpectedly touches such code runs it too.
 
@@ -349,7 +349,7 @@ The ADR fixes: size; generation (where the entropy comes from — never the worl
 | Prefab model | M4.6 | entity references, local IDs, instance link |
 | Amendments | M4.2, M4.4, M4.5 | ADR 0001 *Verification* (EnTT, Lua confirmed); ADR 0004 (shared float writer, new document kinds) |
 
-A decision on Raven for M5 is not an M4 ADR; it is made by the separate evaluation.
+A decision on Raven for M5 is not an M4 ADR; the separate evaluation proposed it as ADR 0019.
 
 ## Out of scope for M4
 
@@ -400,7 +400,7 @@ The Raven evaluation is not a condition for M4.
 1. **Lockfile.** Proposal: create `conan.lock` in M4.5, when the M4 dependency graph is complete (EnTT, Lua), for both profiles, use it in the wrappers and CI, and record it in an ADR amendment. Alternatives: keep pinning versions only (today's practice), or add the lockfile as its own preparation task. M4.5 does it only if approved.
 2. **`ParentComponent` in M4.6** as the entity reference that prefab links need (relationship only, no transform propagation). Alternative: drop intra-prefab links from M4 and keep prefabs as flat entity groups.
 3. **`StaticMeshComponent` in M4.3** instead of M4.2 (asset IDs first).
-4. **Raven experiment branch** (`docs/experiments/raven-ui-evaluation.md`, *Isolation*): the prototype on its own branch, with only its report brought into the M4 branch.
+4. **Raven experiment branch** — done as proposed: the prototype is on `experiment/raven-ui-evaluation`; only its report, screenshots and the proposed ADR 0019 are on the M4 branch. Whether the M5 editor uses Raven (ADR 0019) is decided before M5, not in M4.
 
 ## Risks
 

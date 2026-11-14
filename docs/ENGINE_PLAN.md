@@ -170,7 +170,7 @@ First panels:
 5. Console: logs, script errors and diagnostics.
 6. Project/assets: browse assets and open/save project.
 
-Then add transform gizmos, undo/redo, asset import, prefab editor, brush-based terrain edits and richer materials. Validate Raven in a standalone prototype; only consider replacing ImGui after a short decision record demonstrates a real advantage and the viewport integration works on target platforms. The prototype's plan, isolation rules and decision criteria are in `docs/experiments/raven-ui-evaluation.md`.
+Then add transform gizmos, undo/redo, asset import, prefab editor, brush-based terrain edits and richer materials. Validate Raven in a standalone prototype; only consider replacing ImGui after a short decision record demonstrates a real advantage and the viewport integration works on target platforms. The prototype's plan, isolation rules, results and decision criteria are in `docs/experiments/raven-ui-evaluation.md`: a conditional pass on Windows (2026-11-14); the conditions for using Raven in M5 are in ADR 0019 (proposed).
 
 The engine editor should author characters as entities assembled from components and imported assets. Modeling, UV work, rigging and detailed mesh creation should initially happen in external tools such as Blender; the engine imports those assets, sets up materials/colliders/animation references and attaches Lua behavior. Do not attempt to build Blender inside this engine.
 
@@ -229,7 +229,7 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** save/load a scene without losing entity identity or component values; a Lua script can alter a permitted property and errors are contained.
 
-**Status:** planned (2026-11-14); no sub-milestone started. Plan: `docs/milestones/m4-scene-data-model.md` on the branch `milestone/m4-scene-data-model`, in seven steps: M4.1 scene core and persistent identifiers, M4.2 EnTT and entity components, M4.3 asset identity and asset registry, M4.4 scene documents as versioned JSON, M4.5 Lua runtime and script component, M4.6 prefab model, M4.7 integration, final verification and pull request. Scene, Assets and Scripting stay free of renderer, OpenGL, SDL and Dear ImGui code; WorldGen stays independent of them. M4 adds no rendering of scenes and no editor UI. The Raven UI evaluation for M5 (`docs/experiments/raven-ui-evaluation.md`) is a separate experiment and not an M4 exit criterion.
+**Status:** planned (2026-11-14); no sub-milestone started. Plan: `docs/milestones/m4-scene-data-model.md` on the branch `milestone/m4-scene-data-model`, in seven steps: M4.1 scene core and persistent identifiers, M4.2 EnTT and entity components, M4.3 asset identity and asset registry, M4.4 scene documents as versioned JSON, M4.5 Lua runtime and script component, M4.6 prefab model, M4.7 integration, final verification and pull request. Scene, Assets and Scripting stay free of renderer, OpenGL, SDL and Dear ImGui code; WorldGen stays independent of them. M4 adds no rendering of scenes and no editor UI. The Raven UI evaluation for M5 (`docs/experiments/raven-ui-evaluation.md`) is a separate experiment and not an M4 exit criterion; it ended with a conditional pass and the proposed ADR 0019.
 
 ### M5 — Minimal editor
 
