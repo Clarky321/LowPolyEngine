@@ -105,7 +105,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 |---|---|---|
 | M4.1 | Scene core and persistent identifiers | done |
 | M4.2 | EnTT and entity components | done |
-| M4.3 | Asset identity and asset registry | in progress |
+| M4.3 | Asset identity and asset registry | done |
 | M4.4 | Scene documents as versioned JSON | planned |
 | M4.5 | Lua runtime and script component | planned |
 | M4.6 | Prefab model | planned |
