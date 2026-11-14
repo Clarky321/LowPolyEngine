@@ -6,6 +6,7 @@ Real framebuffer captures made by the engine itself (`Renderer::captureFrame` â†
 build\windows-msvc-debug\bin\Debug\island-preview.exe --screenshot docs\screenshots\m3\<file>.png
 build\windows-msvc-debug\bin\Debug\island-preview.exe --seed 42 --screenshot docs\screenshots\m3\<file>.png
 build\windows-msvc-debug\bin\Debug\island-preview.exe --seed 19 --island 9 --screenshot docs\screenshots\m3\<file>.png
+build\windows-msvc-debug\bin\Debug\island-preview.exe --panel --screenshot docs\screenshots\m3\<file>.png
 ```
 
 From M3.10 on, the clouds drift during the 120 frames (about 1.2 s at the 100 frames per second of the Debug build), a metre or two along the wind.
@@ -22,5 +23,6 @@ The sub-milestone column names the commit that added the image: `git log --grep 
 | `004-meadow-waterfall.png` | M3.9 | `--seed 15 --island 9`: a Meadow island with water in hollows of its top, a stream to the rim and its waterfall; no ocean or water plane anywhere, only water that belongs to an island. The world has 9 lakes and ponds, 6 streams and 3 waterfalls. |
 | `005-clouds.png` | M3.10 | The default world (seed 1) as in `001`, now with 20 low-poly cloud clusters around and between the islands at different heights, generated in about 530 ms in the Debug build, 172 264 triangles. Each cluster is a few flat-bottomed puffs, stretched along its own axis, white where its faces look up and lavender blue underneath; small clusters far away read as wisps, the large one in front of the middle islands as a cumulus. The clouds keep their distance from the islands and drift slowly along the wind. |
 | `006-clouds-seed-42.png` | M3.10 | `--seed 42`, like `002`, with its clouds: clusters fill the air between the islands at many heights; two of the five waterfalls of this world hang below the central islands. |
+| `007-worldgen-panel.png` | M3.12 | `--panel`: the default world with the WorldGen panel (Dear ImGui, F2) at the right: the seed with steps, Regenerate, Revert (off while nothing has changed) and Defaults, the settings in nine collapsible groups with the Islands group open (count, altitude and radius ranges, spacings as drag boxes within their limits), and the settings file to save and load. Every field of the world settings can be edited; Regenerate builds the world again in place. The panel is drawn over the frame, so it is in the capture. |
 
 Earlier images show the program as it was at their sub-milestone.

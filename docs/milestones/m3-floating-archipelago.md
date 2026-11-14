@@ -42,7 +42,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.9 | Local island water | done |
 | M3.10 | Clouds | done |
 | M3.11 | Settings as versioned JSON | done |
-| M3.12 | WorldGen panel with Dear ImGui | planned |
+| M3.12 | WorldGen panel with Dear ImGui | in progress |
 | M3.13 | Final verification and pull request | planned |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M3.x done (M3.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M3.x)"` finds the commits.
@@ -295,16 +295,20 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** change parameters and regenerate without restarting.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0018):
 - Dear ImGui as a development and debug UI in the sandbox, with its SDL3 platform and OpenGL 3 renderer backends; the full editor stays M5. An ADR records the package version and where the OpenGL-dependent backend lives, so no OpenGL type leaves the renderer boundary (AGENTS.md §3).
 - Panel: seed, generator settings, island count, altitude ranges, size ranges, spacing, shape and noise parameters, local water and clouds, "Regenerate", save and load (M3.11). Values are clamped with the M3.3 rules.
 - Regeneration replaces meshes and materials without leaking renderer resources.
+- `imgui/1.92.9b` (Conan, MIT). Its SDL3 and OpenGL 3 backends come as sources in the package and are compiled in `third_party/imgui_backends/`; the engine uses them only in `engine/src/platform/sdl3/Sdl3ImGui.cpp` and `engine/src/render/opengl/GlImGui.cpp`, behind internal functions. Public: `engine/debug/DebugUi.hpp` (`create`, `beginFrame`, `render`, `endFrame`, `wantsMouse`, `wantsKeyboard`); `ApplicationDesc::debugUi` lets the loop own one, start a UI frame before `update()` and draw it after `render()`; `AppContext::debugUi()`.
+- `WorldGenSettings.hpp`: `settingsFields(settings)` lists every editable field (path, pointer, limits, default) from the field list validation uses, so the panel shows every setting without a list of its own.
+- `Renderer::resourceCounts()` (meshes, textures, materials alive) for the leak check this step's tests ask for; nothing changes in how the renderer draws.
+- island-preview: `WorldScene` holds the world on the GPU (a mesh per island, island water and cloud cluster, two materials) and releases everything before uploading a new world; `WorldGenPanel` is the panel's state without UI (draft and applied settings, groups, clamping, Regenerate only for settings that pass `validate()`, Revert, Defaults keeping the seed, Save and Load); `WorldGenPanelUi` draws it with ImGui (seed, 9 collapsible groups of drag boxes within the limits, the problem that blocks Regenerate, messages, a settings file path). F2 shows or hides the panel, `--panel` shows it from the start; while the UI uses the mouse or keyboard the camera and shortcuts leave them alone. Regenerate keeps the camera where it is; the log names the generated world and the renderer's resource counts. The panel saves to `worlds/world.json` by default (ignored by Git).
 
-**Tests:** headless tests for the settings-to-UI binding logic where it is separable; GPU smoke with the panel enabled; renderer resource counts stay level after repeated regeneration; manual check by the user.
+**Tests:** headless tests for the settings-to-UI binding logic where it is separable; GPU smoke with the panel enabled; renderer resource counts stay level after repeated regeneration; manual check by the user. Implemented: `tests/unit/worldgen/settings_fields_test.cpp` (45 fields once, in order, pointing into the settings, defaults within limits, each numeric field bound to the path validation names); `tests/unit/sandbox/worldgen_panel_test.cpp` (9 groups with every field once and their labels, edits through the fields, clamping of out-of-range and NaN values, a combination problem blocks Regenerate with a message and keeps the shown world, Revert, Regenerate applies, Defaults keep the seed, Save and Load through files, a missing file and invalid settings reported); GPU tier `tests/rendering/world_scene_gpu_test.cpp` (the renderer's counts equal the world's needs after the first upload, stay equal over five regenerations of the same world and match three other worlds exactly, go back to the start after release, no OpenGL error; the debug UI starts, refuses a second one, draws a window for three frames, ends an undrawn frame, stops and starts again); `island_preview_panel_smoke` (`--panel`, 30 frames, no error) and `island_preview_panel_not_for_test_scene`. Checked by hand in island-preview (a temporary build that regenerated every ten frames): six worlds in a row, 2 materials each time and exactly the meshes each world needs.
 
 **Done when:** every parameter can be edited and the world regenerates in place.
 
-**Visual check:** screenshot with the panel.
+**Visual check:** screenshot with the panel (`docs/screenshots/m3/007-worldgen-panel.png`).
 
 ### M3.13 — Final verification and pull request
 

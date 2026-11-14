@@ -673,6 +673,13 @@ const RenderStats& Renderer::lastFrameStats() const noexcept
     return impl_->lastFrame;
 }
 
+ResourceCounts Renderer::resourceCounts() const noexcept
+{
+    return ResourceCounts{.meshes = impl_->meshes.size(),
+                          .textures = impl_->textures.size(),
+                          .materials = impl_->materials.size()};
+}
+
 const RendererInfo& Renderer::info() const noexcept
 {
     return impl_->info;

@@ -2,6 +2,7 @@
 
 #include "engine/core/FrameClock.hpp"
 #include "engine/core/Result.hpp"
+#include "engine/debug/DebugUi.hpp"
 #include "engine/platform/GlContext.hpp"
 #include "engine/platform/Input.hpp"
 #include "engine/platform/Window.hpp"
@@ -23,6 +24,10 @@ struct ApplicationDesc {
     // Stop after this many rendered frames (smoke tests, screenshots). Empty: run until quit.
     std::optional<std::uint64_t> maxFrames;
     double maxFrameDeltaSeconds = core::kDefaultMaxFrameDeltaSeconds;
+    // Create a Dear ImGui debug UI (ADR 0018): AppContext::debugUi() then
+    // returns it, a UI frame starts before every update() and the UI is drawn
+    // after every render().
+    bool debugUi = false;
 };
 
 // Engine services an Application uses while it runs. Valid only inside the
@@ -38,6 +43,8 @@ public:
     [[nodiscard]] virtual platform::PixelSize framebufferSize() const noexcept = 0;
     // Frame rate and frame time, averaged over the last completed window.
     [[nodiscard]] virtual const core::FrameStatsSnapshot& frameStats() const noexcept = 0;
+    // The debug UI if ApplicationDesc::debugUi was set, otherwise null.
+    [[nodiscard]] virtual debug::DebugUi* debugUi() noexcept = 0;
 
     // Ends the loop after the current frame's update; no further frame is rendered.
     virtual void requestQuit() noexcept = 0;
@@ -62,11 +69,13 @@ public:
     // the run before the first frame; stop() is not called then.
     [[nodiscard]] virtual std::optional<core::Error> start(AppContext& context) = 0;
 
-    // Once per frame, after the OS events of the frame were processed.
+    // Once per frame, after the OS events of the frame were processed. With a
+    // debug UI, its frame has started: ImGui windows are built here.
     virtual void update(AppContext& context, const core::FrameTime& time) = 0;
 
-    // Once per frame between Renderer::beginFrame and Renderer::endFrame.
-    // Skipped while the window is minimized.
+    // Once per frame between Renderer::beginFrame and Renderer::endFrame,
+    // before the debug UI is drawn over it. Skipped while the window is
+    // minimized.
     virtual void render(AppContext& context) = 0;
 
     // Once after the last frame if start() succeeded, while the renderer still

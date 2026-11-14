@@ -33,10 +33,10 @@ lowpoly-engine/
 │   │   ├── render/           # RHI-facing types and renderer interfaces
 │   │   ├── scene/            # Entity, components, world, prefab, document
 │   │   ├── assets/           # Asset IDs, handles, registry interfaces
-│   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness, noise, world settings, island placement, shapes, meshes, palettes, local water, clouds, whole archipelagos and settings files (M3.1–M3.11, ADR 0003, ADR 0004, ADR 0013–0017)
+│   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness, noise, world settings, island placement, shapes, meshes, palettes, local water, clouds, whole archipelagos and settings files (M3.1–M3.12, ADR 0003, ADR 0004, ADR 0013–0017); settingsFields lists the settings for editors
 │   │   ├── scripting/        # Script runtime facade
 │   │   ├── camera/           # Camera and camera-controller types
-│   │   └── debug/            # On-screen diagnostics (pixel-font text, M1)
+│   │   └── debug/            # On-screen diagnostics (pixel-font text, M1) and the Dear ImGui debug UI (DebugUi, M3.12, ADR 0018)
 │   └── src/
 │       ├── app/
 │       ├── core/
@@ -72,7 +72,7 @@ lowpoly-engine/
 │       ├── gizmos/
 │       └── project/
 ├── sandbox/
-│   └── island-preview/       # First end-to-end executable/sample
+│   └── island-preview/       # First end-to-end executable/sample: the archipelago (WorldScene) with the WorldGen panel (WorldGenPanel, WorldGenPanelUi) or the M1/M2 test scene
 ├── assets/
 │   ├── shaders/
 │   ├── materials/

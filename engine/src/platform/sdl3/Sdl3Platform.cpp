@@ -1,3 +1,4 @@
+#include "Sdl3ImGui.hpp"
 #include "Sdl3Input.hpp"
 
 #include "engine/platform/Platform.hpp"
@@ -67,6 +68,9 @@ PlatformEvents Platform::pollEvents(InputState& input)
     PlatformEvents events;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        // The debug UI sees every event; the application asks it whether it
+        // uses the mouse or keyboard (DebugUi::wantsMouse, wantsKeyboard).
+        forwardEventToDebugUi(event);
         switch (event.type) {
         case SDL_EVENT_QUIT:
         // With a single window, closing it ends the application.

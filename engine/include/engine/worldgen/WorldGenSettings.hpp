@@ -19,6 +19,9 @@
 
 #include <cstdint>
 #include <optional>
+#include <string_view>
+#include <variant>
+#include <vector>
 
 namespace engine::worldgen {
 
@@ -237,5 +240,22 @@ struct WorldGenSettings {
 // field's default. The seed, the generator version and combinations are left
 // as they are: validate() still reports those.
 [[nodiscard]] WorldGenSettings clampToLimits(WorldGenSettings settings);
+
+// One editable field of the settings, for generic editors such as the
+// WorldGen panel: its path (as validate() and the settings file name it), a
+// pointer to its value inside the settings it was taken from, its limits (0
+// and 1 for the water switch) and its default.
+struct SettingsField {
+    std::string_view path;
+    std::variant<float*, int*, bool*> value;
+    double min = 0.0;
+    double max = 0.0;
+    double defaultValue = 0.0;
+};
+
+// Every field below the seed and the generator version, in the order of
+// declaration (the order of the settings file): the numeric fields and
+// water.enabled. The pointers stay valid as long as `settings` does.
+[[nodiscard]] std::vector<SettingsField> settingsFields(WorldGenSettings& settings);
 
 } // namespace engine::worldgen

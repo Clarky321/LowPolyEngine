@@ -10,6 +10,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace engine::worldgen {
 
@@ -177,6 +178,29 @@ WorldGenSettings clampToLimits(WorldGenSettings settings)
                             value = clampValue(value, range, fallback);
                         });
     return settings;
+}
+
+std::vector<SettingsField> settingsFields(WorldGenSettings& settings)
+{
+    const WorldGenSettings defaults{};
+    std::vector<SettingsField> fields;
+    forEachNumericField(settings, defaults,
+                        [&](std::string_view path, auto& value, const auto& range, auto fallback) {
+                            if (path == "water.lakeChance") {
+                                fields.push_back(
+                                    {.path = "water.enabled",
+                                     .value = &settings.water.enabled,
+                                     .min = 0.0,
+                                     .max = 1.0,
+                                     .defaultValue = defaults.water.enabled ? 1.0 : 0.0});
+                            }
+                            fields.push_back({.path = path,
+                                              .value = &value,
+                                              .min = static_cast<double>(range.min),
+                                              .max = static_cast<double>(range.max),
+                                              .defaultValue = static_cast<double>(fallback)});
+                        });
+    return fields;
 }
 
 } // namespace engine::worldgen

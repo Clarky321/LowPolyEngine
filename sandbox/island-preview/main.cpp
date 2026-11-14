@@ -7,11 +7,16 @@
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
-// debug overlay, F12 saves a screenshot to screenshots/, Escape quits.
+// debug overlay, F2 the WorldGen panel (Dear ImGui: edit the settings and
+// regenerate the world in place), F12 saves a screenshot to screenshots/,
+// Escape quits.
 
 #include "DebugOverlay.hpp"
 #include "Sky.hpp"
 #include "TestScene.hpp"
+#include "WorldGenPanel.hpp"
+#include "WorldGenPanelUi.hpp"
+#include "WorldScene.hpp"
 
 #include "engine/app/Application.hpp"
 #include "engine/camera/Camera.hpp"
@@ -20,6 +25,7 @@
 #include "engine/core/Image.hpp"
 #include "engine/core/Log.hpp"
 #include "engine/core/Version.hpp"
+#include "engine/debug/DebugUi.hpp"
 #include "engine/geometry/ObjImport.hpp"
 #include "engine/worldgen/Archipelago.hpp"
 #include "engine/worldgen/Clouds.hpp"
@@ -37,6 +43,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <format>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -53,9 +60,6 @@ constexpr bool kDebugBuild = true;
 
 // Behind the sky dome (archipelago) or the test scene's horizon.
 constexpr engine::render::Color kClearColor{0.53F, 0.74F, 0.86F, 1.0F};
-
-// A drifting cloud smaller than this share of its size is not drawn.
-constexpr float kMinCloudScale = 1.0e-3F;
 
 // Frames rendered before a --screenshot is taken when --frames is not given.
 // Long enough for the frame statistics to fill their first window.
@@ -89,6 +93,8 @@ struct Options {
     // replaces its seed), and the settings in use written to this file.
     std::optional<std::filesystem::path> settingsPath;
     std::optional<std::filesystem::path> saveSettingsPath;
+    // Archipelago only: show the WorldGen panel from the start (F2 toggles it).
+    bool panel = false;
 };
 
 std::optional<std::uint64_t> parseUnsigned(std::string_view text)
@@ -141,6 +147,8 @@ std::optional<Options> parseOptions(int argc, char** argv)
             options.settingsPath = std::filesystem::path(argv[++i]);
         } else if (arg == "--save-settings" && hasValue) {
             options.saveSettingsPath = std::filesystem::path(argv[++i]);
+        } else if (arg == "--panel") {
+            options.panel = true;
         } else if (arg == "--test-scene") {
             options.testScene = true;
         } else {
@@ -149,7 +157,8 @@ std::optional<Options> parseOptions(int argc, char** argv)
     }
     // Each option belongs to one of the two scenes.
     if ((options.modelPath && !options.testScene) ||
-        ((options.seed || options.island || options.settingsPath || options.saveSettingsPath) &&
+        ((options.seed || options.island || options.settingsPath || options.saveSettingsPath ||
+          options.panel) &&
          options.testScene)) {
         return std::nullopt;
     }
@@ -264,14 +273,12 @@ public:
     void stop(engine::app::AppContext& context) override
     {
         auto& renderer = context.renderer();
+        world_.release(renderer);
         // Objects may share a material; destroying it again is ignored.
         for (const auto& object : objects_) {
             renderer.destroyMaterial(object.material);
         }
         objects_.clear();
-        water_.clear();
-        clouds_.clear();
-        renderer.destroyMaterial(waterMaterial_);
         for (const auto mesh : meshes_) {
             renderer.destroyMesh(mesh);
         }
@@ -290,29 +297,54 @@ public:
         using engine::platform::Key;
         using engine::platform::MouseButton;
         const auto& input = context.input();
-        if (input.wasPressed(Key::Escape)) {
-            context.requestQuit();
-            return;
+        // While the debug UI uses the keyboard (a field is being edited) or the
+        // mouse (the pointer is over the panel), the camera and the shortcuts
+        // leave them alone.
+        const engine::debug::DebugUi* ui = context.debugUi();
+        const bool uiKeyboard = ui != nullptr && ui->wantsKeyboard();
+        const bool uiMouse = ui != nullptr && ui->wantsMouse();
+        if (!uiKeyboard) {
+            if (input.wasPressed(Key::Escape)) {
+                context.requestQuit();
+                return;
+            }
+            if (input.wasPressed(Key::F12)) {
+                // Relative to the working directory (the repository root with
+                // run.bat); the folder is ignored by Git.
+                context.requestScreenshot(
+                    std::format("screenshots/island-preview-{:06}.png", time.frameIndex));
+            }
+            if (input.wasPressed(Key::F1)) {
+                showOverlay_ = !showOverlay_;
+            }
+            if (input.wasPressed(Key::F2) && panel_) {
+                panelVisible_ = !panelVisible_;
+            }
         }
-        if (input.wasPressed(Key::F12)) {
-            // Relative to the working directory (the repository root with run.bat);
-            // the folder is ignored by Git.
-            context.requestScreenshot(
-                std::format("screenshots/island-preview-{:06}.png", time.frameIndex));
-        }
-        if (input.wasPressed(Key::F1)) {
-            showOverlay_ = !showOverlay_;
+
+        if (panel_ && panelVisible_ && ui != nullptr) {
+            if (const auto settings = island_preview::drawWorldGenPanel(*panel_)) {
+                regenerate(context, *settings);
+            }
         }
 
         // Mouse look while the right button is held; the cursor is hidden and
-        // captured meanwhile, so it cannot leave the window mid-turn.
-        const bool wantMouseLook = input.isDown(MouseButton::Right);
+        // captured meanwhile, so it cannot leave the window mid-turn. It does
+        // not start over the panel.
+        const bool wantMouseLook = input.isDown(MouseButton::Right) && (mouseLook_ || !uiMouse);
         if (wantMouseLook != mouseLook_) {
             mouseLook_ = wantMouseLook;
             context.window().setRelativeMouseMode(mouseLook_);
         }
-        controller_.update(camera_, engine::camera::readFlyInput(input, mouseLook_),
-                           static_cast<float>(time.deltaSeconds));
+        engine::camera::FlyInput fly = engine::camera::readFlyInput(input, mouseLook_);
+        if (uiKeyboard) {
+            fly.move = engine::math::Vec3{0.0F};
+            fly.fast = false;
+        }
+        if (uiMouse && !mouseLook_) {
+            fly.speedSteps = 0.0F;
+        }
+        controller_.update(camera_, fly, static_cast<float>(time.deltaSeconds));
         sceneSeconds_ = static_cast<float>(time.elapsedSeconds);
 
         // The last frame of a --screenshot run is saved.
@@ -350,41 +382,9 @@ public:
             }
             renderer.drawMesh(object.mesh, object.material, model);
         }
-        // Clouds where the wind has moved them; a cloud shrinks away at the
-        // edge of the world before it wraps around.
-        for (const auto& cloud : clouds_) {
-            const engine::worldgen::CloudDrift drift = engine::worldgen::cloudDrift(
-                cloud.cluster, settings_, static_cast<double>(sceneSeconds_));
-            if (drift.scale < kMinCloudScale) {
-                continue;
-            }
-            const engine::math::Mat4 model =
-                glm::scale(glm::translate(engine::math::Mat4{1.0F}, drift.position),
-                           engine::math::Vec3{drift.scale});
-            renderer.drawMesh(cloud.mesh, cloudMaterial_, model);
-        }
-
-        // Water after all opaque geometry, blended, roughly back to front: the
-        // islands' water meshes by distance from the camera.
-        if (!water_.empty()) {
-            renderer.setView({
-                .view = view,
-                .projection = projection,
-                .blend = engine::render::BlendMode::Alpha,
-            });
-            const auto distance = [&](const WaterObject& water) {
-                const engine::math::Vec3 offset = water.position - camera_.position;
-                return glm::dot(offset, offset);
-            };
-            std::sort(water_.begin(), water_.end(),
-                      [&](const WaterObject& a, const WaterObject& b) {
-                          return distance(a) > distance(b);
-                      });
-            for (const auto& water : water_) {
-                renderer.drawMesh(water.mesh, waterMaterial_,
-                                  glm::translate(engine::math::Mat4{1.0F}, water.position));
-            }
-        }
+        world_.drawOpaque(renderer, static_cast<double>(sceneSeconds_));
+        // Water after all opaque geometry, blended, roughly back to front.
+        world_.drawWater(renderer, view, projection, camera_.position);
 
         if (showOverlay_) {
             renderOverlay(context);
@@ -395,7 +395,7 @@ private:
     std::optional<engine::core::Error> startArchipelago(engine::app::AppContext& context)
     {
         auto& renderer = context.renderer();
-        engine::worldgen::WorldGenSettings& settings = settings_;
+        engine::worldgen::WorldGenSettings settings;
         if (options_.settingsPath) {
             auto loaded = engine::worldgen::loadSettings(*options_.settingsPath);
             if (!loaded) {
@@ -420,6 +420,34 @@ private:
                                   engine::core::toUtf8(*options_.saveSettingsPath));
         }
 
+        if (auto error = generateWorld(context, settings, true)) {
+            return error;
+        }
+        auto sky =
+            renderer.createMesh(island_preview::buildSkyDome(island_preview::floatingWorldSky()));
+        if (!sky) {
+            return sky.error();
+        }
+        sky_ = sky.value();
+
+        light_ = archipelagoSunlight();
+        controller_ = engine::camera::FreeFlyController{{.moveSpeed = 30.0F}};
+        subtitle_ = "M3  FLOATING ARCHIPELAGO";
+        panel_ = std::make_unique<island_preview::WorldGenPanel>(settings);
+        panelVisible_ = options_.panel;
+        engine::core::logInfo("app", "hold the right mouse button to look around, WASD to fly, "
+                                     "the mouse wheel to change speed, F2 for the world panel, "
+                                     "Escape to quit");
+        return std::nullopt;
+    }
+
+    // Generates the world from the settings and uploads it in place of the
+    // shown one. The first world also places the camera: the overview, or the
+    // close view of --island.
+    std::optional<engine::core::Error>
+    generateWorld(engine::app::AppContext& context,
+                  const engine::worldgen::WorldGenSettings& settings, bool first)
+    {
         const auto started = std::chrono::steady_clock::now();
         auto generated = engine::worldgen::generateArchipelago(settings);
         const double milliseconds =
@@ -436,72 +464,21 @@ private:
         if (!archipelago.clouds.warning.empty()) {
             engine::core::logWarning("app", "clouds: {}", archipelago.clouds.warning);
         }
-
-        // Island colours are vertex colours (palettes); one white lit material
-        // lets the sun shade them.
-        auto material = renderer.createMaterial(
-            {.baseColor = {1.0F, 1.0F, 1.0F, 1.0F}, .shading = engine::render::Shading::Lit});
-        if (!material) {
-            return material.error();
+        if (auto error = world_.upload(context.renderer(), archipelago, settings)) {
+            return error;
         }
-        for (const auto& island : archipelago.islands) {
-            auto mesh = renderer.createMesh(island.mesh);
-            if (!mesh) {
-                return mesh.error();
-            }
-            meshes_.push_back(mesh.value());
-            objects_.push_back({mesh.value(), material.value(), island.shape.island.anchor, 0.0F});
-            // Translucent through its vertex colours' alpha.
-            if (!island.water.mesh.positions.empty()) {
-                auto water = renderer.createMesh(island.water.mesh);
-                if (!water) {
-                    return water.error();
+        if (first) {
+            if (options_.island) {
+                if (*options_.island >= archipelago.islands.size()) {
+                    return engine::core::Error{
+                        std::format("--island {}: the archipelago has {} islands, numbered from 0",
+                                    *options_.island, archipelago.islands.size())};
                 }
-                meshes_.push_back(water.value());
-                water_.push_back({water.value(), island.shape.island.anchor});
+                camera_ = islandCamera(archipelago.islands[*options_.island]);
+            } else {
+                camera_ = archipelagoCamera(archipelago);
             }
         }
-        // Water shows its own colours, unlit: it reads as light-filled against
-        // the shaded rock, and a waterfall stays bright on any side.
-        auto waterMaterial = renderer.createMaterial(
-            {.baseColor = {1.0F, 1.0F, 1.0F, 1.0F}, .shading = engine::render::Shading::Unlit});
-        if (!waterMaterial) {
-            return waterMaterial.error();
-        }
-        waterMaterial_ = waterMaterial.value();
-        // Clouds are opaque and, like water, show their own colours unlit:
-        // white tops and lavender undersides, light on every side.
-        cloudMaterial_ = waterMaterial_;
-        for (const auto& cluster : archipelago.clouds.clusters) {
-            auto mesh = renderer.createMesh(cluster.mesh);
-            if (!mesh) {
-                return mesh.error();
-            }
-            meshes_.push_back(mesh.value());
-            CloudObject cloud{mesh.value(), cluster};
-            cloud.cluster.mesh = {};
-            clouds_.push_back(std::move(cloud));
-        }
-        auto sky =
-            renderer.createMesh(island_preview::buildSkyDome(island_preview::floatingWorldSky()));
-        if (!sky) {
-            return sky.error();
-        }
-        sky_ = sky.value();
-
-        light_ = archipelagoSunlight();
-        if (options_.island) {
-            if (*options_.island >= archipelago.islands.size()) {
-                return engine::core::Error{
-                    std::format("--island {}: the archipelago has {} islands, numbered from 0",
-                                *options_.island, archipelago.islands.size())};
-            }
-            camera_ = islandCamera(archipelago.islands[*options_.island]);
-        } else {
-            camera_ = archipelagoCamera(archipelago);
-        }
-        controller_ = engine::camera::FreeFlyController{{.moveSpeed = 30.0F}};
-        subtitle_ = "M3  FLOATING ARCHIPELAGO";
         const engine::worldgen::WaterCounts water = archipelago.waterCounts();
         sceneLines_ = {
             std::format("SEED: {}   ISLANDS: {} OF {}   TRIANGLES: {}   GEN: {:.0f} MS",
@@ -518,9 +495,26 @@ private:
                               archipelago.layout.requestedCount, archipelago.triangleCount(),
                               water.lakes, water.streams, water.waterfalls,
                               archipelago.clouds.clusters.size(), milliseconds);
-        engine::core::logInfo("app", "hold the right mouse button to look around, WASD to fly, "
-                                     "the mouse wheel to change speed, Escape to quit");
+        lastGenerationMilliseconds_ = milliseconds;
         return std::nullopt;
+    }
+
+    // The panel's Regenerate: a new world in place, the camera where it is.
+    void regenerate(engine::app::AppContext& context,
+                    const engine::worldgen::WorldGenSettings& settings)
+    {
+        if (auto error = generateWorld(context, settings, false)) {
+            engine::core::logError("app", "{}", error->message);
+            panel_->setMessage(island_preview::PanelMessageKind::Error, error->message);
+            return;
+        }
+        const auto counts = context.renderer().resourceCounts();
+        engine::core::logInfo("app",
+                              "world regenerated: the renderer holds {} meshes, {} textures and "
+                              "{} materials",
+                              counts.meshes, counts.textures, counts.materials);
+        panel_->setMessage(island_preview::PanelMessageKind::Info,
+                           std::format("generated in {:.0f} ms", lastGenerationMilliseconds_));
     }
 
     std::optional<engine::core::Error> startTestScene(engine::app::AppContext& context)
@@ -663,28 +657,14 @@ private:
     std::vector<engine::render::MeshHandle> meshes_;
     // Used by the objects' materials; destroyed after them.
     std::vector<engine::render::TextureHandle> textures_;
-    // The test scene's objects have a material each; the archipelago's islands
-    // share one.
+    // The test scene's objects, each with its own material.
     std::vector<SceneObject> objects_;
-    // The islands' water, drawn after the opaque objects. Its meshes are in
-    // meshes_.
-    struct WaterObject {
-        engine::render::MeshHandle mesh;
-        engine::math::Vec3 position{0.0F};
-    };
-    std::vector<WaterObject> water_;
-    engine::render::MaterialHandle waterMaterial_;
-    // The cloud clusters (without their meshes, which are uploaded and kept in
-    // meshes_), drawn where the wind has moved them; their material is the
-    // water's one.
-    struct CloudObject {
-        engine::render::MeshHandle mesh;
-        engine::worldgen::CloudCluster cluster;
-    };
-    std::vector<CloudObject> clouds_;
-    engine::render::MaterialHandle cloudMaterial_;
-    // The archipelago's settings: the clouds' wind and the world bounds.
-    engine::worldgen::WorldGenSettings settings_;
+    // The generated world and the panel that edits its settings (archipelago
+    // only).
+    island_preview::WorldScene world_;
+    std::unique_ptr<island_preview::WorldGenPanel> panel_;
+    bool panelVisible_ = false;
+    double lastGenerationMilliseconds_ = 0.0;
     engine::render::MeshHandle sky_;
     engine::render::LightDesc light_;
     engine::camera::Camera camera_;
@@ -707,7 +687,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr,
                      "usage: island-preview [--frames N] [--assets DIR] "
                      "[--screenshot FILE.png] [--seed N] [--island N] [--settings FILE.json] "
-                     "[--save-settings FILE.json] [--test-scene [--model FILE.obj]]\n");
+                     "[--save-settings FILE.json] [--panel] [--test-scene [--model FILE.obj]]\n");
         return kExitUsage;
     }
 
@@ -719,6 +699,8 @@ int main(int argc, char** argv)
         .assetDirectory = options->assetDirectory,
         .clearColor = kClearColor,
         .maxFrames = options->maxFrames,
+        // The WorldGen panel's Dear ImGui (archipelago only).
+        .debugUi = !options->testScene,
     };
 
     IslandPreview app(*options);

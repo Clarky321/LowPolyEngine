@@ -67,7 +67,7 @@ void buildOverlay(engine::debug::TextMeshBuilder& builder, const OverlayData& da
     lines.push_back(std::format("SPEED: {:.1f} M/S   DRAWS: {}   TRIANGLES: {}", data.moveSpeed,
                                 data.renderStats.drawCalls, data.renderStats.triangles));
     lines.emplace_back("HOLD RMB: LOOK   WASD: MOVE   E/Q: UP/DOWN   SHIFT: FAST   WHEEL: SPEED");
-    lines.emplace_back("F1: OVERLAY   F12: SCREENSHOT   ESC: QUIT");
+    lines.emplace_back("F1: OVERLAY   F2: WORLD PANEL   F12: SCREENSHOT   ESC: QUIT");
 
     float textWidth = 0.0F;
     for (const auto& line : lines) {

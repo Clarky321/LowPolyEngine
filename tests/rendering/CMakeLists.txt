@@ -6,12 +6,16 @@ set(fixtures "${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 # Files written by GPU tests (screenshots); inside the build tree, never in the sources.
 set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
 
-# Engine-level GPU tests (Catch2): application loop, renderer, frame capture.
+# Engine-level GPU tests (Catch2): application loop, renderer, frame capture,
+# and island-preview's world on the GPU with the debug UI (M3.12).
 add_executable(lpe_gpu_tests
     application_gpu_test.cpp
     renderer_gpu_test.cpp
     texture_gpu_test.cpp
+    world_scene_gpu_test.cpp
+    ${PROJECT_SOURCE_DIR}/sandbox/island-preview/WorldScene.cpp
 )
+target_include_directories(lpe_gpu_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
 # glad: the texture tests inspect OpenGL objects directly (handles, row order,
 # sampling state). The renderer loads the function pointers.
 target_link_libraries(lpe_gpu_tests PRIVATE engine glad Catch2::Catch2WithMain)
@@ -93,6 +97,15 @@ set_tests_properties(island_preview_settings_missing_file PROPERTIES
 lpe_add_gpu_test(island_preview_settings_not_for_test_scene
     island-preview --test-scene --settings assets/worlds/default.json)
 set_tests_properties(island_preview_settings_not_for_test_scene PROPERTIES
+    PASS_REGULAR_EXPRESSION "usage: island-preview")
+
+# The WorldGen panel (M3.12): the archipelago with the panel open runs
+# without errors; the panel belongs to the archipelago.
+lpe_add_gpu_test(island_preview_panel_smoke island-preview --panel --frames 30)
+set_tests_properties(island_preview_panel_smoke PROPERTIES
+    FAIL_REGULAR_EXPRESSION "\\[error\\]")
+lpe_add_gpu_test(island_preview_panel_not_for_test_scene island-preview --test-scene --panel)
+set_tests_properties(island_preview_panel_not_for_test_scene PROPERTIES
     PASS_REGULAR_EXPRESSION "usage: island-preview")
 
 # A close view of one island with its water drawn translucent after the

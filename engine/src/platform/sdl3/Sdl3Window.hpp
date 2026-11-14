@@ -20,4 +20,16 @@ struct Window::Impl {
     bool openGl = false;
 };
 
+namespace detail {
+
+// The native window for code of the SDL3 platform layer outside Window itself.
+struct NativeWindowAccess {
+    [[nodiscard]] static SDL_Window* handle(const Window& window) noexcept
+    {
+        return window.impl_ ? window.impl_->handle.get() : nullptr;
+    }
+};
+
+} // namespace detail
+
 } // namespace engine::platform
