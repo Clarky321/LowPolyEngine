@@ -64,6 +64,37 @@ lpe_add_gpu_test(island_preview_island_not_for_test_scene island-preview --test-
 set_tests_properties(island_preview_island_not_for_test_scene PROPERTIES
     PASS_REGULAR_EXPRESSION "usage: island-preview")
 
+# World settings from a file (M3.11): the default file gives the default
+# world without warnings; --save-settings writes the settings in use; a wrong
+# type and an unknown field are named with their path; a missing file is
+# named; the options belong to the archipelago.
+lpe_add_gpu_test(island_preview_settings_file
+    island-preview --settings assets/worlds/default.json --frames 5)
+set_tests_properties(island_preview_settings_file PROPERTIES
+    PASS_REGULAR_EXPRESSION "archipelago: seed 1, 12 of 12 islands"
+    FAIL_REGULAR_EXPRESSION "\\[error\\]|\\[warning\\]")
+lpe_add_gpu_test(island_preview_save_settings
+    island-preview --save-settings "${gpu_output}/saved-settings.json" --frames 1)
+set_tests_properties(island_preview_save_settings PROPERTIES
+    PASS_REGULAR_EXPRESSION "world settings saved to '[^']*saved-settings\\.json'")
+lpe_add_gpu_test(island_preview_settings_wrong_type
+    island-preview --settings "${fixtures}/worldgen-settings/wrong-type.json" --frames 1)
+set_tests_properties(island_preview_settings_wrong_type PROPERTIES
+    PASS_REGULAR_EXPRESSION "wrong-type\\.json': islands\\.count: expected an integer, found string")
+lpe_add_gpu_test(island_preview_settings_unknown_field
+    island-preview --settings "${fixtures}/worldgen-settings/unknown-field.json" --frames 5)
+set_tests_properties(island_preview_settings_unknown_field PROPERTIES
+    PASS_REGULAR_EXPRESSION "unknown field 'islands\\.colour' ignored"
+    FAIL_REGULAR_EXPRESSION "\\[error\\]")
+lpe_add_gpu_test(island_preview_settings_missing_file
+    island-preview --settings does-not-exist.json --frames 1)
+set_tests_properties(island_preview_settings_missing_file PROPERTIES
+    PASS_REGULAR_EXPRESSION "cannot open file '[^']*does-not-exist\\.json'")
+lpe_add_gpu_test(island_preview_settings_not_for_test_scene
+    island-preview --test-scene --settings assets/worlds/default.json)
+set_tests_properties(island_preview_settings_not_for_test_scene PROPERTIES
+    PASS_REGULAR_EXPRESSION "usage: island-preview")
+
 # A close view of one island with its water drawn translucent after the
 # opaque geometry (M3.9), without errors; an island the world does not have is
 # named.

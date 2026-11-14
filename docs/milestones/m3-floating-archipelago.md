@@ -41,7 +41,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.8 | Floating world preview | done |
 | M3.9 | Local island water | done |
 | M3.10 | Clouds | done |
-| M3.11 | Settings as versioned JSON | planned |
+| M3.11 | Settings as versioned JSON | in progress |
 | M3.12 | WorldGen panel with Dear ImGui | planned |
 | M3.13 | Final verification and pull request | planned |
 
@@ -274,12 +274,18 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** save and load a world description.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0004 Amendment 1):
 - `nlohmann_json/3.12.0` as decided in ADR 0004: the envelope with `format` and `formatVersion`, `generatorVersion`, the seed as a hex string, all `WorldGenSettings` fields including placement, altitude and size ranges, local water and clouds.
 - Loading validates with the M3.3 rules; errors never throw across the boundary and name the field path.
 - island-preview can start from a settings file.
+- `engine/worldgen/SettingsFile.hpp`: `settingsToJson`, `settingsFromJson`, `saveSettings`, `loadSettings` (`LoadedSettings`: settings and warnings). The JSON library is a private dependency of the engine, included only in `SettingsFile.cpp`; Conan `nlohmann_json/3.12.0`, recorded in `docs/references/THIRD_PARTY_NOTICES.md`.
+- One list of fields: the numeric field visitor of validation moved to `engine/src/worldgen/SettingsFields.hpp` and drives the file too, so the JSON paths are the paths `validate()` names.
+- Readable files: fields in declaration order, floats with the fewest digits that read back bit for bit (`0.045`), the seed as `"0x"` and 16 hex digits.
+- Reading: malformed JSON with line and column (a non-throwing SAX pass), the format id and a supported version required, other fields optional with defaults, wrong types named by path, unknown keys at any depth as warnings, then `validate()`. Saving refuses invalid settings.
+- `assets/worlds/default.json`: the default settings as written by the program (the folder `docs/PROJECT_STRUCTURE.md` plans for worlds).
+- island-preview: `--settings FILE.json` starts from a file (warnings logged; `--seed` replaces its seed), `--save-settings FILE.json` writes the settings in use; both belong to the archipelago.
 
-**Tests (headless):** the ADR 0004 list: round trip, missing fields (defaults), unknown fields (warning), wrong types, malformed JSON, a newer `formatVersion`, a seed above 2^53; a loaded file reproduces the same world hash.
+**Tests (headless):** the ADR 0004 list: round trip, missing fields (defaults), unknown fields (warning), wrong types, malformed JSON, a newer `formatVersion`, a seed above 2^53; a loaded file reproduces the same world hash. Implemented in `tests/unit/worldgen/settings_file_test.cpp`: the shipped default file equals `settingsToJson` of the defaults and loads without warnings; the text's envelope and short numbers; each of the 44 numeric fields changed alone comes back in its own field; water off; 6 000 random floats and awkward ones bit for bit; seeds 0, 1, 2^53 + 1, the golden-ratio constant and 2^64 − 1, short and lower-case hex; a minimal file and a partial one take defaults; unknown keys at three depths give warnings with their paths; 15 wrong types and bad seeds with their messages; malformed JSON with line and column, empty and truncated text, a non-object, a missing or foreign format, a missing or non-integer version; version 2 refused, version 0 rejected; range and combination errors from `validate()`; files saved into new folders and loaded, invalid settings not saved, missing and broken files named; a loaded file generates the same islands, water and clouds (mesh hashes) for a seed above 2^53. GPU tier: `island_preview_settings_file` (the default file, no warning), `island_preview_save_settings`, `island_preview_settings_wrong_type`, `island_preview_settings_unknown_field`, `island_preview_settings_missing_file`, `island_preview_settings_not_for_test_scene`.
 
 **Done when:** save → load → generate gives the same world and every failure case is reported.
 

@@ -33,7 +33,7 @@ lowpoly-engine/
 │   │   ├── render/           # RHI-facing types and renderer interfaces
 │   │   ├── scene/            # Entity, components, world, prefab, document
 │   │   ├── assets/           # Asset IDs, handles, registry interfaces
-│   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness, noise, world settings, island placement, shapes, meshes, palettes, local water, clouds and whole archipelagos (M3.1–M3.10, ADR 0003, ADR 0013–0017)
+│   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness, noise, world settings, island placement, shapes, meshes, palettes, local water, clouds, whole archipelagos and settings files (M3.1–M3.11, ADR 0003, ADR 0004, ADR 0013–0017)
 │   │   ├── scripting/        # Script runtime facade
 │   │   ├── camera/           # Camera and camera-controller types
 │   │   └── debug/            # On-screen diagnostics (pixel-font text, M1)
@@ -79,7 +79,7 @@ lowpoly-engine/
 │   ├── palettes/
 │   ├── textures/
 │   ├── models/
-│   ├── worlds/
+│   ├── worlds/               # World generation settings files (default.json, ADR 0004)
 │   └── test-fixtures/
 ├── tests/
 │   ├── unit/

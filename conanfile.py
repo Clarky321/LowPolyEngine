@@ -37,6 +37,8 @@ class LowPolyEngineConan(ConanFile):
         self.requires("glm/1.0.3")
         # PNG encoding for frame captures (stb_image_write; header-only, ADR 0006).
         self.requires("stb/cci.20261021")
+        # World generation settings files (JSON; header-only, ADR 0004).
+        self.requires("nlohmann_json/3.12.0")
         # Unit tests only; never linked into the engine runtime.
         self.test_requires("catch2/3.16.1")
 

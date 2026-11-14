@@ -23,6 +23,7 @@
 #include "engine/geometry/ObjImport.hpp"
 #include "engine/worldgen/Archipelago.hpp"
 #include "engine/worldgen/Clouds.hpp"
+#include "engine/worldgen/SettingsFile.hpp"
 #include "engine/worldgen/WorldGenSettings.hpp"
 
 #include <glm/geometric.hpp>
@@ -84,6 +85,10 @@ struct Options {
     // Archipelago only: start with a close view of this island (layout order)
     // instead of the overview.
     std::optional<std::uint64_t> island;
+    // Archipelago only: world settings read from this file (--seed still
+    // replaces its seed), and the settings in use written to this file.
+    std::optional<std::filesystem::path> settingsPath;
+    std::optional<std::filesystem::path> saveSettingsPath;
 };
 
 std::optional<std::uint64_t> parseUnsigned(std::string_view text)
@@ -132,6 +137,10 @@ std::optional<Options> parseOptions(int argc, char** argv)
             if (!options.island) {
                 return std::nullopt;
             }
+        } else if (arg == "--settings" && hasValue) {
+            options.settingsPath = std::filesystem::path(argv[++i]);
+        } else if (arg == "--save-settings" && hasValue) {
+            options.saveSettingsPath = std::filesystem::path(argv[++i]);
         } else if (arg == "--test-scene") {
             options.testScene = true;
         } else {
@@ -140,7 +149,8 @@ std::optional<Options> parseOptions(int argc, char** argv)
     }
     // Each option belongs to one of the two scenes.
     if ((options.modelPath && !options.testScene) ||
-        ((options.seed || options.island) && options.testScene)) {
+        ((options.seed || options.island || options.settingsPath || options.saveSettingsPath) &&
+         options.testScene)) {
         return std::nullopt;
     }
     if (options.screenshotPath && !options.maxFrames) {
@@ -386,8 +396,28 @@ private:
     {
         auto& renderer = context.renderer();
         engine::worldgen::WorldGenSettings& settings = settings_;
+        if (options_.settingsPath) {
+            auto loaded = engine::worldgen::loadSettings(*options_.settingsPath);
+            if (!loaded) {
+                return engine::core::Error{
+                    std::format("world settings: {}", loaded.error().message)};
+            }
+            settings = loaded.value().settings;
+            const std::string file = engine::core::toUtf8(*options_.settingsPath);
+            for (const auto& warning : loaded.value().warnings) {
+                engine::core::logWarning("app", "world settings '{}': {}", file, warning);
+            }
+            engine::core::logInfo("app", "world settings loaded from '{}'", file);
+        }
         if (options_.seed) {
             settings.seed = *options_.seed;
+        }
+        if (options_.saveSettingsPath) {
+            if (auto error = engine::worldgen::saveSettings(*options_.saveSettingsPath, settings)) {
+                return error;
+            }
+            engine::core::logInfo("app", "world settings saved to '{}'",
+                                  engine::core::toUtf8(*options_.saveSettingsPath));
         }
 
         const auto started = std::chrono::steady_clock::now();
@@ -674,9 +704,10 @@ int main(int argc, char** argv)
 {
     const auto options = parseOptions(argc, argv);
     if (!options) {
-        std::fprintf(stderr, "usage: island-preview [--frames N] [--assets DIR] "
-                             "[--screenshot FILE.png] [--seed N] [--island N] [--test-scene "
-                             "[--model FILE.obj]]\n");
+        std::fprintf(stderr,
+                     "usage: island-preview [--frames N] [--assets DIR] "
+                     "[--screenshot FILE.png] [--seed N] [--island N] [--settings FILE.json] "
+                     "[--save-settings FILE.json] [--test-scene [--model FILE.obj]]\n");
         return kExitUsage;
     }
 

@@ -37,6 +37,7 @@ add_executable(lpe_unit_tests
     unit/worldgen/island_water_test.cpp
     unit/worldgen/noise_test.cpp
     unit/worldgen/random_test.cpp
+    unit/worldgen/settings_file_test.cpp
     unit/worldgen/world_gen_settings_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
