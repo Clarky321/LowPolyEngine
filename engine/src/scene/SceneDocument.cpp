@@ -20,6 +20,7 @@ using core::json::describe;
 using core::json::floatNumber;
 using core::json::Json;
 using core::json::OrderedJson;
+using core::json::readBool;
 using core::json::readFloat;
 using core::json::readString;
 using core::json::shortened;
@@ -30,9 +31,10 @@ constexpr std::string_view kTransformKey = "transform";
 constexpr std::string_view kStaticMeshKey = "staticMesh";
 constexpr std::string_view kCameraKey = "camera";
 constexpr std::string_view kLightKey = "directionalLight";
+constexpr std::string_view kScriptKey = "script";
 
-constexpr std::array<std::string_view, 5> kComponentKeys{kNameKey, kTransformKey, kStaticMeshKey,
-                                                         kCameraKey, kLightKey};
+constexpr std::array<std::string_view, 6> kComponentKeys{kNameKey,   kTransformKey, kStaticMeshKey,
+                                                         kCameraKey, kLightKey,     kScriptKey};
 constexpr std::array<std::string_view, 5> kEnvelopeFields{"format", "formatVersion", "id", "name",
                                                           "entities"};
 constexpr std::array<std::string_view, 2> kEntityFields{"id", "components"};
@@ -110,6 +112,13 @@ OrderedJson componentsJson(const Scene& scene, EntityId entity)
         object["color"] = vectorJson(light.color, kRgb);
         object["intensity"] = floatNumber(light.intensity);
         components[std::string(kLightKey)] = std::move(object);
+    }
+    if (scene.hasComponent<ScriptComponent>(entity)) {
+        const ScriptComponent script = scene.component<ScriptComponent>(entity).value();
+        OrderedJson object = OrderedJson::object();
+        object["asset"] = assetJson(script.asset);
+        object["enabled"] = script.enabled;
+        components[std::string(kScriptKey)] = std::move(object);
     }
     return components;
 }
@@ -391,6 +400,38 @@ public:
         return component;
     }
 
+    core::Result<ScriptComponent> script(const Json& value, std::string_view path)
+    {
+        if (auto error = expectObject(value, path)) {
+            return *error;
+        }
+        static constexpr std::array<std::string_view, 2> kFields{"asset", "enabled"};
+        warnUnknown(value, path, kFields);
+        ScriptComponent component;
+        const std::string assetPath = join(path, "asset");
+        auto assetText = requiredString(value, path, "asset");
+        if (!assetText) {
+            return assetText.error();
+        }
+        auto asset = assets::AssetId::parse(assetText.value());
+        if (!asset) {
+            return core::Error{std::format("{}: {}", assetPath, asset.error().message)};
+        }
+        component.asset = asset.value();
+        if (const auto found = value.find("enabled"); found != value.end()) {
+            if (auto error = readBool(*found, join(path, "enabled"), component.enabled)) {
+                return *error;
+            }
+        }
+        if (auto error = checked(component, path)) {
+            return *error;
+        }
+        if (auto error = checkAsset(component.asset, assets::AssetType::Script, assetPath)) {
+            return *error;
+        }
+        return component;
+    }
+
 private:
     const assets::AssetRegistry* registry_;
     std::vector<std::string> warnings_;
@@ -410,6 +451,8 @@ struct EntityData {
     CameraComponent camera;
     bool hasLight = false;
     DirectionalLightComponent light;
+    bool hasScript = false;
+    ScriptComponent script;
 };
 
 // Takes a component into the entity's data, or returns its error.
@@ -445,6 +488,8 @@ std::optional<core::Error> readComponents(Reader& reader, const Json& components
             error = take(reader.camera(value, at), data.hasCamera, data.camera);
         } else if (key == kLightKey) {
             error = take(reader.light(value, at), data.hasLight, data.light);
+        } else if (key == kScriptKey) {
+            error = take(reader.script(value, at), data.hasScript, data.script);
         } else {
             // Not dropped with a warning: saving the scene again would lose it.
             error = core::Error{
@@ -604,6 +649,9 @@ core::Result<LoadedScene> sceneFromJson(std::string_view text, core::UuidGenerat
         }
         if (!error) {
             error = addIf(scene, data.id, data.hasLight, data.light);
+        }
+        if (!error) {
+            error = addIf(scene, data.id, data.hasScript, data.script);
         }
         if (error) {
             return core::Error{std::format("entities[{}]: {}", i, error->message)};

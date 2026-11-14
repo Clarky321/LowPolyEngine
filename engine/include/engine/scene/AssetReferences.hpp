@@ -1,7 +1,7 @@
 #pragma once
 
-// Checks a scene's asset references against an asset registry (M4.3, ADR
-// 0022): a scene stores asset IDs only, so whether they name registered assets
+// Checks a scene's asset references against an asset registry (M4.3, M4.5;
+// ADR 0022): a scene stores asset IDs only, so whether they name registered assets
 // of the right type is checked against the registry of the project the scene
 // belongs to. Missing files are not reported here; they are the registry's
 // availability.
@@ -19,7 +19,8 @@ namespace engine::scene {
 
 struct AssetReferenceProblem {
     EntityId entity;
-    // The component type and field, e.g. "static mesh" and "material".
+    // The component type and field, e.g. "static mesh" and "material", or
+    // "script" and "asset".
     std::string_view component;
     std::string_view field;
     assets::AssetId asset;

@@ -45,10 +45,18 @@ class LowPolyEngineConan(ConanFile):
         # Entity and component storage inside engine/src/scene/ only
         # (header-only, private; ADR 0021).
         self.requires("entt/4.0.0")
+        # The Lua VM of engine/src/scripting/lua/ only (static, private; ADR 0024).
+        # Compiled as C++ (see configure()).
+        self.requires("lua/5.5.0")
         # Unit tests only; never linked into the engine runtime.
         self.test_requires("catch2/3.16.1")
 
     def configure(self):
+        # Lua raises its errors as C++ exceptions instead of longjmp, so a
+        # script error unwinds the C++ frames of the bindings properly (ADR 0024).
+        lua = self.options["lua/*"]
+        lua.compile_as_cpp = True
+        lua.shared = False
         sdl = self.options["sdl/*"]
         sdl.shared = False
         for subsystem in _SDL_UNUSED_SUBSYSTEMS:

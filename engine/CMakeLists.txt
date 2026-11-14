@@ -5,6 +5,7 @@ find_package(glm REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED CONFIG)
 find_package(imgui REQUIRED CONFIG)
 find_package(EnTT REQUIRED CONFIG)
+find_package(lua REQUIRED CONFIG)
 
 # World generation (src/worldgen/) must give the same float results with every
 # compiler (ADR 0003): GCC and Clang may otherwise contract a * b + c into a
@@ -68,6 +69,8 @@ add_library(engine STATIC
     src/scene/Components.cpp
     src/scene/Scene.cpp
     src/scene/SceneDocument.cpp
+    src/scripting/lua/LuaVm.cpp
+    src/scripting/lua/ScriptRuntime.cpp
     ${worldgen_sources}
 )
 
@@ -83,7 +86,8 @@ target_compile_features(engine PUBLIC cxx_std_20)
 # include it (src/worldgen/SettingsFile.cpp, src/assets/AssetManifest.cpp,
 # src/scene/SceneDocument.cpp), the Dear ImGui backends only in
 # src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp, EnTT only
-# in src/scene/ (ADR 0002, 0004, 0005, 0006, 0008, 0018, 0021, 0022, 0023).
+# in src/scene/, Lua only in src/scripting/lua/ (ADR 0002, 0004, 0005, 0006,
+# 0008, 0018, 0021, 0022, 0023, 0024).
 # Public headers include none of them; consumers only get them as link
 # dependencies.
 target_link_libraries(engine PRIVATE
@@ -91,6 +95,7 @@ target_link_libraries(engine PRIVATE
     SDL3::SDL3
     glad
     imgui_backends
+    lua::lua
     nlohmann_json::nlohmann_json
     stb_image
     stb_image_write

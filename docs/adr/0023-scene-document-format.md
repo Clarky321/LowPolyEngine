@@ -1,8 +1,8 @@
 # ADR 0023: Scene document format
 
-- **Status:** Accepted
+- **Status:** Accepted; amended for M4.5 (Amendment 1)
 - **Date:** 2026-11-14
-- **Related:** ADR 0004 (JSON documents; Amendment 2), ADR 0020 (persistent identifiers), ADR 0021 (components), ADR 0022 (asset references), `docs/milestones/m4-scene-data-model.md` M4.4
+- **Related:** ADR 0004 (JSON documents; Amendment 2), ADR 0020 (persistent identifiers), ADR 0021 (components), ADR 0022 (asset references), ADR 0024 (the script component, Amendment 1), `docs/milestones/m4-scene-data-model.md` M4.4
 
 ## Context
 
@@ -40,3 +40,7 @@ A scene must be saved to a file and loaded back logically identical: the same sc
 
 - Scenes grow so large that JSON loading is slow: a binary cache beside the JSON source (ADR 0004).
 - Scenes link to world generation settings (M5) or contain prefab instances (M4.6).
+
+## Amendment 1: the script component (M4.5, 2026-11-15)
+
+Format version 1 gains the component key `script` (ADR 0024): `{"asset": <asset ID>, "enabled": true}`, written after `directionalLight`. `asset` is required; `enabled` defaults to true. With a registry, an asset that is not registered or not a Script asset is an error naming `entities[i].components.script.asset`. The version stays 1: no document of version 1 has been released while M4 is not merged into `main`, so no reader exists that this could surprise. From the merge on, a new component type raises the version as decision 5 says.

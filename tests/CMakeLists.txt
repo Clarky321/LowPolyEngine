@@ -40,6 +40,8 @@ add_executable(lpe_unit_tests
     unit/scene/scene_components_test.cpp
     unit/scene/scene_document_test.cpp
     unit/scene/scene_test.cpp
+    unit/scripting/lua_vm_test.cpp
+    unit/scripting/script_runtime_test.cpp
     unit/sandbox/sky_test.cpp
     unit/sandbox/worldgen_panel_test.cpp
     ${PROJECT_SOURCE_DIR}/sandbox/island-preview/Sky.cpp
@@ -58,7 +60,10 @@ add_executable(lpe_unit_tests
     unit/worldgen/world_corpus_test.cpp
     unit/worldgen/world_gen_settings_test.cpp
 )
-target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
+# The internal Lua VM (engine/src/scripting/lua/) is tested directly, so the
+# unit tests see Lua's headers; the engine's public headers never include them.
+find_package(lua REQUIRED CONFIG)
+target_link_libraries(lpe_unit_tests PRIVATE engine lua::lua Catch2::Catch2WithMain)
 # GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 # The sky (M3.8) and the WorldGen panel's state (M3.12) of island-preview are
@@ -79,6 +84,7 @@ add_executable(lpe_integration_tests
     integration/input_events_test.cpp
     integration/platform_test.cpp
     integration/scene_document_test.cpp
+    integration/script_scene_test.cpp
 )
 # SDL directly: input tests push synthetic events into SDL's queue.
 find_package(SDL3 REQUIRED CONFIG)

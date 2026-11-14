@@ -13,7 +13,8 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 pushd "%LPE_ROOT%"
 
 rem Same commands as README.md; the preset reads its toolchain from build\<preset>\conan.
-"%LPE_CONAN%" install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=%LPE_CONFIG% --build=missing -of "build/%LPE_PRESET%/conan"
+rem conan.lock pins every version and recipe revision (ADR 0024).
+"%LPE_CONAN%" install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=%LPE_CONFIG% --lockfile=conan.lock --build=missing -of "build/%LPE_PRESET%/conan"
 if %errorlevel% neq 0 goto :failed
 
 "%LPE_CMAKE%" --preset %LPE_PRESET%

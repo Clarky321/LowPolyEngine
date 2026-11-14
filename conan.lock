@@ -1,0 +1,23 @@
+{
+    "version": "0.5",
+    "requires": [
+        "xorg/system#87ea3cbfa907ff490f4ece2f5fa3dbb9%1781197504.821",
+        "stb/cci.20261021#457350593cdcfbebc238b27a747af0aa%1792674259.327",
+        "sdl/3.4.16#fe421775c8e1866eb22a3ba23ef8fd62%1790611343.755",
+        "opengl/system#cfcf523b9d2bad75cbf377f56562634c%1762526044.744",
+        "nlohmann_json/3.12.0#2d634ab0ec8d9f56353e5ccef6d6612c%1744735883.94",
+        "lua/5.5.0#2bac82d0b9a1744cfaf436c5c1d01bee%1775664604.889",
+        "imgui/1.92.9b#b0eee8a52c7f9d1cae639b440b4bb234%1785711534.216",
+        "glm/1.0.3#debeffa033a21e12074ba5e361989c90%1782474723.712",
+        "entt/4.0.0#ca14bea628dd1cfb1e8d444456de278c%1792396657.387",
+        "catch2/3.16.1#0dc3f5041f5a681061a45f17e7be0fed%1793091288.859"
+    ],
+    "build_requires": [
+        "pkgconf/2.5.1#93c2051284cba1279494a43a4fcfeae2%1757684701.089",
+        "ninja/1.13.2#c8c5dc2a52ed6e4e42a66d75b4717ceb%1764096931.974",
+        "meson/1.10.2#9d2d10681fe7fe61c788c58626c89b25%1775558003.754",
+        "cmake/4.4.4#9009f1989569bdbc583e48ea6e132723%1793881531.325"
+    ],
+    "python_requires": [],
+    "config_requires": []
+}

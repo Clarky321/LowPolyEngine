@@ -19,6 +19,7 @@ using engine::core::UuidGenerator;
 using engine::scene::EntityId;
 using engine::scene::Scene;
 using engine::scene::SceneId;
+using engine::scene::ScriptComponent;
 using engine::scene::StaticMeshComponent;
 using lpe_test::assetId;
 
@@ -93,4 +94,25 @@ TEST_CASE("Unknown and wrongly typed asset references are reported in entity ord
     CHECK(problems[2].field == "material");
     CHECK(problems[2].asset == assetId(3));
     CHECK(problems[2].message.ends_with("'textures/bark.png' is a texture, expected a material"));
+}
+
+TEST_CASE("Script asset references are checked too", "[scene][assets]")
+{
+    AssetRegistry registry = makeRegistry();
+    REQUIRE_FALSE(registry.registerAsset(assetId(4), AssetType::Script,
+                                         AssetPath::parse("scripts/door.lua").value()));
+    Scene scene = makeScene();
+    const EntityId door = scene.createEntity().value();
+    REQUIRE_FALSE(scene.addComponent(door, ScriptComponent{assetId(4), true}).has_value());
+    const EntityId wrong = scene.createEntity().value();
+    REQUIRE_FALSE(scene.addComponent(wrong, ScriptComponent{assetId(1), false}).has_value());
+
+    const auto problems = engine::scene::findAssetReferenceProblems(scene, registry);
+    REQUIRE(problems.size() == 1);
+    CHECK(problems[0].entity == wrong);
+    CHECK(problems[0].component == "script");
+    CHECK(problems[0].field == "asset");
+    CHECK(problems[0].message == "scene 'Main': entity " + wrong.toString() +
+                                     ": script component: asset: asset " + assetId(1).toString() +
+                                     ": 'models/tree.obj' is a mesh, expected a script");
 }

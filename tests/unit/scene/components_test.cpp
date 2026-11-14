@@ -2,6 +2,7 @@
 #include "engine/scene/CameraComponent.hpp"
 #include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/NameComponent.hpp"
+#include "engine/scene/ScriptComponent.hpp"
 #include "engine/scene/StaticMeshComponent.hpp"
 #include "engine/scene/TransformComponent.hpp"
 
@@ -18,6 +19,7 @@
 using engine::scene::CameraComponent;
 using engine::scene::DirectionalLightComponent;
 using engine::scene::NameComponent;
+using engine::scene::ScriptComponent;
 using engine::scene::StaticMeshComponent;
 using engine::scene::TransformComponent;
 using engine::scene::validate;
@@ -172,6 +174,17 @@ TEST_CASE("A static mesh needs a mesh; its material may be null", "[scene][compo
           "static mesh component: mesh is the null asset ID, must name a mesh asset");
     CHECK(errorOf(StaticMeshComponent{{}, material}) ==
           "static mesh component: mesh is the null asset ID, must name a mesh asset");
+}
+
+TEST_CASE("A script component needs a script asset", "[scene][components]")
+{
+    const engine::assets::AssetId script{
+        engine::core::Uuid{0x3333333333334333ULL, 0x8333333333333333ULL}};
+    CHECK_FALSE(validate(ScriptComponent{script, true}).has_value());
+    CHECK_FALSE(validate(ScriptComponent{script, false}).has_value());
+    CHECK(ScriptComponent{}.enabled);
+    CHECK(errorOf(ScriptComponent{}) ==
+          "script component: asset is the null asset ID, must name a script asset");
 }
 
 TEST_CASE("A camera's lens stays in the ranges of the projection", "[scene][components]")

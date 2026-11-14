@@ -50,7 +50,7 @@ Package facts checked on 2026-11-14 with Conan 2.34.0 against Conan Center (`con
 - **`lua/5.5.0`** — the newest Lua in Conan Center (upstream 5.5.1 is not there, as ADR 0001 notes); recipe revision `2bac82d0b9a1744cfaf436c5c1d01bee`; MIT; static library compiled as C by default (`compile_as_cpp=False`, `with_tools=False`, `with_readline=False`); no prebuilt binary for the project's Windows profile, so `--build=missing` builds it from source (like `imgui`); on Linux the package defines `LUA_USE_DLOPEN` and `LUA_USE_POSIX` and links `dl` and `m`, so native module loading exists in the library and must stay unreachable from scripts.
 - **LuaBridge3** — not in Conan Center (`luabridge*`, `luabridge3*`: no recipes). Its README (read on 2026-11-14) states MIT, header-only, C++17, tests with PUC-Lua 5.5.0, and work with or without C++ exceptions; the newest release is the pre-release `3.0-rc13`, and the only package manager it documents is vcpkg. Adopting it would mean vendoring a pinned tag under `third_party/` (`docs/TECH_STACK.md` §6).
 - **sol2** `sol2/3.5.0` is in Conan Center but not a candidate of the plan; it is listed in the M4.5 ADR only as a considered alternative.
-- **Lockfile:** the repository has no `conan.lock` although `docs/TECH_STACK.md` §7 and `docs/PROJECT_STRUCTURE.md` list one; CI and the wrappers run `conan install` without a lockfile. M4.5 creates it once EnTT and Lua are in (decided, see *Decisions on the open questions*).
+- **Lockfile:** the repository had no `conan.lock` although `docs/TECH_STACK.md` §7 and `docs/PROJECT_STRUCTURE.md` list one; CI and the wrappers ran `conan install` without a lockfile. M4.5 created it once EnTT and Lua were in (decided, see *Decisions on the open questions*).
 
 Every new dependency follows AGENTS.md §7: purpose, exact version and recipe revision, license, platforms, why the standard library and current dependencies are not enough, a row in `docs/references/THIRD_PARTY_NOTICES.md`, and an ADR.
 
@@ -107,7 +107,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 | M4.2 | EnTT and entity components | done |
 | M4.3 | Asset identity and asset registry | done |
 | M4.4 | Scene documents as versioned JSON | done |
-| M4.5 | Lua runtime and script component | planned |
+| M4.5 | Lua runtime and script component | in progress |
 | M4.6 | Prefab model | planned |
 | M4.7 | Integration, final verification and pull request | planned |
 
@@ -121,7 +121,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Documents follow ADR 0004: an envelope with `format` and `formatVersion`, 64-bit and larger IDs as strings, floats that read back bit for bit, non-throwing parsing, errors with the field path, explicit migrations, no library types in public headers. Each document kind gets its own format id and schema decision.
 - Every new public type and function gets headless unit tests for normal, boundary and failure cases; loaders get round-trip, missing-field, unknown-field, wrong-type, malformed-input, newer-version and limit tests.
 - New dependencies only in the steps that name them: EnTT in M4.2, Lua (and, if chosen, LuaBridge3) in M4.5.
-- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0024; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 to 0023 come from M4.1 to M4.4).
+- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0025; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 to 0024 come from M4.1 to M4.5).
 - The editor, the Scene → renderer bridge and everything in *Out of scope* stay out, even where an API would make them easy.
 - No GPU tier is required for M4.1–M4.6 (no rendering, shader, windowing or loop code changes); the final step runs it as `docs/DEVELOPMENT_WORKFLOW.md` §8 requires. A step that unexpectedly touches such code runs it too.
 
@@ -324,6 +324,19 @@ Implemented tests: `tests/unit/scene/scene_document_test.cpp` (the exact layout 
 - Conan lockfile (approved 2026-11-14), after EnTT and Lua are in and the M4 dependency graph is final: create `conan.lock`; check that it serves Windows MSVC and Linux GCC, one lockfile for both profiles if Conan allows it, otherwise one per platform with the reason documented; use it in CI and in the Windows wrappers (`scripts/windows/`), so that every build resolves the same versions and recipe revisions; update `docs/TECH_STACK.md` §7, `docs/PROJECT_STRUCTURE.md`, `README.md` and the ADR.
 
 **Decisions to make (ADR "Lua runtime and bindings"):** package, version and options; C or C++ error mechanism; binding layer; opened libraries; budgets; the Lua API surface and its error messages; the script entry points; how instances are reset or reloaded (no hot reload in M4, but restarting a runtime is supported and tested); the lockfile layout (one or per platform) and how CI and the wrappers pass it to `conan install`.
+
+**Decisions taken while implementing** (ADR 0024; ADR 0023 Amendment 1):
+- `lua/5.5.0` (recipe revision `2bac82d0b9a1744cfaf436c5c1d01bee`), static, `compile_as_cpp=True`: Lua errors are C++ exceptions that unwind the bindings' frames; `lua.h` is included directly (C++ linkage). The C API used was checked against the 5.5 headers and manual (`lua_newstate` with a seed, `luaL_openselectedlibs`, the count hook, mode `"t"`).
+- A project-owned binding layer, not LuaBridge3. Entity IDs reach Lua as strings.
+- `engine/scripting/ScriptRuntime.hpp` (facade, no Lua types); `engine/src/scripting/lua/LuaVm.hpp` (the VM: allocator with a memory limit, count-hook budget, `protect` for every entry from C++, the sandbox, text-only loading) and `ScriptRuntime.cpp` (instances keyed by entity ID, the engine API). `ScriptComponent` is in `engine/scene/` rather than `scripting/`: the scene lists its component types and scripting depends on the scene.
+- Sandbox: base functions without `collectgarbage`, `dofile`, `load`, `loadfile`, `print` and `warn` (an own `print` goes to a handler, by default the engine log); copies of `string`, `table`, `math`, `utf8` per instance; no `string.dump`; the string metatable locked; no `coroutine`, `io`, `os`, `package`, `debug`; a fixed string-hash seed.
+- Limits: 256 KiB of source, 10 000 000 instructions per call (checked every 1000, then every instruction once exceeded), 64 MiB per VM; `validate(ScriptLimits)`.
+- Lifecycle: `addScript`, `loadScripts(scene, registry)`, `start(scene)`, `update(scene, dt)`, `instance`, `instances`, `restart` (checks that the closed VM returned all memory). Scripts return a table with optional `start(entity)` and `update(entity, dt)`; failed instances stay failed until a restart; disabled components are not loaded and not updated.
+- Engine API: `exists`, `name`, `position`/`setPosition`, `rotation`/`setRotation`, `scale`/`setScale`, `deltaTime`, only during `start` and `update`; exact argument counts, strict IDs, floats range-checked, writes validated through the scene.
+- `ScriptComponent` (`asset`, `enabled`) in scene documents as `script` in format version 1 (unreleased while M4 is not merged); asset reference checks include it.
+- One `conan.lock` for both profiles, created with `conan lock create` for the four configurations; `configure.bat` and the Linux CI job pass `--lockfile=conan.lock`; the CI cache keys include it.
+
+Implemented tests: `tests/unit/scripting/lua_vm_test.cpp` (memory returned on close, a VM in too little memory, the budget against loops and `pcall` loops with a fresh budget per call, the memory limit and recovery, exactly the documented globals, `string.dump`, the locked string metatable, separate environments, bytecode refused, syntax and runtime error messages, a C++ exception turned into an error), `tests/unit/scripting/script_runtime_test.cpp` (a script moving its entity in start and update; reading names, transforms, the delta time, `exists` and `print`; syntax and runtime errors with name, line and traceback, a failed script not called again; every argument, type, count, range, missing-entity and validation error; the API outside start and update; destroyed entities during calls; an endless loop and a memory-hungry script stopped while another runs on; source size, bytecode, non-table results, non-function entries, a second script; isolation of globals and libraries; restart with memory returned and running again; scripts loaded through the registry — missing file, wrong type, unregistered, too large, disabled; limits and delta time checked), the script component in `tests/unit/scene/{components,scene_components,scene_document,asset_references}_test.cpp`, and the integration test `tests/integration/script_scene_test.cpp` (a saved scene with script components loaded with the project's registry, scripts loaded, start and four updates, the moved and grown transforms saved and read back).
 
 **Out of scope:** hot reload, events and subscriptions, input access from Lua, spawning or destroying entities from Lua, coroutine scheduling, a game update loop in the application, debugging tools, a second VM.
 

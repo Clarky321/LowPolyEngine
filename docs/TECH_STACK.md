@@ -58,8 +58,8 @@ Official/reference links:
 | EnTT | ECS | Adopted in M4.2 (`entt/4.0.0`, ADR 0021) as the private storage of `engine::scene::Scene`, included only in `engine/src/scene/Scene.cpp`. Persistent `EntityId`s (ADR 0020) stay separate from the transient EnTT entity handles, which never leave the scene implementation. |
 | Dear ImGui | Editor UI | Adopt for first editor prototype. Use official SDL3 + OpenGL/Vulkan backends where applicable. |
 | Catch2 v3 | Unit/integration testing | Adopt with CTest. Use one main test framework. |
-| Lua 5.5.1 | Embedded scripts | Candidate baseline; validate Conan package and toolchain across target platforms. Lua official release list identifies 5.5.1 (3 Aug 2026) as current at research time. |
-| LuaBridge3 | C++ ↔ Lua bindings | Candidate. Prove compatibility with selected Lua 5.5.1 package; otherwise use a small project-owned wrapper around Lua C API. |
+| Lua 5.5 | Embedded scripts | Adopted in M4.5 (`lua/5.5.0`, ADR 0024): static, compiled as C++ so Lua errors unwind C++ frames, private to `engine/src/scripting/lua/`, sandboxed, with an instruction budget and a memory limit. Upstream 5.5.1 (3 Aug 2026) is not in Conan Center yet. |
+| LuaBridge3 | C++ ↔ Lua bindings | Not taken (M4.5, ADR 0024): not in Conan Center and only a pre-release; the engine API is a handful of functions bound by a small project-owned layer over the Lua C API. |
 | stb_image / tinyobjloader / meshoptimizer | Asset import/processing | Add only when the asset pipeline milestone needs them; verify licenses and current maintenance before selection. `stb_image_write` from the `stb` package is used for frame captures (M1, ADR 0006), and `stb_image` from the same package decodes PNG files (M2.4, ADR 0008). tinyobjloader was not taken: M2 imports an OBJ subset with its own parser (M2.9, ADR 0012). |
 | Tracy | Profiling | Optional later tool; add after there is meaningful runtime behavior to profile. |
 
@@ -110,7 +110,7 @@ GLAD is generated API loader code; generated source may be vendored under a clea
 - `CMakePresets.json`: named configurations such as `windows-msvc-debug`, `windows-msvc-release`, `linux-gcc-debug`, `linux-gcc-release`.
 - `requirements-dev.txt`: pinned Python developer tools (Conan, clang-format, Ninja on Linux) for local work and CI.
 - `conanfile.py`: dependency requirements, generators and build options.
-- `conan.lock`: exact dependency graph once baseline is stable.
+- `conan.lock`: exact dependency graph — every version and recipe revision for both profiles (created in M4.5, ADR 0024); `configure.bat` and CI pass it to `conan install` with `--lockfile=conan.lock`. README.md ("Build and test manually") lists the commands that create it again.
 - `profiles/`: Conan host/build profiles for supported compiler/platform combinations.
 - `scripts/python/`: asset validation, shader checks, deterministic test fixtures and build helpers.
 - `scripts/windows/`: `.bat` wrappers that call Conan, CMake and CTest, passing through exit codes.
@@ -118,7 +118,7 @@ GLAD is generated API loader code; generated source may be vendored under a clea
 Command sequence (implemented in M0.1; Windows presets use the Visual Studio 2026 generator so no developer command prompt is needed):
 
 ```powershell
-conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --build=missing -of build/windows-msvc-debug/conan
+conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --lockfile=conan.lock --build=missing -of build/windows-msvc-debug/conan
 cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug

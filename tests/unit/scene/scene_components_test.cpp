@@ -25,6 +25,7 @@ using engine::scene::EntityId;
 using engine::scene::NameComponent;
 using engine::scene::Scene;
 using engine::scene::SceneId;
+using engine::scene::ScriptComponent;
 using engine::scene::StaticMeshComponent;
 using engine::scene::TransformComponent;
 
@@ -132,6 +133,19 @@ struct Samples<DirectionalLightComponent> {
         "directional light component: intensity is -1, must be at least 0";
 };
 
+template <>
+struct Samples<ScriptComponent> {
+    static engine::assets::AssetId asset(std::uint64_t number)
+    {
+        return engine::assets::AssetId{Uuid{0x5C21975C21974C21ULL, 0x8000000000000000ULL | number}};
+    }
+    static ScriptComponent first() { return {asset(1), true}; }
+    static ScriptComponent second() { return {asset(2), false}; }
+    static ScriptComponent invalid() { return {{}, true}; }
+    static constexpr std::string_view kInvalidMessage =
+        "script component: asset is the null asset ID, must name a script asset";
+};
+
 template <typename T>
 std::string typeName()
 {
@@ -173,7 +187,7 @@ double lengthOf(const Vec3& v)
 } // namespace
 
 using AllComponents = std::tuple<NameComponent, TransformComponent, StaticMeshComponent,
-                                 CameraComponent, DirectionalLightComponent>;
+                                 CameraComponent, DirectionalLightComponent, ScriptComponent>;
 
 TEMPLATE_LIST_TEST_CASE("A component is added, read, replaced and removed", "[scene][components]",
                         AllComponents)

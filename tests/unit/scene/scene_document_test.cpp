@@ -30,6 +30,7 @@ using engine::scene::LoadedScene;
 using engine::scene::NameComponent;
 using engine::scene::Scene;
 using engine::scene::SceneId;
+using engine::scene::ScriptComponent;
 using engine::scene::StaticMeshComponent;
 using engine::scene::TransformComponent;
 using lpe_test::assetId;
@@ -135,6 +136,8 @@ Scene richScene()
     add(scene, sun, NameComponent{"Sun"});
     add(scene, sun, DirectionalLightComponent{{0.0F, -1.0F, 0.0F}, {1.0F, 0.9F, 0.75F}, 3.5F});
     add(scene, sun, StaticMeshComponent{assetId(1), {}});
+    add(scene, sun, ScriptComponent{assetId(5), false});
+    add(scene, lighthouse, ScriptComponent{assetId(6), true});
 
     const EntityId eye = makeEntity(scene);
     add(scene, eye, CameraComponent{0.8F, 0.05F, 2500.0F});
@@ -263,6 +266,7 @@ TEST_CASE("A scene reads back logically identical", "[scene][document]")
         checkSame<StaticMeshComponent>(original, copy, entity);
         checkSame<CameraComponent>(original, copy, entity);
         checkSame<DirectionalLightComponent>(original, copy, entity);
+        checkSame<ScriptComponent>(original, copy, entity);
         if (original.hasComponent<TransformComponent>(entity)) {
             CHECK(sameBits(original.component<TransformComponent>(entity).value(),
                            copy.component<TransformComponent>(entity).value()));
@@ -381,9 +385,9 @@ TEST_CASE("A scene document's entities are checked", "[scene][document]")
           "entities[2].id: entity " + kFirstEntity + " is also entities[0]");
     CHECK(errorOf(withEntities(R"({"id": ")" + kFirstEntity + R"(", "components": []})")) ==
           "entities[0].components: expected an object, found array");
-    CHECK(errorOf(withComponents(R"("script": {"path": "door.lua"})")) ==
-          "entities[0].components.script: unknown component type; known: name, transform, "
-          "staticMesh, camera, directionalLight");
+    CHECK(errorOf(withComponents(R"("rigidBody": {"mass": 2})")) ==
+          "entities[0].components.rigidBody: unknown component type; known: name, transform, "
+          "staticMesh, camera, directionalLight, script");
     CHECK(errorOf(withComponents(R"("camera": 5)")) ==
           "entities[0].components.camera: expected an object, found number 5");
 }
@@ -435,6 +439,49 @@ TEST_CASE("A scene document's component values are checked", "[scene][document]"
         "entities[0].components.directionalLight: direction is (0, 0, 0), must not be zero");
     CHECK(errorOf(withComponents(R"("directionalLight": {"color": {"g": -0.5}})")) ==
           "entities[0].components.directionalLight: color.g is -0.5, must be at least 0");
+}
+
+TEST_CASE("Script components are written and read", "[scene][document]")
+{
+    Scene scene = makeScene();
+    const EntityId entity = makeEntity(scene);
+    add(scene, entity, ScriptComponent{assetId(7), false});
+    const std::string text = engine::scene::sceneToJson(scene);
+    CHECK(text.find("        \"script\": {\n"
+                    "          \"asset\": \"" +
+                    assetId(7).toString() +
+                    "\",\n"
+                    "          \"enabled\": false\n"
+                    "        }\n") != std::string::npos);
+    const LoadedScene loaded = load(text);
+    CHECK(loaded.scene.component<ScriptComponent>(entity).value() ==
+          ScriptComponent{assetId(7), false});
+
+    // "enabled" defaults to true.
+    const LoadedScene enabled =
+        load(withComponents(R"("script": {"asset": ")" + assetId(7).toString() + R"("})"));
+    CHECK(enabled.scene.component<ScriptComponent>(enabled.scene.entityIds().front())
+              .value()
+              .enabled);
+
+    CHECK(errorOf(withComponents(R"("script": {})")) ==
+          "entities[0].components.script.asset: missing");
+    CHECK(errorOf(withComponents(R"("script": {"asset": ")" + assetId(7).toString() +
+                                 R"(", "enabled": 1})")) ==
+          "entities[0].components.script.enabled: expected true or false, found number 1");
+    CHECK(errorOf(withComponents(R"("script": {"asset": "door.lua"})"))
+              .starts_with("entities[0].components.script.asset: asset ID 'door.lua':"));
+
+    AssetRegistry registry(std::filesystem::path("unused"));
+    REQUIRE_FALSE(registry.registerAsset(assetId(7), AssetType::Script,
+                                         AssetPath::parse("scripts/door.lua").value()));
+    REQUIRE_FALSE(registry.registerAsset(assetId(8), AssetType::Mesh,
+                                         AssetPath::parse("models/door.obj").value()));
+    CHECK(load(text, &registry).scene.entityCount() == 1);
+    CHECK(errorOf(withComponents(R"("script": {"asset": ")" + assetId(8).toString() + R"("})"),
+                  &registry) == "entities[0].components.script.asset: asset " +
+                                    assetId(8).toString() +
+                                    ": 'models/door.obj' is a mesh, expected a script");
 }
 
 TEST_CASE("Asset references are checked against a registry when one is given", "[scene][document]")

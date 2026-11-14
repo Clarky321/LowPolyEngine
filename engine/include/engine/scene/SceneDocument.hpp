@@ -1,6 +1,6 @@
 #pragma once
 
-// A scene as a versioned JSON document (M4.4, ADR 0004, ADR 0023):
+// A scene as a versioned JSON document (M4.4, M4.5; ADR 0004, ADR 0023):
 //
 //   {
 //     "format": "lpe.scene",
@@ -20,7 +20,8 @@
 //                      "farPlane": 1000.0},
 //           "directionalLight": {"direction": {"x": 0.0, "y": -1.0, "z": 0.0},
 //                                "color": {"r": 1.0, "g": 1.0, "b": 1.0},
-//                                "intensity": 1.0}
+//                                "intensity": 1.0},
+//           "script": {"asset": "<asset ID>", "enabled": true}
 //         }
 //       }
 //     ]

@@ -2,6 +2,7 @@
 #include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/NameComponent.hpp"
 #include "engine/scene/Scene.hpp"
+#include "engine/scene/ScriptComponent.hpp"
 #include "engine/scene/StaticMeshComponent.hpp"
 #include "engine/scene/TransformComponent.hpp"
 
@@ -165,6 +166,16 @@ std::optional<core::Error> validate(const StaticMeshComponent& component)
         return core::Error{std::format("{} component: mesh is the null asset ID, must name a "
                                        "mesh asset",
                                        StaticMeshComponent::kTypeName)};
+    }
+    return std::nullopt;
+}
+
+std::optional<core::Error> validate(const ScriptComponent& component)
+{
+    if (component.asset.isNull()) {
+        return core::Error{std::format("{} component: asset is the null asset ID, must name a "
+                                       "script asset",
+                                       ScriptComponent::kTypeName)};
     }
     return std::nullopt;
 }
