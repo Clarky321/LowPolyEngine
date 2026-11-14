@@ -41,7 +41,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.8 | Floating world preview | done |
 | M3.9 | Local island water | done |
 | M3.10 | Clouds | done |
-| M3.11 | Settings as versioned JSON | in progress |
+| M3.11 | Settings as versioned JSON | done |
 | M3.12 | WorldGen panel with Dear ImGui | planned |
 | M3.13 | Final verification and pull request | planned |
 
