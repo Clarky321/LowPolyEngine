@@ -87,7 +87,7 @@ Recommended proof-of-concept before adopting Raven:
 4. Test on at least Windows and one Linux desktop environment if both are targets.
 5. Verify API stability, licensing, integration model and how undo/redo/data binding would work.
 
-**Decision:** Dear ImGui for initial editor; Raven may replace it only after a documented prototype proves a meaningful advantage. Do not maintain two editor UI stacks in the production app. Whether the M5 editor uses Raven on the conditions of ADR 0019 is the user's decision before M5; until then this decision stands.
+**Decision:** Dear ImGui for initial editor; Raven may replace it only after a documented prototype proves a meaningful advantage. Do not maintain two editor UI stacks in the production app. Raven is the preliminarily preferred UI of the M5 editor (ADR 0019, option 2, accepted only after the checks listed there, Linux and High-DPI among them); until then this decision stands and Dear ImGui stays.
 
 Raven repository: <https://github.com/oscar-soirey/Raven>
 

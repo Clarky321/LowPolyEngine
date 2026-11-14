@@ -136,7 +136,7 @@ Use an ECS or ECS-like component model, with EnTT as the initial candidate. M4 i
 - `DirectionalLightComponent` (the renderer has one directional light; other light kinds come with renderer support)
 - `ScriptComponent`
 - `NameComponent` / editor metadata
-- a parent link between entities, where prefabs need references inside them (proposed for M4.6)
+- `ParentComponent`, a parent link between entities that prefabs need for references inside them (M4.6; a relationship only, no transform inheritance in M4)
 
 Use stable UUID-like IDs for saved entities and assets. Runtime EnTT handles are transient. A scene document should contain entities, components, references and version metadata. Prefabs are reusable entity/component compositions with overrides. Decide JSON vs another format by testing human readability, schema migration and dependency availability; do not persist implementation-specific object layout.
 
@@ -170,7 +170,7 @@ First panels:
 5. Console: logs, script errors and diagnostics.
 6. Project/assets: browse assets and open/save project.
 
-Then add transform gizmos, undo/redo, asset import, prefab editor, brush-based terrain edits and richer materials. Validate Raven in a standalone prototype; only consider replacing ImGui after a short decision record demonstrates a real advantage and the viewport integration works on target platforms. The prototype's plan, isolation rules, results and decision criteria are in `docs/experiments/raven-ui-evaluation.md`: a conditional pass on Windows (2026-11-14); the conditions for using Raven in M5 are in ADR 0019 (proposed).
+Then add transform gizmos, undo/redo, asset import, prefab editor, brush-based terrain edits and richer materials. Validate Raven in a standalone prototype; only consider replacing ImGui after a short decision record demonstrates a real advantage and the viewport integration works on target platforms. The prototype's plan, isolation rules, results and decision criteria are in `docs/experiments/raven-ui-evaluation.md`: a conditional pass on Windows (2026-11-14). Raven is preliminarily preferred for the M5 editor; ADR 0019 (still proposed) lists the checks before its final acceptance, and Dear ImGui stays until then.
 
 The engine editor should author characters as entities assembled from components and imported assets. Modeling, UV work, rigging and detailed mesh creation should initially happen in external tools such as Blender; the engine imports those assets, sets up materials/colliders/animation references and attaches Lua behavior. Do not attempt to build Blender inside this engine.
 

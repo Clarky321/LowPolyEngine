@@ -1,6 +1,6 @@
 # ADR 0019: Editor UI after the Raven evaluation
 
-- **Status:** Proposed (2026-11-14); waits for the user's decision before M5 is planned. Nothing in the engine changes until it is accepted.
+- **Status:** Proposed (2026-11-14). The user accepted option 2 preliminarily on 2026-11-14 (see *Preliminary acceptance*); it becomes Accepted only after the checks listed there. Nothing in the engine changes until then.
 - **Related:** ADR 0018 (Dear ImGui as the debug UI), `docs/TECH_STACK.md` §5, `docs/ENGINE_PLAN.md` §9 and M5, `docs/experiments/raven-ui-evaluation.md`, AGENTS.md §3 and §7
 
 ## Context
@@ -39,6 +39,24 @@ Mirrors ADR 0018, so no OpenGL type leaves the renderer boundary and no SDL type
 - **Engine loop:** an internal hook in `Platform::pollEvents` hands raw events to the UI (as `forwardEventToDebugUi` does for Dear ImGui), and the frame gets one UI draw point between `Renderer::beginFrame` and `endFrame`; Raven runs with `RInitDesc::disable_render_thread` on the main thread, which owns the OpenGL context. Raven's global state (one `Rinit` per process, callbacks without user data) is owned by one engine object.
 - **Editor:** the editor application (`editor/`, M5) builds its panels with Raven's C API and XML layouts; the 3D viewport uses the draw callback; documents, commands, selection and undo stay the editor's own (Raven is only the interface).
 - **Dear ImGui stays** for island-preview's WorldGen panel and the engine's debug UI until a separate migration is accepted. The editor application itself uses one UI stack (`docs/TECH_STACK.md` §5).
+
+## Preliminary acceptance (2026-11-14)
+
+The user chose option 2: Raven is the preferred interface of the M5 editor, conditionally. Until this ADR is accepted:
+
+- Dear ImGui stays: the WorldGen panel of island-preview is not rewritten and the debug UI is not removed.
+- Raven does not enter the production engine in M4.
+
+Before M5, in addition to the conditions above:
+
+1. Build and run on Linux.
+2. Run on a real display scaled above 100 %.
+3. Check the clipboard and the text widgets the editor needs.
+4. Check the behaviour on focus loss.
+5. Check the limits of the host platform.
+6. Confirm that the project can safely maintain its own OpenGL backend and SDL3 bridge.
+
+If the Linux or High-DPI check finds a critical problem, the choice of UI is reopened and Dear ImGui is considered again.
 
 ## Consequences
 

@@ -50,7 +50,7 @@ Package facts checked on 2026-11-14 with Conan 2.34.0 against Conan Center (`con
 - **`lua/5.5.0`** — the newest Lua in Conan Center (upstream 5.5.1 is not there, as ADR 0001 notes); recipe revision `2bac82d0b9a1744cfaf436c5c1d01bee`; MIT; static library compiled as C by default (`compile_as_cpp=False`, `with_tools=False`, `with_readline=False`); no prebuilt binary for the project's Windows profile, so `--build=missing` builds it from source (like `imgui`); on Linux the package defines `LUA_USE_DLOPEN` and `LUA_USE_POSIX` and links `dl` and `m`, so native module loading exists in the library and must stay unreachable from scripts.
 - **LuaBridge3** — not in Conan Center (`luabridge*`, `luabridge3*`: no recipes). Its README (read on 2026-11-14) states MIT, header-only, C++17, tests with PUC-Lua 5.5.0, and work with or without C++ exceptions; the newest release is the pre-release `3.0-rc13`, and the only package manager it documents is vcpkg. Adopting it would mean vendoring a pinned tag under `third_party/` (`docs/TECH_STACK.md` §6).
 - **sol2** `sol2/3.5.0` is in Conan Center but not a candidate of the plan; it is listed in the M4.5 ADR only as a considered alternative.
-- **Lockfile:** the repository has no `conan.lock` although `docs/TECH_STACK.md` §7 and `docs/PROJECT_STRUCTURE.md` list one; CI and the wrappers run `conan install` without a lockfile. See *Open questions*.
+- **Lockfile:** the repository has no `conan.lock` although `docs/TECH_STACK.md` §7 and `docs/PROJECT_STRUCTURE.md` list one; CI and the wrappers run `conan install` without a lockfile. M4.5 creates it once EnTT and Lua are in (decided, see *Decisions on the open questions*).
 
 Every new dependency follows AGENTS.md §7: purpose, exact version and recipe revision, license, platforms, why the standard library and current dependencies are not enough, a row in `docs/references/THIRD_PARTY_NOTICES.md`, and an ADR.
 
@@ -275,8 +275,9 @@ The ADR fixes: size; generation (where the entropy comes from — never the worl
 - Minimal script lifecycle: a script returns a table with optional `start(entity)` and `update(entity, dt)`; the runtime runs `start` once and `update` when its owner calls it (tests call it directly). The application loop is not changed: a game update system waits until the application lifecycle for it is designed.
 - `ScriptComponent`: the `AssetId` of a Script asset and `enabled`; the runtime error state lives in the runtime, keyed by entity ID, and is not serialized. The scene document (M4.4) gains the `script` component; the ADR of M4.4 records the addition (format version 1 is still unreleased while M4 is not merged).
 - Error isolation: every entry from C++ into Lua is a protected call with a message handler that adds the script name and line; no C++ exception crosses into or out of Lua; a failing script instance is marked failed with its message and stops being called, while the scene, other scripts and the engine continue.
+- Conan lockfile (approved 2026-11-14), after EnTT and Lua are in and the M4 dependency graph is final: create `conan.lock`; check that it serves Windows MSVC and Linux GCC, one lockfile for both profiles if Conan allows it, otherwise one per platform with the reason documented; use it in CI and in the Windows wrappers (`scripts/windows/`), so that every build resolves the same versions and recipe revisions; update `docs/TECH_STACK.md` §7, `docs/PROJECT_STRUCTURE.md`, `README.md` and the ADR.
 
-**Decisions to make (ADR "Lua runtime and bindings"):** package, version and options; C or C++ error mechanism; binding layer; opened libraries; budgets; the Lua API surface and its error messages; the script entry points; how instances are reset or reloaded (no hot reload in M4, but restarting a runtime is supported and tested).
+**Decisions to make (ADR "Lua runtime and bindings"):** package, version and options; C or C++ error mechanism; binding layer; opened libraries; budgets; the Lua API surface and its error messages; the script entry points; how instances are reset or reloaded (no hot reload in M4, but restarting a runtime is supported and tested); the lockfile layout (one or per platform) and how CI and the wrappers pass it to `conan install`.
 
 **Out of scope:** hot reload, events and subscriptions, input access from Lua, spawning or destroying entities from Lua, coroutine scheduling, a game update loop in the application, debugging tools, a second VM.
 
@@ -288,7 +289,7 @@ The ADR fixes: size; generation (where the entropy comes from — never the worl
 
 **Failure cases:** syntax error; runtime error; missing entity; destroyed entity during a call; wrong arguments; missing or wrongly typed script asset; script too large; endless execution; memory exhaustion; bytecode input.
 
-**Done when:** the acceptance tests pass in CI on all four jobs and the ADR records the runtime and binding decisions.
+**Done when:** the acceptance tests pass in CI on all four jobs, CI and the wrappers build from the lockfile, and the ADR records the runtime, binding and lockfile decisions.
 
 **Visual check:** none.
 
@@ -297,24 +298,24 @@ The ADR fixes: size; generation (where the entropy comes from — never the worl
 **Goal:** reusable groups of entities saved as prefab documents and instantiated into scenes.
 
 **Scope:**
-- An entity reference to make links inside a prefab possible: the M4 component set has none, so this step adds a `ParentComponent` holding the parent's `EntityId` (a relationship only; no world transform propagation in M4). Validation: the parent exists in the same scene, is not the entity itself, no cycles. The step defines what destroying a parent does (destroy its children, or detach them) and the scene document gains the component. *(Proposed; see Open questions.)*
+- `ParentComponent` (approved 2026-11-14), the entity reference that links inside a prefab need: the parent's `EntityId`, a relationship only. Rules: no self-parenting; no cycles; the parent exists; parent and child belong to the same scene; destroying a parent detaches its children (their `ParentComponent` is removed) and does not destroy them; the links are checked when a scene or prefab document is loaded and when a prefab is instantiated. The scene document gains the component. No transform inheritance in M4: hierarchical transforms get a milestone of their own.
 - A prefab document (ADR 0004 envelope, its own `format` id, `formatVersion` 1): the prefab's asset ID (cross-checked with the registry), entities with prefab-local IDs unique within the document, their components, references to other assets by asset ID, references between its entities by local ID, minimal metadata.
 - Creating a prefab from a set of scene entities: local IDs assigned, internal parent links kept, a reference to an entity outside the set rejected.
 - Saving and loading prefab documents with the same rules as scene documents (staged validation, limits, atomic write).
 - Instantiation into a scene: new `EntityId`s for every prefab entity, the local → new ID map applied to all internal references, components created with the same validation as everywhere else, nothing shared between instances (values are copied). All-or-nothing: on any error the scene is unchanged.
 - The link from an instance to its prefab: the minimal model the ADR chooses, for example a component on each instance entity with the prefab's asset ID, an instance ID and the local ID, so a later milestone can update instances. Instances store their full component values in the scene; there are no overrides in M4.
 
-**Decisions to make (ADR "Prefab model"):** the entity-reference component and its destroy policy; local ID form; the instance link; what a scene stores for an instance; limits.
+**Decisions to make (ADR "Prefab model"):** how `ParentComponent` is stored and validated within the rules above; local ID form; the instance link; what a scene stores for an instance; limits.
 
 **Out of scope:** a prefab editor, nested prefabs, prefab variants or inheritance, overrides for every component, live links or automatic updates of instances when the prefab changes, a visual editor.
 
 **Acceptance criteria:** a prefab can be created, saved, loaded and instantiated into a scene without losing data or identity; two instances are independent and have unique entity IDs; internal links point inside their own instance.
 
-**Unit tests:** create a prefab from entities with links; save and load it; instantiate; two instances: distinct IDs, independent values (changing one leaves the other), links inside each instance; ParentComponent validation (missing parent, self, cycle) and the destroy policy; a scene with instances round-trips with links and instance data; failure cases below; the scene unchanged after a failed instantiation.
+**Unit tests:** create a prefab from entities with links; save and load it; instantiate; two instances: distinct IDs, independent values (changing one leaves the other), links inside each instance; ParentComponent validation (missing parent, self, cycle, a parent from another scene) and the destroy rule (children detached, kept with their IDs and components); a scene with instances round-trips with links and instance data; failure cases below; the scene unchanged after a failed instantiation.
 
 **Integration tests:** a prefab saved to a temporary project, registered in the manifest, loaded through its asset ID and instantiated twice into a loaded scene, then the scene saved and loaded again.
 
-**Failure cases:** missing prefab asset; broken prefab document; duplicate or unknown local IDs; a link to a local ID that does not exist; a link to an entity outside the prefab; an unknown asset referenced by a prefab entity; a prefab ID that disagrees with the registry.
+**Failure cases:** missing prefab asset; broken prefab document; duplicate or unknown local IDs; a link to a local ID that does not exist; a link to an entity outside the prefab; a self-parent or a cycle in a scene or prefab document; an unknown asset referenced by a prefab entity; a prefab ID that disagrees with the registry.
 
 **Done when:** prefabs pass their tests in CI and the ADR records the model.
 
@@ -345,7 +346,7 @@ The ADR fixes: size; generation (where the entropy comes from — never the worl
 | EnTT as the internal ECS | M4.2 | package pin, isolation from public headers, access contract, component limits |
 | Asset identity and registry | M4.3 | asset ID, types, path policy, manifest, missing assets |
 | Scene document format | M4.4 | the scene schema ADR 0004 left to M4; amended by M4.5 and M4.6 for new components |
-| Lua runtime and bindings | M4.5 | package and options, error mechanism, binding layer, sandbox, budgets, API |
+| Lua runtime and bindings | M4.5 | package and options, error mechanism, binding layer, sandbox, budgets, API; the Conan lockfile |
 | Prefab model | M4.6 | entity references, local IDs, instance link |
 | Amendments | M4.2, M4.4, M4.5 | ADR 0001 *Verification* (EnTT, Lua confirmed); ADR 0004 (shared float writer, new document kinds) |
 
@@ -390,17 +391,19 @@ The Raven evaluation is not a condition for M4.
 - `docs/ENGINE_PLAN.md` §7 named `LightComponent` and a `MaterialComponent`; this plan uses `DirectionalLightComponent` (the renderer has one directional light) and a material reference on `StaticMeshComponent`; §7 is aligned with the plan in the same commit.
 - The task description put `StaticMeshComponent` (with mesh and material asset IDs) into M4.2, before asset IDs exist (M4.3). Under the one-sub-milestone rule M4.2 could not be finished without part of M4.3, so the component moved to M4.3.
 - Material files are deferred to M6 by ADR 0010; M4 gives materials asset IDs and paths but no file format or loader.
-- Links between entities inside a prefab (task description, M4.6) need a component that refers to another entity; the M4 component set had none, hence the proposed `ParentComponent` in M4.6.
-- `docs/TESTING_AND_CI.md` lists "hierarchy validation" among scene tests; with the proposed `ParentComponent` it is covered in M4.6.
+- Links between entities inside a prefab (task description, M4.6) need a component that refers to another entity; the M4 component set had none, hence `ParentComponent` in M4.6.
+- `docs/TESTING_AND_CI.md` lists "hierarchy validation" among scene tests; with `ParentComponent` it is covered in M4.6.
 - WorldGen's shortest-float JSON writer lives inside `engine/src/worldgen/SettingsFile.cpp`; scene documents need the same behavior without depending on WorldGen, hence the shared internal helper in M4.4.
 - On Linux the Lua package enables `dlopen`-based module loading; the sandbox in M4.5 must keep `package` and `require` closed.
 
-## Open questions for plan approval
+## Decisions on the open questions
 
-1. **Lockfile.** Proposal: create `conan.lock` in M4.5, when the M4 dependency graph is complete (EnTT, Lua), for both profiles, use it in the wrappers and CI, and record it in an ADR amendment. Alternatives: keep pinning versions only (today's practice), or add the lockfile as its own preparation task. M4.5 does it only if approved.
-2. **`ParentComponent` in M4.6** as the entity reference that prefab links need (relationship only, no transform propagation). Alternative: drop intra-prefab links from M4 and keep prefabs as flat entity groups.
-3. **`StaticMeshComponent` in M4.3** instead of M4.2 (asset IDs first).
-4. **Raven experiment branch** — done as proposed: the prototype is on `experiment/raven-ui-evaluation`; only its report, screenshots and the proposed ADR 0019 are on the M4 branch. Whether the M5 editor uses Raven (ADR 0019) is decided before M5, not in M4.
+Approved by the user on 2026-11-14; the details are in the steps named.
+
+1. **Lockfile:** `conan.lock` is created in M4.5, after EnTT and Lua, and used by CI and the Windows wrappers; one lockfile for both profiles if possible, otherwise per platform with the reason documented (M4.5).
+2. **`ParentComponent`** is added in M4.6 as a relationship only, with the rules in M4.6 (children are detached, not destroyed, when their parent is destroyed); no transform inheritance in M4.
+3. **`StaticMeshComponent`** is implemented in M4.3 together with the asset registry, because it depends on `AssetId`; M4.2 keeps `NameComponent`, `TransformComponent`, `CameraComponent` and `DirectionalLightComponent`.
+4. **Raven experiment branch** — done as proposed: the prototype is on `experiment/raven-ui-evaluation`; only its report, screenshots and ADR 0019 are on the M4 branch. ADR 0019's option 2 (Raven for the M5 editor) is accepted preliminarily, on the checks listed in the ADR; nothing of Raven enters the engine in M4, and Dear ImGui stays.
 
 ## Risks
 
