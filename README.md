@@ -1,8 +1,10 @@
 # LowPolyEngine
 
-A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M2 — low-poly renderer and materials** is done on the branch `milestone/m2-renderer-materials` and waits for acceptance before it is merged into `main`: normals and UVs, PNG textures, materials with a base color and an optional texture, one directional light with flat shading, and import of a documented OBJ subset (plan and status of each step: `docs/milestones/m2-renderer-materials.md`). Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context) and M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay). See `docs/ENGINE_PLAN.md` for the roadmap.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M3 — procedural floating sky archipelago** is done on the branch `milestone/m3-floating-archipelago` and waits for acceptance and the merge into `main`: a seeded archipelago of floating islands at different altitudes, with rocky undersides, their own palettes, local water (lakes, streams, waterfalls) and low-poly clouds between them, in the art direction of *AER: Memories of Old* (plan, status and verification of each step: `docs/milestones/m3-floating-archipelago.md`; island-preview generates and shows the floating islands — placement in 3D, shapes, closed flat-shaded meshes, palettes, local lakes, streams with ponds and waterfalls, drifting low-poly clouds — under a stylized sky, saves and loads world settings as versioned JSON, and edits them in a Dear ImGui panel that regenerates the world in place; screenshots of several seeds: `docs/screenshots/m3/`). Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context), M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay) and M2 (normals and UVs, PNG textures, materials with a base color and an optional texture, one directional light with flat shading, import of a documented OBJ subset; pull request #3). See `docs/ENGINE_PLAN.md` for the roadmap.
 
-![island-preview at the end of M2: lit, flat-shaded test scene with a textured crate and an imported lighthouse](docs/screenshots/m2/004-imported-model.png)
+![island-preview in M3.10: a generated archipelago of floating islands with their own palettes, rocky undersides and low-poly clouds between them under a pastel sky](docs/screenshots/m3/005-clouds.png)
+
+![island-preview in M3.9 with --seed 19 --island 9: a floating island with a lake, a stream to its rim and a waterfall falling away below it](docs/screenshots/m3/003-island-water.png)
 
 ## Running the island preview
 
@@ -19,10 +21,11 @@ scripts\windows\run.bat debug
 | Shift | fly faster |
 | mouse wheel | change flying speed |
 | F1 | toggle the debug overlay |
+| F2 | show or hide the WorldGen panel (Dear ImGui): edit every world setting, Regenerate the world in place, save and load settings files |
 | F12 | save a screenshot to `screenshots/` (ignored by Git) |
 | Escape | quit |
 
-Keys are physical positions, so WASD works on any keyboard layout. Command-line options: `island-preview [--frames N] [--assets DIR] [--screenshot FILE.png] [--model FILE.obj]`; `--screenshot` saves the last frame (frame 120 unless `--frames` is given) and exits; `--model` loads another OBJ file instead of the scene's lighthouse (used by tests). This is how the images in `docs/screenshots/` are made (ADR 0006).
+Keys are physical positions, so WASD works on any keyboard layout. By default island-preview generates the archipelago of the default world settings (seed 1) and starts with a view over it; flying speed starts at 30 m/s. Command-line options: `island-preview [--frames N] [--assets DIR] [--screenshot FILE.png] [--seed N] [--island N] [--settings FILE.json] [--save-settings FILE.json] [--panel] [--test-scene [--model FILE.obj]]`; `--screenshot` saves the last frame (frame 120 unless `--frames` is given) and exits; `--seed` generates another world; `--island N` starts with a close view of island N (from 0, in placement order), beside its waterfall if it has one; `--settings FILE.json` starts from a world settings file (`assets/worlds/default.json` holds the defaults; `--seed` replaces its seed), `--save-settings FILE.json` writes the settings in use; `--panel` opens the WorldGen panel at the start; `--test-scene` shows the M1/M2 test scene instead, where `--model` loads another OBJ file instead of the lighthouse (used by tests). This is how the images in `docs/screenshots/` are made (ADR 0006).
 
 ## Building on Windows
 
@@ -106,16 +109,19 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
   - `core/` — results, logging, frame clock, files, PNG images, math aliases (GLM).
   - `platform/` — window, OpenGL context, input; SDL3 only in `engine/src/platform/sdl3/`.
   - `geometry/` — CPU-side `MeshData`, primitive builders and OBJ subset import (ADR 0012); no GPU or SDL code.
+  - `worldgen/` — deterministic world generation, pure CPU: seeded random numbers (ADR 0003), 2D noise (ADR 0003 Amendment 2), the validated world settings (ADR 0013), island placement in 3D (ADR 0013 Amendment 1), island shapes: outline, top surface and underside (ADR 0014), closed island meshes (ADR 0014 Amendment 1) and island palettes as vertex colours (ADR 0015), local water: lakes, streams with ponds and waterfalls (ADR 0016), clouds and their drift (ADR 0017), whole archipelagos (ADR 0014 Amendment 2) and settings files as versioned JSON (ADR 0004 Amendment 1); no GPU, SDL or ImGui code.
   - `render/` — renderer API with mesh, texture and material handles and one directional light; OpenGL/GLAD only in `engine/src/render/opengl/`.
   - `camera/` — camera math and the free-fly controller.
-  - `debug/` — built-in pixel font for on-screen diagnostics.
-- `sandbox/island-preview/` — first executable: free-fly test scene, lit and partly textured, with an imported model and a debug overlay (see above; `assets/` is found relative to the working directory).
+  - `debug/` — built-in pixel font for on-screen diagnostics, and the Dear ImGui debug UI (`DebugUi`, ADR 0018; its SDL3 and OpenGL 3 backends only in the platform and renderer folders).
+- `sandbox/island-preview/` — first executable: the generated floating archipelago with its translucent local water and drifting clouds under a sky dome (default) or, with `--test-scene`, the lit, partly textured M1/M2 test scene with an imported model; free-fly camera and debug overlay (see above; `assets/` is found relative to the working directory).
 - `assets/shaders/` — GLSL sources loaded at runtime.
 - `assets/textures/` — textures of the test scene (PNG, made for the project; origin in `docs/references/THIRD_PARTY_NOTICES.md`).
+- `assets/worlds/` — world generation settings files (`default.json`, ADR 0004).
 - `assets/models/` — models of the test scene (OBJ subset, ADR 0012; made for the project). A missing or broken asset is logged and the rest of the scene runs.
 - `tests/` — Catch2/CTest tiers: `unit/` (headless), `integration/` (SDL dummy video driver, headless), `rendering/` (label `gpu`, real OpenGL, frame readback).
 - `docs/screenshots/` — captured screenshots per milestone, with how they were made.
 - `third_party/glad/` — generated OpenGL loader; regenerate with `scripts/python/generate_glad.py` (ADR 0005).
+- `third_party/imgui_backends/` — builds Dear ImGui's SDL3 and OpenGL 3 backends from the sources in the Conan `imgui` package (ADR 0018).
 - `third_party/stb_image_write/` — compiles the stb PNG writer (header from Conan) without project warning flags (ADR 0006).
 - `third_party/stb_image/` — compiles the stb PNG decoder the same way, PNG only (ADR 0008).
 - `cmake/` — shared CMake modules (warning policy).

@@ -3,9 +3,9 @@
 #include <glm/trigonometric.hpp>
 
 #include <algorithm>
-#include <array>
 #include <format>
 #include <string>
+#include <vector>
 
 namespace island_preview {
 
@@ -38,28 +38,36 @@ void buildOverlay(engine::debug::TextMeshBuilder& builder, const OverlayData& da
     const Vec2 titleSize = measureText(title, kTitleScale);
     builder.addText(title, {std::max(0.0F, (width - titleSize.x) * 0.5F), 28.0F},
                     TextStyle{.scale = kTitleScale, .color = kTextColor});
-    const std::string subtitle = "M2  RENDERER / MATERIALS";
-    const Vec2 subtitleSize = measureText(subtitle, kTextScale);
-    builder.addText(subtitle, {std::max(0.0F, (width - subtitleSize.x) * 0.5F), 84.0F},
+    const Vec2 subtitleSize = measureText(data.subtitle, kTextScale);
+    builder.addText(data.subtitle, {std::max(0.0F, (width - subtitleSize.x) * 0.5F), 84.0F},
                     TextStyle{.scale = kTextScale, .color = kAccentColor});
 
     // Diagnostics panel in the bottom-left corner.
     const auto& camera = data.camera;
-    const std::array<std::string, 9> lines{
-        std::format("FPS: {:.0f}   FRAME: {:.2f} MS   MAX: {:.2f} MS", data.frame.framesPerSecond,
-                    data.frame.averageFrameMs, data.frame.maxFrameMs),
-        std::format("RENDERER: {}", data.renderer.api),
-        std::format("GL: {}", data.renderer.driverVersion),
-        std::format("GPU: {}", data.renderer.device),
-        std::format("WINDOW: {} X {}", data.framebuffer.width, data.framebuffer.height),
-        std::format("CAMERA: X {:.1f}  Y {:.1f}  Z {:.1f}  YAW {:.0f}  PITCH {:.0f}",
-                    camera.position.x, camera.position.y, camera.position.z,
-                    glm::degrees(camera.yawRadians), glm::degrees(camera.pitchRadians)),
-        std::format("SPEED: {:.1f} M/S   DRAWS: {}   TRIANGLES: {}", data.moveSpeed,
-                    data.renderStats.drawCalls, data.renderStats.triangles),
-        "HOLD RMB: LOOK   WASD: MOVE   E/Q: UP/DOWN   SHIFT: FAST   WHEEL: SPEED",
-        "F1: OVERLAY   F12: SCREENSHOT   ESC: QUIT",
-    };
+    // Appended in order: GCC 13 at -O3 reports a false array-bounds error for
+    // inserting a std::string into the middle of the vector.
+    std::vector<std::string> lines;
+    lines.reserve(9U + data.scene.size());
+    lines.push_back(std::format("FPS: {:.0f}   FRAME: {:.2f} MS   MAX: {:.2f} MS",
+                                data.frame.framesPerSecond, data.frame.averageFrameMs,
+                                data.frame.maxFrameMs));
+    // The scene facts after the frame statistics, before the renderer lines.
+    for (const std::string& line : data.scene) {
+        lines.push_back(line);
+    }
+    lines.push_back(std::format("RENDERER: {}", data.renderer.api));
+    lines.push_back(std::format("GL: {}", data.renderer.driverVersion));
+    lines.push_back(std::format("GPU: {}", data.renderer.device));
+    lines.push_back(
+        std::format("WINDOW: {} X {}", data.framebuffer.width, data.framebuffer.height));
+    lines.push_back(std::format("CAMERA: X {:.1f}  Y {:.1f}  Z {:.1f}  YAW {:.0f}  PITCH {:.0f}",
+                                camera.position.x, camera.position.y, camera.position.z,
+                                glm::degrees(camera.yawRadians),
+                                glm::degrees(camera.pitchRadians)));
+    lines.push_back(std::format("SPEED: {:.1f} M/S   DRAWS: {}   TRIANGLES: {}", data.moveSpeed,
+                                data.renderStats.drawCalls, data.renderStats.triangles));
+    lines.emplace_back("HOLD RMB: LOOK   WASD: MOVE   E/Q: UP/DOWN   SHIFT: FAST   WHEEL: SPEED");
+    lines.emplace_back("F1: OVERLAY   F2: WORLD PANEL   F12: SCREENSHOT   ESC: QUIT");
 
     float textWidth = 0.0F;
     for (const auto& line : lines) {

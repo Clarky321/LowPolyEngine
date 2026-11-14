@@ -1,0 +1,8 @@
+{
+  "format": "lpe.worldgen.settings",
+  "formatVersion": 1,
+  "seed": "0x0000000000000003",
+  "islands": {
+    "count": "many"
+  }
+}

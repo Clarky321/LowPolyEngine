@@ -6,6 +6,7 @@
 #include "engine/platform/Platform.hpp"
 
 #include <chrono>
+#include <optional>
 #include <string>
 #include <thread>
 #include <utility>
@@ -22,8 +23,8 @@ constexpr std::chrono::milliseconds kMinimizedPause{16};
 class LoopContext final : public AppContext {
 public:
     LoopContext(platform::Window& window, render::Renderer& renderer,
-                const platform::InputState& input)
-        : window_(window), renderer_(renderer), input_(input)
+                const platform::InputState& input, debug::DebugUi* debugUi)
+        : window_(window), renderer_(renderer), input_(input), debugUi_(debugUi)
     {
     }
 
@@ -32,6 +33,7 @@ public:
     const platform::InputState& input() const noexcept override { return input_; }
     platform::PixelSize framebufferSize() const noexcept override { return framebufferSize_; }
     const core::FrameStatsSnapshot& frameStats() const noexcept override { return frameStats_; }
+    debug::DebugUi* debugUi() noexcept override { return debugUi_; }
 
     void requestQuit() noexcept override { quitRequested_ = true; }
     void requestScreenshot(std::filesystem::path path) override
@@ -51,6 +53,7 @@ private:
     platform::Window& window_;
     render::Renderer& renderer_;
     const platform::InputState& input_;
+    debug::DebugUi* debugUi_ = nullptr;
     platform::PixelSize framebufferSize_;
     core::FrameStatsSnapshot frameStats_;
     std::optional<std::filesystem::path> screenshotPath_;
@@ -117,8 +120,18 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
     core::logInfo("render", "{} on {} ({}), driver {}", info.api, info.device, info.vendor,
                   info.driverVersion);
 
+    // After the renderer, so it is destroyed first; it needs the OpenGL context.
+    std::optional<debug::DebugUi> debugUi;
+    if (desc.debugUi) {
+        auto ui = debug::DebugUi::create(window.value(), context.value());
+        if (!ui) {
+            return ui.error();
+        }
+        debugUi.emplace(std::move(ui).value());
+    }
+
     platform::InputState input;
-    LoopContext loop(window.value(), renderer.value(), input);
+    LoopContext loop(window.value(), renderer.value(), input, debugUi ? &*debugUi : nullptr);
     loop.setFramebufferSize(window.value().pixelSize());
     if (auto error = application.start(loop)) {
         return startupError("application start", *error);
@@ -146,18 +159,27 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
         }
         loop.setFramebufferSize(size);
 
+        if (debugUi) {
+            debugUi->beginFrame();
+        }
         application.update(loop, time);
         if (loop.quitRequested()) {
             break;
         }
 
         if (window.value().isMinimized() || size.width <= 0 || size.height <= 0) {
+            if (debugUi) {
+                debugUi->endFrame();
+            }
             std::this_thread::sleep_for(kMinimizedPause);
             continue;
         }
 
         renderer.value().beginFrame(size.width, size.height, desc.clearColor);
         application.render(loop);
+        if (debugUi) {
+            debugUi->render();
+        }
         renderer.value().endFrame();
 
         if (const auto screenshot = loop.takeScreenshotRequest()) {

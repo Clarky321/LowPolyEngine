@@ -11,6 +11,11 @@ namespace engine::platform {
 class Platform;
 class GlContext;
 
+namespace detail {
+// Defined inside the SDL3 platform layer (Sdl3Window.hpp).
+struct NativeWindowAccess;
+} // namespace detail
+
 // Largest accepted width/height in screen coordinates. Far above any current
 // display; it only rejects garbage input before it reaches the OS.
 inline constexpr int kMaxWindowExtent = 16384;
@@ -64,8 +69,10 @@ private:
     struct Impl;
     explicit Window(std::unique_ptr<Impl> impl) noexcept;
 
-    // GlContext needs the native handle, which is otherwise private to the platform layer.
+    // GlContext and the debug UI's platform backend need the native handle,
+    // which is otherwise private to the platform layer.
     friend class GlContext;
+    friend struct detail::NativeWindowAccess;
 
     std::unique_ptr<Impl> impl_;
 };

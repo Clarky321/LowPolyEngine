@@ -1,6 +1,6 @@
 # ADR 0004: Serialization format for world generation settings
 
-- **Status:** Accepted
+- **Status:** Accepted; amended for M3.11 (Amendment 1)
 - **Date:** 2026-11-09
 - **Related:** ADR 0003, `docs/ENGINE_PLAN.md` M3/M4
 
@@ -56,3 +56,15 @@ Rules:
 - Tests required: round-trip, missing fields, unknown fields, wrong types, malformed JSON, newer `formatVersion`, seed above 2^53.
 - If profiling later shows JSON loading is a bottleneck for large scenes, a binary cache can be added next to the JSON source of truth; this ADR does not change.
 - Revisit if the project moves to C++23 (glaze becomes an option) or if M4 scene requirements do not fit this approach.
+
+## Amendment 1: world settings files, format version 1 (M3.11, 2026-11-14)
+
+`engine/worldgen/SettingsFile.hpp` implements the decision for `WorldGenSettings`: `settingsToJson` and `settingsFromJson` for text, `saveSettings` and `loadSettings` for files, `LoadedSettings` with the settings and the warnings. `nlohmann/json.hpp` is included only in `engine/src/worldgen/SettingsFile.cpp` and linked privately.
+
+- **Layout.** The envelope `format` (`"lpe.worldgen.settings"`), `formatVersion` (1), `generatorVersion` and `seed`, then every field of `WorldGenSettings` in nested objects along the path that `validate()` names it by: `"islands": {"altitude": {"min": -20.0, …}}`. Fields are written in the order of declaration (an insertion-ordered object), indented by two spaces, with a final newline. The list of fields and paths is the one validation and clamping use (`engine/src/worldgen/SettingsFields.hpp`), with `water.enabled` before the other water fields, so a new setting cannot be left out of the file. `assets/worlds/default.json` is the default settings written this way; a test keeps it byte for byte equal to `settingsToJson(WorldGenSettings{})`.
+- **Numbers.** Floats are written with the fewest digits that read back to the same float (`0.045`, not `0.04500000178813934`): the writer stores the double nearest to the float's shortest decimal form, which the library prints with those digits, and falls back to the float's exact value if that would not read back bit for bit. Integers are JSON integers; a float such as `12.5` for an integer field is an error, as is a value outside the field's C++ type or outside the float range.
+- **Seed.** `"0x"` and 16 upper-case hex digits; reading accepts `0x`/`0X` with 1 to 16 hex digits in either case. A JSON number is an error that explains why seeds are strings.
+- **Reading.** A first pass with a non-throwing SAX handler finds malformed JSON and reports the library's message with line and column; the document is then parsed with the non-throwing `parse`. Required: an object with `format` equal to the id and an integer `formatVersion` from 1 to `kSettingsFormatVersion`; a newer version is an error that asks for a newer program. Every other field is optional and keeps its default when missing. A field of the wrong type (or an object on its path that is not an object) is an error naming the path, e.g. `islands.count: expected an integer, found string "many"`. Keys the reader does not know, at any depth, are ignored with a warning naming their path. Finally the settings must pass `validate()`, whose message names the field or combination.
+- **Errors** are `core::Error` values; nothing throws across the boundary. `loadSettings` prefixes the file name; `saveSettings` refuses settings that do not pass `validate()`, so a saved file always loads.
+- **Migrations.** Version 1 is the first; there is nothing to migrate yet. The first change of the layout raises `kSettingsFormatVersion` and adds a migration from each older version before the fields are read.
+- **island-preview** reads a file with `--settings FILE.json` (its `--seed` still replaces the file's seed) and writes the settings in use with `--save-settings FILE.json`; warnings are logged, errors stop the start with the file and field.

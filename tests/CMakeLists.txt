@@ -26,10 +26,30 @@ add_executable(lpe_unit_tests
     unit/render/light_test.cpp
     unit/render/material_test.cpp
     unit/sandbox/island_preview_assets_test.cpp
+    unit/sandbox/sky_test.cpp
+    unit/sandbox/worldgen_panel_test.cpp
+    ${PROJECT_SOURCE_DIR}/sandbox/island-preview/Sky.cpp
+    ${PROJECT_SOURCE_DIR}/sandbox/island-preview/WorldGenPanel.cpp
+    unit/worldgen/archipelago_test.cpp
+    unit/worldgen/clouds_test.cpp
+    unit/worldgen/island_layout_test.cpp
+    unit/worldgen/island_mesh_test.cpp
+    unit/worldgen/island_palette_test.cpp
+    unit/worldgen/island_shape_test.cpp
+    unit/worldgen/island_water_test.cpp
+    unit/worldgen/noise_test.cpp
+    unit/worldgen/random_test.cpp
+    unit/worldgen/settings_fields_test.cpp
+    unit/worldgen/settings_file_test.cpp
+    unit/worldgen/world_corpus_test.cpp
+    unit/worldgen/world_gen_settings_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
 # GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
+# The sky (M3.8) and the WorldGen panel's state (M3.12) of island-preview are
+# tested headless.
+target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
 # The committed assets island-preview loads are checked headless too.
 target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets")
 lpe_set_project_warnings(lpe_unit_tests)

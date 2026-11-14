@@ -82,3 +82,7 @@ CMakeUserPresets.json
 
 # Screenshots taken with F12 at runtime. Curated screenshots live in docs/screenshots/.
 /screenshots/
+
+# World settings saved from island-preview's WorldGen panel at runtime (its
+# default file is worlds/world.json). Shipped worlds live in assets/worlds/.
+/worlds/

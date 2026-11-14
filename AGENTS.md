@@ -2,7 +2,7 @@
 
 ## 1. Project intent
 
-This repository is a custom low-poly 3D engine and editor. It is not a game project and is not intended to become a general-purpose Unity/Unreal competitor. The first vertical slice is a native desktop application that renders deterministic procedural islands, water and low-poly clouds, and provides a first-person free-fly camera. Editing, content authoring and gameplay systems are staged after the rendering/world-generation foundation works.
+This repository is a custom low-poly 3D engine and editor. It is not a game project and is not intended to become a general-purpose Unity/Unreal competitor. The first vertical slice is a native desktop application that renders a deterministic procedural archipelago of floating islands in open 3D sky — islands at different altitudes with uneven tops, rocky undersides, their own palettes and local water (lakes, streams, waterfalls), low-poly clouds around and between them, no world ocean — and provides a first-person free-fly camera that moves freely through that space. Editing, content authoring and gameplay systems are staged after the rendering/world-generation foundation works.
 
 ## 2. Languages and boundaries
 
@@ -22,7 +22,7 @@ This repository is a custom low-poly 3D engine and editor. It is not a game proj
 - `glm`, `spdlog`, `EnTT`, Lua, Catch2 and Dear ImGui are approved candidates from the initial plan; they are not automatically approved for every subsystem. Keep dependency count low.
 - Do not introduce a generic framework, plugin system, job system, render graph, asset database or custom memory allocator before a concrete feature requires it.
 - Use stable project-owned IDs/handles for persisted assets and entities. Do not serialize raw pointers, GPU object IDs or EnTT entity handles as durable identity.
-- Generation must be deterministic: the same versioned generator settings and seed must produce the same logical terrain result. Use independent derived random streams for island, vegetation and cloud generation so adding one feature does not reshuffle all other randomness.
+- Generation must be deterministic: the same versioned generator settings and seed must produce the same logical terrain result. Use independent derived random streams for island layout, island shape, local water, vegetation and cloud generation so adding one feature does not reshuffle all other randomness.
 
 ## 4. C++ quality
 
@@ -47,7 +47,8 @@ This repository is a custom low-poly 3D engine and editor. It is not a game proj
 
 ## 6. Rendering and low-poly style
 
-- The art direction is low-poly, color-led, stylized 3D. Flat shading and vertex colors are first-class; textures are supported but not required for every surface.
+- The art direction is low-poly, color-led, stylized 3D: flat shading, vertex colors, crisp geometric faces, expressive palettes, simple but readable forms, minimalist stylized clouds and stylized water. Flat shading and vertex colors are first-class; textures are supported but not required for every surface.
+- Main visual reference: *AER: Memories of Old*; *Journey*, *ABZÛ* and *The Witness* for atmosphere, color and composition. References guide mood only; do not copy their assets, characters or level designs. Do not move toward photorealism, heavy PBR, photorealistic clouds or high-resolution textures.
 - The renderer must support both vertex colors and textured materials. Do not encode all visual information into a single global palette or hard-code biome colors in shaders.
 - Begin with a small forward renderer, directional light and simple material model. Add shadows, post-processing, reflections and advanced lighting incrementally.
 - Prefer data-driven material and biome palettes. Keep shader code versioned and validate shader compilation in tests/smoke runs.

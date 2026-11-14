@@ -1,0 +1,9 @@
+{
+  "format": "lpe.worldgen.settings",
+  "formatVersion": 1,
+  "seed": "0x0000000000000005",
+  "islands": {
+    "count": 6,
+    "colour": "red"
+  }
+}

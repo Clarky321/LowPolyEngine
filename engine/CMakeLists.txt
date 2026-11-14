@@ -2,6 +2,29 @@
 # (docs/PROJECT_STRUCTURE.md). Split it only when boundaries justify it.
 find_package(SDL3 REQUIRED CONFIG)
 find_package(glm REQUIRED CONFIG)
+find_package(nlohmann_json REQUIRED CONFIG)
+find_package(imgui REQUIRED CONFIG)
+
+# World generation (src/worldgen/) must give the same float results with every
+# compiler (ADR 0003): GCC and Clang may otherwise contract a * b + c into a
+# fused multiply-add on CPUs that have one. MSVC's default /fp:precise does not
+# contract. Every worldgen source belongs in this list.
+set(worldgen_sources
+    src/worldgen/Archipelago.cpp
+    src/worldgen/Clouds.cpp
+    src/worldgen/IslandLayout.cpp
+    src/worldgen/IslandMesh.cpp
+    src/worldgen/IslandPalette.cpp
+    src/worldgen/IslandShape.cpp
+    src/worldgen/IslandWater.cpp
+    src/worldgen/Noise.cpp
+    src/worldgen/Random.cpp
+    src/worldgen/SettingsFile.cpp
+    src/worldgen/WorldGenSettings.cpp
+)
+set_source_files_properties(${worldgen_sources} PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>"
+)
 
 add_library(engine STATIC
     src/app/Application.cpp
@@ -12,6 +35,7 @@ add_library(engine STATIC
     src/core/Image.cpp
     src/core/Log.cpp
     src/core/Version.cpp
+    src/debug/DebugUi.cpp
     src/debug/TextMesh.cpp
     src/geometry/FaceNormal.cpp
     src/geometry/MeshData.cpp
@@ -20,16 +44,19 @@ add_library(engine STATIC
     src/platform/Input.cpp
     src/platform/WindowDesc.cpp
     src/platform/sdl3/Sdl3GlContext.cpp
+    src/platform/sdl3/Sdl3ImGui.cpp
     src/platform/sdl3/Sdl3Input.cpp
     src/platform/sdl3/Sdl3Platform.cpp
     src/platform/sdl3/Sdl3Window.cpp
     src/render/Lighting.cpp
     src/render/Material.cpp
     src/render/opengl/GlDiagnostics.cpp
+    src/render/opengl/GlImGui.cpp
     src/render/opengl/GlMesh.cpp
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
     src/render/opengl/GlTexture.cpp
+    ${worldgen_sources}
 )
 
 target_include_directories(engine PUBLIC
@@ -39,19 +66,26 @@ target_include_directories(engine PUBLIC
 target_compile_features(engine PUBLIC cxx_std_20)
 
 # PRIVATE: SDL is used only in src/platform/sdl3/, GLAD only in
-# src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp
-# (ADR 0002, 0005, 0006, 0008). Public headers include none of them; consumers
-# only get them as link dependencies.
+# src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp,
+# nlohmann_json only in src/worldgen/SettingsFile.cpp, the Dear ImGui backends
+# only in src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp
+# (ADR 0002, 0004, 0005, 0006, 0008, 0018). Public headers include none of
+# them; consumers only get them as link dependencies.
 target_link_libraries(engine PRIVATE
     SDL3::SDL3
     glad
+    imgui_backends
+    nlohmann_json::nlohmann_json
     stb_image
     stb_image_write
 )
 
-# PUBLIC: engine/core/Math.hpp aliases GLM types in public headers (ADR 0007).
+# PUBLIC: engine/core/Math.hpp aliases GLM types in public headers (ADR 0007);
+# programs build their debug UI windows with the Dear ImGui API (imgui.h) that
+# engine/debug/DebugUi.hpp sets up (ADR 0018).
 target_link_libraries(engine PUBLIC
     glm::glm
+    imgui::imgui
 )
 
 # The project() version is the single source of truth for the engine version.

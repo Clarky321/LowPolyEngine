@@ -3,7 +3,11 @@
 add_executable(island-preview
     main.cpp
     DebugOverlay.cpp
+    Sky.cpp
     TestScene.cpp
+    WorldGenPanel.cpp
+    WorldGenPanelUi.cpp
+    WorldScene.cpp
 )
 
 target_link_libraries(island-preview PRIVATE engine)

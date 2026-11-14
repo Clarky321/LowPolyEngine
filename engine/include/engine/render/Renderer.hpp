@@ -6,6 +6,7 @@
 #include "engine/geometry/MeshData.hpp"
 #include "engine/platform/GlContext.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -170,6 +171,17 @@ struct RendererInfo {
     std::string vendor;
 };
 
+// Meshes, textures and materials the renderer holds: created and not yet
+// destroyed. For diagnostics and leak checks (a program that replaces its
+// resources keeps these level).
+struct ResourceCounts {
+    std::size_t meshes = 0;
+    std::size_t textures = 0;
+    std::size_t materials = 0;
+
+    friend bool operator==(const ResourceCounts&, const ResourceCounts&) = default;
+};
+
 // Work submitted in one frame.
 struct RenderStats {
     std::uint32_t drawCalls = 0;
@@ -267,6 +279,9 @@ public:
 
     // Statistics of the last completed frame.
     [[nodiscard]] const RenderStats& lastFrameStats() const noexcept;
+
+    // Resources currently alive.
+    [[nodiscard]] ResourceCounts resourceCounts() const noexcept;
 
     [[nodiscard]] const RendererInfo& info() const noexcept;
 
