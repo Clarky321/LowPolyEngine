@@ -2,8 +2,10 @@
 
 #include "../core/DocumentMigration.hpp"
 #include "../core/JsonSupport.hpp"
+#include "ComponentJson.hpp"
 
 #include "engine/core/FileSystem.hpp"
+#include "engine/scene/EntityComponents.hpp"
 
 #include <array>
 #include <format>
@@ -17,495 +19,186 @@ namespace engine::scene {
 namespace {
 
 using core::json::describe;
-using core::json::floatNumber;
 using core::json::Json;
 using core::json::OrderedJson;
-using core::json::readBool;
-using core::json::readFloat;
-using core::json::readString;
 using core::json::shortened;
+using json::ComponentReader;
+using json::join;
 
-// Component keys in documents, in the order they are written.
-constexpr std::string_view kNameKey = "name";
-constexpr std::string_view kTransformKey = "transform";
-constexpr std::string_view kStaticMeshKey = "staticMesh";
-constexpr std::string_view kCameraKey = "camera";
-constexpr std::string_view kLightKey = "directionalLight";
-constexpr std::string_view kScriptKey = "script";
+// The links of scene documents, written after the plain components.
+constexpr std::string_view kParentKey = "parent";
+constexpr std::string_view kPrefabInstanceKey = "prefabInstance";
 
-constexpr std::array<std::string_view, 6> kComponentKeys{kNameKey,   kTransformKey, kStaticMeshKey,
-                                                         kCameraKey, kLightKey,     kScriptKey};
+constexpr std::array<std::string_view, 8> kComponentKeys{json::kComponentKeys[0],
+                                                         json::kComponentKeys[1],
+                                                         json::kComponentKeys[2],
+                                                         json::kComponentKeys[3],
+                                                         json::kComponentKeys[4],
+                                                         json::kComponentKeys[5],
+                                                         kParentKey,
+                                                         kPrefabInstanceKey};
 constexpr std::array<std::string_view, 5> kEnvelopeFields{"format", "formatVersion", "id", "name",
                                                           "entities"};
 constexpr std::array<std::string_view, 2> kEntityFields{"id", "components"};
-constexpr std::array<std::string_view, 3> kXyz{"x", "y", "z"};
-constexpr std::array<std::string_view, 3> kRgb{"r", "g", "b"};
-constexpr std::array<std::string_view, 4> kWxyz{"w", "x", "y", "z"};
 
 // Version N to N + 1 is kMigrations[N - 1]; version 1 is the first, so there
 // is nothing to migrate yet.
 constexpr std::array<core::DocumentMigration<Json>, 0> kMigrations{};
 
-// ---- Writing -------------------------------------------------------------
-
-OrderedJson vectorJson(const math::Vec3& value, const std::array<std::string_view, 3>& names)
-{
-    OrderedJson object = OrderedJson::object();
-    object[std::string(names[0])] = floatNumber(value.x);
-    object[std::string(names[1])] = floatNumber(value.y);
-    object[std::string(names[2])] = floatNumber(value.z);
-    return object;
-}
-
-OrderedJson rotationJson(const math::Quat& value)
-{
-    OrderedJson object = OrderedJson::object();
-    object["w"] = floatNumber(value.w);
-    object["x"] = floatNumber(value.x);
-    object["y"] = floatNumber(value.y);
-    object["z"] = floatNumber(value.z);
-    return object;
-}
-
-OrderedJson assetJson(assets::AssetId id)
-{
-    return id.isNull() ? OrderedJson(nullptr) : OrderedJson(id.toString());
-}
-
 OrderedJson componentsJson(const Scene& scene, EntityId entity)
 {
     OrderedJson components = OrderedJson::object();
-    if (scene.hasComponent<NameComponent>(entity)) {
-        const NameComponent name = scene.component<NameComponent>(entity).value();
+    json::writeComponents(components, componentsOf(scene, entity));
+    if (const auto parent = scene.component<ParentComponent>(entity)) {
         OrderedJson object = OrderedJson::object();
-        object["value"] = name.value;
-        components[std::string(kNameKey)] = std::move(object);
+        object["entity"] = parent.value().entity.toString();
+        components[std::string(kParentKey)] = std::move(object);
     }
-    if (scene.hasComponent<TransformComponent>(entity)) {
-        const TransformComponent transform = scene.component<TransformComponent>(entity).value();
+    if (const auto instance = scene.component<PrefabInstanceComponent>(entity)) {
         OrderedJson object = OrderedJson::object();
-        object["position"] = vectorJson(transform.position, kXyz);
-        object["rotation"] = rotationJson(transform.rotation);
-        object["scale"] = vectorJson(transform.scale, kXyz);
-        components[std::string(kTransformKey)] = std::move(object);
-    }
-    if (scene.hasComponent<StaticMeshComponent>(entity)) {
-        const StaticMeshComponent mesh = scene.component<StaticMeshComponent>(entity).value();
-        OrderedJson object = OrderedJson::object();
-        object["mesh"] = assetJson(mesh.mesh);
-        object["material"] = assetJson(mesh.material);
-        components[std::string(kStaticMeshKey)] = std::move(object);
-    }
-    if (scene.hasComponent<CameraComponent>(entity)) {
-        const CameraComponent camera = scene.component<CameraComponent>(entity).value();
-        OrderedJson object = OrderedJson::object();
-        object["verticalFovRadians"] = floatNumber(camera.verticalFovRadians);
-        object["nearPlane"] = floatNumber(camera.nearPlane);
-        object["farPlane"] = floatNumber(camera.farPlane);
-        components[std::string(kCameraKey)] = std::move(object);
-    }
-    if (scene.hasComponent<DirectionalLightComponent>(entity)) {
-        const DirectionalLightComponent light =
-            scene.component<DirectionalLightComponent>(entity).value();
-        OrderedJson object = OrderedJson::object();
-        object["direction"] = vectorJson(light.direction, kXyz);
-        object["color"] = vectorJson(light.color, kRgb);
-        object["intensity"] = floatNumber(light.intensity);
-        components[std::string(kLightKey)] = std::move(object);
-    }
-    if (scene.hasComponent<ScriptComponent>(entity)) {
-        const ScriptComponent script = scene.component<ScriptComponent>(entity).value();
-        OrderedJson object = OrderedJson::object();
-        object["asset"] = assetJson(script.asset);
-        object["enabled"] = script.enabled;
-        components[std::string(kScriptKey)] = std::move(object);
+        object["prefab"] = instance.value().prefab.toString();
+        object["instance"] = instance.value().instance.toString();
+        object["localId"] = instance.value().localId;
+        components[std::string(kPrefabInstanceKey)] = std::move(object);
     }
     return components;
 }
 
-// ---- Reading -------------------------------------------------------------
-
-bool isOneOf(std::string_view key, std::span<const std::string_view> known)
-{
-    for (const std::string_view candidate : known) {
-        if (candidate == key) {
-            return true;
-        }
-    }
-    return false;
-}
-
-std::string join(std::string_view path, std::string_view key)
-{
-    return path.empty() ? std::string(key) : std::string(path) + "." + std::string(key);
-}
-
-std::string listOf(std::span<const std::string_view> names)
-{
-    std::string list;
-    for (const std::string_view name : names) {
-        list += list.empty() ? std::string(name) : ", " + std::string(name);
-    }
-    return list;
-}
-
-// Reads one document: the warnings it collects on the way.
-class Reader {
-public:
-    explicit Reader(const assets::AssetRegistry* registry) noexcept : registry_(registry) {}
-
-    [[nodiscard]] std::vector<std::string>& warnings() noexcept { return warnings_; }
-
-    // Keys of an object the reader does not know, as warnings.
-    void warnUnknown(const Json& object, std::string_view path,
-                     std::span<const std::string_view> known)
-    {
-        for (const auto& item : object.items()) {
-            if (!isOneOf(item.key(), known)) {
-                warnings_.push_back(
-                    std::format("unknown field '{}' ignored", join(path, shortened(item.key()))));
-            }
-        }
-    }
-
-    static std::optional<core::Error> expectObject(const Json& value, std::string_view path)
-    {
-        if (!value.is_object()) {
-            return core::Error{
-                std::format("{}: expected an object, found {}", path, describe(value))};
-        }
-        return std::nullopt;
-    }
-
-    // An optional float field; a missing one keeps its default.
-    static std::optional<core::Error> floatField(const Json& object, std::string_view path,
-                                                 std::string_view key, float& out)
-    {
-        const auto found = object.find(key);
-        if (found == object.end()) {
-            return std::nullopt;
-        }
-        return readFloat(*found, join(path, key), out);
-    }
-
-    // An optional object of named floats, e.g. {"x": 1, "y": 2, "z": 3}; missing
-    // members keep their defaults.
-    template <std::size_t N>
-    std::optional<core::Error>
-    floatsField(const Json& object, std::string_view path, std::string_view key,
-                const std::array<std::string_view, N>& names, const std::array<float*, N>& out)
-    {
-        const auto found = object.find(key);
-        if (found == object.end()) {
-            return std::nullopt;
-        }
-        const std::string at = join(path, key);
-        if (auto error = expectObject(*found, at)) {
-            return error;
-        }
-        warnUnknown(*found, at, names);
-        for (std::size_t i = 0; i < N; ++i) {
-            if (auto error = floatField(*found, at, names[i], *out[i])) {
-                return error;
-            }
-        }
-        return std::nullopt;
-    }
-
-    // A required ID text.
-    static core::Result<std::string> requiredString(const Json& object, std::string_view path,
-                                                    std::string_view key)
-    {
-        const auto found = object.find(key);
-        if (found == object.end()) {
-            return core::Error{std::format("{}: missing", join(path, key))};
-        }
-        std::string text;
-        if (auto error = readString(*found, join(path, key), text)) {
-            return *error;
-        }
-        return text;
-    }
-
-    // A component value that fails its validate: the message without its
-    // "<type> component: " prefix, after the component's path.
-    template <typename T>
-    static std::optional<core::Error> checked(const T& component, std::string_view path)
-    {
-        if (auto error = validate(component)) {
-            std::string_view message = error->message;
-            const std::string prefix = std::string(T::kTypeName) + " component: ";
-            if (message.starts_with(prefix)) {
-                message.remove_prefix(prefix.size());
-            }
-            return core::Error{std::format("{}: {}", path, message)};
-        }
-        return std::nullopt;
-    }
-
-    std::optional<core::Error> checkAsset(assets::AssetId id, assets::AssetType type,
-                                          std::string_view path) const
-    {
-        if (registry_ == nullptr || id.isNull()) {
-            return std::nullopt;
-        }
-        if (auto error = registry_->checkType(id, type)) {
-            return core::Error{std::format("{}: {}", path, error->message)};
-        }
-        return std::nullopt;
-    }
-
-    core::Result<NameComponent> name(const Json& value, std::string_view path)
-    {
-        if (auto error = expectObject(value, path)) {
-            return *error;
-        }
-        static constexpr std::array<std::string_view, 1> kFields{"value"};
-        warnUnknown(value, path, kFields);
-        auto text = requiredString(value, path, "value");
-        if (!text) {
-            return text.error();
-        }
-        NameComponent component{std::move(text).value()};
-        if (auto error = checked(component, path)) {
-            return *error;
-        }
-        return component;
-    }
-
-    core::Result<TransformComponent> transform(const Json& value, std::string_view path)
-    {
-        if (auto error = expectObject(value, path)) {
-            return *error;
-        }
-        static constexpr std::array<std::string_view, 3> kFields{"position", "rotation", "scale"};
-        warnUnknown(value, path, kFields);
-        TransformComponent component;
-        math::Vec3& position = component.position;
-        math::Quat& rotation = component.rotation;
-        math::Vec3& scale = component.scale;
-        if (auto error = floatsField<3>(value, path, "position", kXyz,
-                                        {&position.x, &position.y, &position.z})) {
-            return *error;
-        }
-        if (auto error = floatsField<4>(value, path, "rotation", kWxyz,
-                                        {&rotation.w, &rotation.x, &rotation.y, &rotation.z})) {
-            return *error;
-        }
-        if (auto error =
-                floatsField<3>(value, path, "scale", kXyz, {&scale.x, &scale.y, &scale.z})) {
-            return *error;
-        }
-        if (auto error = checked(component, path)) {
-            return *error;
-        }
-        return component;
-    }
-
-    core::Result<StaticMeshComponent> staticMesh(const Json& value, std::string_view path)
-    {
-        if (auto error = expectObject(value, path)) {
-            return *error;
-        }
-        static constexpr std::array<std::string_view, 2> kFields{"mesh", "material"};
-        warnUnknown(value, path, kFields);
-        StaticMeshComponent component;
-
-        const std::string meshPath = join(path, "mesh");
-        auto meshText = requiredString(value, path, "mesh");
-        if (!meshText) {
-            return meshText.error();
-        }
-        auto mesh = assets::AssetId::parse(meshText.value());
-        if (!mesh) {
-            return core::Error{std::format("{}: {}", meshPath, mesh.error().message)};
-        }
-        component.mesh = mesh.value();
-
-        // Missing or null: the default material.
-        const std::string materialPath = join(path, "material");
-        if (const auto found = value.find("material"); found != value.end() && !found->is_null()) {
-            std::string text;
-            if (auto error = readString(*found, materialPath, text)) {
-                return *error;
-            }
-            auto material = assets::AssetId::parse(text);
-            if (!material) {
-                return core::Error{std::format("{}: {}", materialPath, material.error().message)};
-            }
-            component.material = material.value();
-        }
-        if (auto error = checked(component, path)) {
-            return *error;
-        }
-        if (auto error = checkAsset(component.mesh, assets::AssetType::Mesh, meshPath)) {
-            return *error;
-        }
-        if (auto error =
-                checkAsset(component.material, assets::AssetType::Material, materialPath)) {
-            return *error;
-        }
-        return component;
-    }
-
-    core::Result<CameraComponent> camera(const Json& value, std::string_view path)
-    {
-        if (auto error = expectObject(value, path)) {
-            return *error;
-        }
-        static constexpr std::array<std::string_view, 3> kFields{"verticalFovRadians", "nearPlane",
-                                                                 "farPlane"};
-        warnUnknown(value, path, kFields);
-        CameraComponent component;
-        if (auto error =
-                floatField(value, path, "verticalFovRadians", component.verticalFovRadians)) {
-            return *error;
-        }
-        if (auto error = floatField(value, path, "nearPlane", component.nearPlane)) {
-            return *error;
-        }
-        if (auto error = floatField(value, path, "farPlane", component.farPlane)) {
-            return *error;
-        }
-        if (auto error = checked(component, path)) {
-            return *error;
-        }
-        return component;
-    }
-
-    core::Result<DirectionalLightComponent> light(const Json& value, std::string_view path)
-    {
-        if (auto error = expectObject(value, path)) {
-            return *error;
-        }
-        static constexpr std::array<std::string_view, 3> kFields{"direction", "color", "intensity"};
-        warnUnknown(value, path, kFields);
-        DirectionalLightComponent component;
-        math::Vec3& direction = component.direction;
-        math::Vec3& color = component.color;
-        if (auto error = floatsField<3>(value, path, "direction", kXyz,
-                                        {&direction.x, &direction.y, &direction.z})) {
-            return *error;
-        }
-        if (auto error =
-                floatsField<3>(value, path, "color", kRgb, {&color.r, &color.g, &color.b})) {
-            return *error;
-        }
-        if (auto error = floatField(value, path, "intensity", component.intensity)) {
-            return *error;
-        }
-        if (auto error = checked(component, path)) {
-            return *error;
-        }
-        return component;
-    }
-
-    core::Result<ScriptComponent> script(const Json& value, std::string_view path)
-    {
-        if (auto error = expectObject(value, path)) {
-            return *error;
-        }
-        static constexpr std::array<std::string_view, 2> kFields{"asset", "enabled"};
-        warnUnknown(value, path, kFields);
-        ScriptComponent component;
-        const std::string assetPath = join(path, "asset");
-        auto assetText = requiredString(value, path, "asset");
-        if (!assetText) {
-            return assetText.error();
-        }
-        auto asset = assets::AssetId::parse(assetText.value());
-        if (!asset) {
-            return core::Error{std::format("{}: {}", assetPath, asset.error().message)};
-        }
-        component.asset = asset.value();
-        if (const auto found = value.find("enabled"); found != value.end()) {
-            if (auto error = readBool(*found, join(path, "enabled"), component.enabled)) {
-                return *error;
-            }
-        }
-        if (auto error = checked(component, path)) {
-            return *error;
-        }
-        if (auto error = checkAsset(component.asset, assets::AssetType::Script, assetPath)) {
-            return *error;
-        }
-        return component;
-    }
-
-private:
-    const assets::AssetRegistry* registry_;
-    std::vector<std::string> warnings_;
-};
-
-// One entity as read, before the scene is built. Plain values with flags
-// rather than std::optional (GCC -Wmaybe-uninitialized at -O3).
+// One entity as read, before the scene is built.
 struct EntityData {
     EntityId id;
-    bool hasName = false;
-    NameComponent name;
-    bool hasTransform = false;
-    TransformComponent transform;
-    bool hasStaticMesh = false;
-    StaticMeshComponent staticMesh;
-    bool hasCamera = false;
-    CameraComponent camera;
-    bool hasLight = false;
-    DirectionalLightComponent light;
-    bool hasScript = false;
-    ScriptComponent script;
+    EntityComponents components;
+    std::optional<ParentComponent> parent;
+    std::optional<PrefabInstanceComponent> instance;
 };
 
-// Takes a component into the entity's data, or returns its error.
-template <typename T>
-std::optional<core::Error> take(core::Result<T> read, bool& has, T& out)
+core::Result<ParentComponent> readParent(ComponentReader& reader, const Json& value,
+                                         std::string_view path)
 {
-    if (!read) {
-        return read.error();
+    if (auto error = ComponentReader::expectObject(value, path)) {
+        return *error;
     }
-    out = std::move(read).value();
-    has = true;
-    return std::nullopt;
+    static constexpr std::array<std::string_view, 1> kFields{"entity"};
+    reader.warnUnknown(value, path, kFields);
+    auto entity = ComponentReader::requiredId<EntityId>(value, path, "entity");
+    if (!entity) {
+        return entity.error();
+    }
+    return ParentComponent{entity.value()};
 }
 
-std::optional<core::Error> readComponents(Reader& reader, const Json& components,
+core::Result<PrefabInstanceComponent> readInstance(ComponentReader& reader, const Json& value,
+                                                   std::string_view path)
+{
+    if (auto error = ComponentReader::expectObject(value, path)) {
+        return *error;
+    }
+    static constexpr std::array<std::string_view, 3> kFields{"prefab", "instance", "localId"};
+    reader.warnUnknown(value, path, kFields);
+    PrefabInstanceComponent component;
+    auto prefab = ComponentReader::requiredId<assets::AssetId>(value, path, "prefab");
+    if (!prefab) {
+        return prefab.error();
+    }
+    component.prefab = prefab.value();
+    auto instance = ComponentReader::requiredId<PrefabInstanceId>(value, path, "instance");
+    if (!instance) {
+        return instance.error();
+    }
+    component.instance = instance.value();
+    const auto localId = value.find("localId");
+    if (localId == value.end()) {
+        return core::Error{std::format("{}: missing", join(path, "localId"))};
+    }
+    if (auto error = core::json::readInteger(*localId, join(path, "localId"), component.localId)) {
+        return *error;
+    }
+    if (auto error = ComponentReader::checked(component, path)) {
+        return *error;
+    }
+    if (auto error =
+            reader.checkAsset(component.prefab, assets::AssetType::Prefab, join(path, "prefab"))) {
+        return *error;
+    }
+    return component;
+}
+
+std::optional<core::Error> readComponents(ComponentReader& reader, const Json& components,
                                           std::string_view path, EntityData& data)
 {
-    if (auto error = Reader::expectObject(components, path)) {
+    if (auto error = ComponentReader::expectObject(components, path)) {
         return error;
     }
     for (const auto& item : components.items()) {
         const std::string& key = item.key();
         const std::string at = join(path, shortened(key));
         const Json& value = item.value();
-        std::optional<core::Error> error;
-        if (key == kNameKey) {
-            error = take(reader.name(value, at), data.hasName, data.name);
-        } else if (key == kTransformKey) {
-            error = take(reader.transform(value, at), data.hasTransform, data.transform);
-        } else if (key == kStaticMeshKey) {
-            error = take(reader.staticMesh(value, at), data.hasStaticMesh, data.staticMesh);
-        } else if (key == kCameraKey) {
-            error = take(reader.camera(value, at), data.hasCamera, data.camera);
-        } else if (key == kLightKey) {
-            error = take(reader.light(value, at), data.hasLight, data.light);
-        } else if (key == kScriptKey) {
-            error = take(reader.script(value, at), data.hasScript, data.script);
+        auto shared = reader.readComponent(key, value, at, data.components);
+        if (!shared) {
+            return shared.error();
+        }
+        if (shared.value()) {
+            continue;
+        }
+        if (key == kParentKey) {
+            auto parent = readParent(reader, value, at);
+            if (!parent) {
+                return parent.error();
+            }
+            data.parent = parent.value();
+        } else if (key == kPrefabInstanceKey) {
+            auto instance = readInstance(reader, value, at);
+            if (!instance) {
+                return instance.error();
+            }
+            data.instance = instance.value();
         } else {
             // Not dropped with a warning: saving the scene again would lose it.
-            error = core::Error{
-                std::format("{}: unknown component type; known: {}", at, listOf(kComponentKeys))};
-        }
-        if (error) {
-            return error;
+            return core::Error{std::format("{}: unknown component type; known: {}", at,
+                                           json::listOf(kComponentKeys))};
         }
     }
     return std::nullopt;
 }
 
-template <typename T>
-std::optional<core::Error> addIf(Scene& scene, EntityId entity, bool has, const T& component)
+// Parent links inside the document: no self-parent, a parent in the
+// document, no cycle. The path names the child's link.
+std::optional<core::Error> checkParents(const std::vector<EntityData>& entities,
+                                        const std::map<EntityId, std::size_t>& indices)
 {
-    return has ? scene.addComponent(entity, component) : std::nullopt;
+    for (std::size_t i = 0; i < entities.size(); ++i) {
+        if (!entities[i].parent) {
+            continue;
+        }
+        const std::string path = std::format("entities[{}].components.parent.entity", i);
+        const EntityId parent = entities[i].parent->entity;
+        if (parent == entities[i].id) {
+            return core::Error{path + ": an entity cannot be its own parent"};
+        }
+        const auto found = indices.find(parent);
+        if (found == indices.end()) {
+            return core::Error{
+                std::format("{}: entity {} is not in the document", path, parent.toString())};
+        }
+        // Walk up; reaching this entity again closes a cycle.
+        std::size_t current = found->second;
+        for (std::size_t step = 0; step <= entities.size(); ++step) {
+            if (current == i) {
+                return core::Error{std::format("{}: entity {} is a descendant of this entity, "
+                                               "which makes a cycle",
+                                               path, parent.toString())};
+            }
+            if (!entities[current].parent) {
+                break;
+            }
+            const auto next = indices.find(entities[current].parent->entity);
+            if (next == indices.end()) {
+                break; // Reported when that entity's own link is checked.
+            }
+            current = next->second;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -560,10 +253,10 @@ core::Result<LoadedScene> sceneFromJson(std::string_view text, core::UuidGenerat
 
     // Stage 3: the scene's fields and every entity, checked before anything
     // is built.
-    Reader reader(registry);
+    ComponentReader reader(registry);
     reader.warnUnknown(root, "", kEnvelopeFields);
 
-    auto idText = Reader::requiredString(root, "", "id");
+    auto idText = ComponentReader::requiredString(root, "", "id");
     if (!idText) {
         return idText.error();
     }
@@ -571,7 +264,7 @@ core::Result<LoadedScene> sceneFromJson(std::string_view text, core::UuidGenerat
     if (!sceneId) {
         return core::Error{"id: " + sceneId.error().message};
     }
-    auto nameText = Reader::requiredString(root, "", "name");
+    auto nameText = ComponentReader::requiredString(root, "", "name");
     if (!nameText) {
         return nameText.error();
     }
@@ -580,6 +273,7 @@ core::Result<LoadedScene> sceneFromJson(std::string_view text, core::UuidGenerat
     }
 
     std::vector<EntityData> entities;
+    std::map<EntityId, std::size_t> seen;
     if (const auto list = root.find("entities"); list != root.end()) {
         if (!list->is_array()) {
             return core::Error{
@@ -590,15 +284,14 @@ core::Result<LoadedScene> sceneFromJson(std::string_view text, core::UuidGenerat
                                            kMaxSceneEntities)};
         }
         entities.reserve(list->size());
-        std::map<EntityId, std::size_t> seen;
         std::size_t index = 0;
         for (const Json& item : *list) {
             const std::string at = std::format("entities[{}]", index);
-            if (auto error = Reader::expectObject(item, at)) {
+            if (auto error = ComponentReader::expectObject(item, at)) {
                 return *error;
             }
             reader.warnUnknown(item, at, kEntityFields);
-            auto entityText = Reader::requiredString(item, at, "id");
+            auto entityText = ComponentReader::requiredString(item, at, "id");
             if (!entityText) {
                 return entityText.error();
             }
@@ -622,36 +315,31 @@ core::Result<LoadedScene> sceneFromJson(std::string_view text, core::UuidGenerat
         }
     }
 
-    // Stage 4: the new scene. Everything was checked above, so the scene
-    // accepts it; an error here would be a bug, still reported, not thrown.
+    if (auto error = checkParents(entities, seen)) {
+        return *error;
+    }
+
+    // Stage 4: the new scene: every entity first, so that parent links find
+    // their parents. Everything was checked above, so the scene accepts it;
+    // an error here would be a bug, still reported, not thrown.
     auto created = Scene::create(sceneId.value(), nameText.value(), generator);
     if (!created) {
         return created.error();
     }
     Scene scene = std::move(created).value();
     for (std::size_t i = 0; i < entities.size(); ++i) {
+        if (auto made = scene.createEntity(entities[i].id); !made) {
+            return core::Error{std::format("entities[{}]: {}", i, made.error().message)};
+        }
+    }
+    for (std::size_t i = 0; i < entities.size(); ++i) {
         const EntityData& data = entities[i];
-        std::optional<core::Error> error;
-        if (auto made = scene.createEntity(data.id); !made) {
-            error = made.error();
+        std::optional<core::Error> error = addComponents(scene, data.id, data.components);
+        if (!error && data.parent) {
+            error = scene.addComponent(data.id, *data.parent);
         }
-        if (!error) {
-            error = addIf(scene, data.id, data.hasName, data.name);
-        }
-        if (!error) {
-            error = addIf(scene, data.id, data.hasTransform, data.transform);
-        }
-        if (!error) {
-            error = addIf(scene, data.id, data.hasStaticMesh, data.staticMesh);
-        }
-        if (!error) {
-            error = addIf(scene, data.id, data.hasCamera, data.camera);
-        }
-        if (!error) {
-            error = addIf(scene, data.id, data.hasLight, data.light);
-        }
-        if (!error) {
-            error = addIf(scene, data.id, data.hasScript, data.script);
+        if (!error && data.instance) {
+            error = scene.addComponent(data.id, *data.instance);
         }
         if (error) {
             return core::Error{std::format("entities[{}]: {}", i, error->message)};

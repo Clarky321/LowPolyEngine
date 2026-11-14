@@ -23,6 +23,8 @@ using engine::scene::CameraComponent;
 using engine::scene::DirectionalLightComponent;
 using engine::scene::EntityId;
 using engine::scene::NameComponent;
+using engine::scene::PrefabInstanceComponent;
+using engine::scene::PrefabInstanceId;
 using engine::scene::Scene;
 using engine::scene::SceneId;
 using engine::scene::ScriptComponent;
@@ -146,6 +148,23 @@ struct Samples<ScriptComponent> {
         "script component: asset is the null asset ID, must name a script asset";
 };
 
+template <>
+struct Samples<PrefabInstanceComponent> {
+    static engine::assets::AssetId asset(std::uint64_t number)
+    {
+        return engine::assets::AssetId{Uuid{0x9E7AB9E7AB9E4ABEULL, 0x8000000000000000ULL | number}};
+    }
+    static PrefabInstanceId instance(std::uint64_t number)
+    {
+        return PrefabInstanceId{Uuid{0x1257A1257A124257ULL, 0x8000000000000000ULL | number}};
+    }
+    static PrefabInstanceComponent first() { return {asset(1), instance(1), 1}; }
+    static PrefabInstanceComponent second() { return {asset(1), instance(2), 7}; }
+    static PrefabInstanceComponent invalid() { return {asset(1), instance(1), 0}; }
+    static constexpr std::string_view kInvalidMessage =
+        "prefab instance component: localId is 0, must be at least 1";
+};
+
 template <typename T>
 std::string typeName()
 {
@@ -186,8 +205,9 @@ double lengthOf(const Vec3& v)
 
 } // namespace
 
-using AllComponents = std::tuple<NameComponent, TransformComponent, StaticMeshComponent,
-                                 CameraComponent, DirectionalLightComponent, ScriptComponent>;
+using AllComponents =
+    std::tuple<NameComponent, TransformComponent, StaticMeshComponent, CameraComponent,
+               DirectionalLightComponent, ScriptComponent, PrefabInstanceComponent>;
 
 TEMPLATE_LIST_TEST_CASE("A component is added, read, replaced and removed", "[scene][components]",
                         AllComponents)

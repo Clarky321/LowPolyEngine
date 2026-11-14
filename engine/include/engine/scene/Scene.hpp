@@ -1,7 +1,7 @@
 #pragma once
 
 // A scene: the entities of one game world document and their components
-// (M4.1-M4.3, M4.5; ADR 0020, ADR 0021, ADR 0022, ADR 0024).
+// (M4.1-M4.3, M4.5, M4.6; ADR 0020, ADR 0021, ADR 0022, ADR 0024, ADR 0025).
 //
 // Entities are identified only by their persistent EntityId; the scene hands
 // out no pointer or reference into its storage, so a destroyed entity cannot
@@ -23,6 +23,8 @@
 #include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/EntityId.hpp"
 #include "engine/scene/NameComponent.hpp"
+#include "engine/scene/ParentComponent.hpp"
+#include "engine/scene/PrefabInstanceComponent.hpp"
 #include "engine/scene/SceneId.hpp"
 #include "engine/scene/ScriptComponent.hpp"
 #include "engine/scene/StaticMeshComponent.hpp"
@@ -56,7 +58,8 @@ template <typename T>
 concept SceneComponent =
     std::same_as<T, NameComponent> || std::same_as<T, TransformComponent> ||
     std::same_as<T, StaticMeshComponent> || std::same_as<T, CameraComponent> ||
-    std::same_as<T, DirectionalLightComponent> || std::same_as<T, ScriptComponent>;
+    std::same_as<T, DirectionalLightComponent> || std::same_as<T, ScriptComponent> ||
+    std::same_as<T, ParentComponent> || std::same_as<T, PrefabInstanceComponent>;
 
 class Scene {
 public:
@@ -87,8 +90,9 @@ public:
     // already contains.
     [[nodiscard]] core::Result<EntityId> createEntity(EntityId entity);
 
-    // Destroys the entity together with its components. Fails for an ID the
-    // scene does not contain.
+    // Destroys the entity together with its components. Its children are
+    // detached (their ParentComponent removed), not destroyed. Fails for an ID
+    // the scene does not contain.
     [[nodiscard]] std::optional<core::Error> destroyEntity(EntityId entity);
 
     [[nodiscard]] bool contains(EntityId entity) const noexcept;
@@ -105,6 +109,10 @@ public:
     // name and generator.
     void clear() noexcept;
 
+    // A new ID from the scene's generator, for identities the scene's
+    // document holds besides its entities (prefab instances). Never null.
+    [[nodiscard]] core::Uuid generateId() noexcept;
+
     // Component operations. Each fails, changing nothing, for an entity the
     // scene does not contain; the error names the scene, the entity and the
     // component type.
@@ -112,7 +120,8 @@ public:
     // Adds a component the entity does not have yet (an entity has at most
     // one component of each type; replaceComponent changes it). Fails for an
     // invalid value with the error of its validate. Rotations and light
-    // directions are stored normalized.
+    // directions are stored normalized. A ParentComponent must name another
+    // entity of this scene and must not close a cycle of parent links.
     template <SceneComponent T>
     [[nodiscard]] std::optional<core::Error> addComponent(EntityId entity, const T& value);
     // Replaces a component the entity has, under the same rules as
@@ -151,6 +160,8 @@ private:
     [[nodiscard]] std::string describe(EntityId entity) const;
     // The error for an entity the scene does not contain (or the null ID).
     [[nodiscard]] core::Error entityError(EntityId entity) const;
+    // Nothing if `parent` may become the parent of `child`.
+    [[nodiscard]] std::optional<core::Error> checkParent(EntityId child, EntityId parent) const;
     [[nodiscard]] Storage& storage();
     void insert(EntityId entity);
 

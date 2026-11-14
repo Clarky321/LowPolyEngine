@@ -1,6 +1,8 @@
 #include "engine/scene/CameraComponent.hpp"
 #include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/NameComponent.hpp"
+#include "engine/scene/ParentComponent.hpp"
+#include "engine/scene/PrefabInstanceComponent.hpp"
 #include "engine/scene/Scene.hpp"
 #include "engine/scene/ScriptComponent.hpp"
 #include "engine/scene/StaticMeshComponent.hpp"
@@ -176,6 +178,35 @@ std::optional<core::Error> validate(const ScriptComponent& component)
         return core::Error{std::format("{} component: asset is the null asset ID, must name a "
                                        "script asset",
                                        ScriptComponent::kTypeName)};
+    }
+    return std::nullopt;
+}
+
+std::optional<core::Error> validate(const ParentComponent& component)
+{
+    if (component.entity.isNull()) {
+        return core::Error{std::format("{} component: entity is the null entity ID, must name the "
+                                       "parent",
+                                       ParentComponent::kTypeName)};
+    }
+    return std::nullopt;
+}
+
+std::optional<core::Error> validate(const PrefabInstanceComponent& component)
+{
+    constexpr std::string_view kType = PrefabInstanceComponent::kTypeName;
+    if (component.prefab.isNull()) {
+        return core::Error{std::format(
+            "{} component: prefab is the null asset ID, must name a prefab asset", kType)};
+    }
+    if (component.instance.isNull()) {
+        return core::Error{std::format(
+            "{} component: instance is the null prefab instance ID, must name the instance",
+            kType)};
+    }
+    if (component.localId < 1) {
+        return core::Error{std::format("{} component: localId is {}, must be at least 1", kType,
+                                       component.localId)};
     }
     return std::nullopt;
 }

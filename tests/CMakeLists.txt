@@ -36,6 +36,9 @@ add_executable(lpe_unit_tests
     unit/sandbox/island_preview_assets_test.cpp
     unit/scene/asset_references_test.cpp
     unit/scene/components_test.cpp
+    unit/scene/parent_component_test.cpp
+    unit/scene/prefab_document_test.cpp
+    unit/scene/prefab_test.cpp
     unit/scene/public_headers_test.cpp
     unit/scene/scene_components_test.cpp
     unit/scene/scene_document_test.cpp
@@ -83,6 +86,7 @@ add_executable(lpe_integration_tests
     integration/asset_project_test.cpp
     integration/input_events_test.cpp
     integration/platform_test.cpp
+    integration/prefab_project_test.cpp
     integration/scene_document_test.cpp
     integration/script_scene_test.cpp
 )

@@ -136,7 +136,8 @@ Use an ECS or ECS-like component model, with EnTT as the initial candidate. M4 i
 - `DirectionalLightComponent` (the renderer has one directional light; other light kinds come with renderer support)
 - `ScriptComponent`
 - `NameComponent` / editor metadata
-- `ParentComponent`, a parent link between entities that prefabs need for references inside them (M4.6; a relationship only, no transform inheritance in M4)
+- `ParentComponent`, a parent link between entities that prefabs need for references inside them (M4.6, ADR 0025; a relationship only, no transform inheritance in M4)
+- `PrefabInstanceComponent`, the link from an instance's entities to their prefab (M4.6, ADR 0025)
 
 Use stable UUID-like IDs for saved entities and assets. Runtime EnTT handles are transient. A scene document should contain entities, components, references and version metadata. Prefabs are reusable entity/component compositions with overrides. Decide JSON vs another format by testing human readability, schema migration and dependency availability; do not persist implementation-specific object layout.
 
@@ -229,7 +230,7 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** save/load a scene without losing entity identity or component values; a Lua script can alter a permitted property and errors are contained.
 
-**Status:** in progress (2026-11-14); M4.1 (scene core and persistent identifiers, ADR 0020), M4.2 (EnTT and entity components, ADR 0021), M4.3 (asset identity and asset registry, ADR 0022), M4.4 (scene documents as versioned JSON, ADR 0023) and M4.5 (Lua runtime and script component, ADR 0024; the Conan lockfile) are implemented, the other steps are planned. Plan: `docs/milestones/m4-scene-data-model.md` on the branch `milestone/m4-scene-data-model`, in seven steps: M4.1 scene core and persistent identifiers, M4.2 EnTT and entity components, M4.3 asset identity and asset registry, M4.4 scene documents as versioned JSON, M4.5 Lua runtime and script component, M4.6 prefab model, M4.7 integration, final verification and pull request. Scene, Assets and Scripting stay free of renderer, OpenGL, SDL and Dear ImGui code; WorldGen stays independent of them. M4 adds no rendering of scenes and no editor UI. The Raven UI evaluation for M5 (`docs/experiments/raven-ui-evaluation.md`) is a separate experiment and not an M4 exit criterion; it ended with a conditional pass and the proposed ADR 0019.
+**Status:** in progress (2026-11-14); M4.1 (scene core and persistent identifiers, ADR 0020), M4.2 (EnTT and entity components, ADR 0021), M4.3 (asset identity and asset registry, ADR 0022), M4.4 (scene documents as versioned JSON, ADR 0023), M4.5 (Lua runtime and script component, ADR 0024; the Conan lockfile) and M4.6 (prefab model, ADR 0025) are implemented; M4.7 is planned. Plan: `docs/milestones/m4-scene-data-model.md` on the branch `milestone/m4-scene-data-model`, in seven steps: M4.1 scene core and persistent identifiers, M4.2 EnTT and entity components, M4.3 asset identity and asset registry, M4.4 scene documents as versioned JSON, M4.5 Lua runtime and script component, M4.6 prefab model, M4.7 integration, final verification and pull request. Scene, Assets and Scripting stay free of renderer, OpenGL, SDL and Dear ImGui code; WorldGen stays independent of them. M4 adds no rendering of scenes and no editor UI. The Raven UI evaluation for M5 (`docs/experiments/raven-ui-evaluation.md`) is a separate experiment and not an M4 exit criterion; it ended with a conditional pass and the proposed ADR 0019.
 
 ### M5 — Minimal editor
 

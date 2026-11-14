@@ -108,7 +108,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 | M4.3 | Asset identity and asset registry | done |
 | M4.4 | Scene documents as versioned JSON | done |
 | M4.5 | Lua runtime and script component | done |
-| M4.6 | Prefab model | planned |
+| M4.6 | Prefab model | in progress |
 | M4.7 | Integration, final verification and pull request | planned |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M4.x done (M4.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M4.x)"` finds the commits.
@@ -121,7 +121,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Documents follow ADR 0004: an envelope with `format` and `formatVersion`, 64-bit and larger IDs as strings, floats that read back bit for bit, non-throwing parsing, errors with the field path, explicit migrations, no library types in public headers. Each document kind gets its own format id and schema decision.
 - Every new public type and function gets headless unit tests for normal, boundary and failure cases; loaders get round-trip, missing-field, unknown-field, wrong-type, malformed-input, newer-version and limit tests.
 - New dependencies only in the steps that name them: EnTT in M4.2, Lua (and, if chosen, LuaBridge3) in M4.5.
-- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0025; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 to 0024 come from M4.1 to M4.5).
+- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0026; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 to 0025 come from M4.1 to M4.6).
 - The editor, the Scene → renderer bridge and everything in *Out of scope* stay out, even where an API would make them easy.
 - No GPU tier is required for M4.1–M4.6 (no rendering, shader, windowing or loop code changes); the final step runs it as `docs/DEVELOPMENT_WORKFLOW.md` §8 requires. A step that unexpectedly touches such code runs it too.
 
@@ -365,6 +365,17 @@ Implemented tests: `tests/unit/scripting/lua_vm_test.cpp` (memory returned on cl
 - The link from an instance to its prefab: the minimal model the ADR chooses, for example a component on each instance entity with the prefab's asset ID, an instance ID and the local ID, so a later milestone can update instances. Instances store their full component values in the scene; there are no overrides in M4.
 
 **Decisions to make (ADR "Prefab model"):** how `ParentComponent` is stored and validated within the rules above; local ID form; the instance link; what a scene stores for an instance; limits.
+
+**Decisions taken while implementing** (ADR 0025; ADR 0023 Amendment 2):
+- `engine/scene/ParentComponent.hpp`: `ParentComponent { EntityId entity; }`, a scene component. `Scene::addComponent` and `replaceComponent` reject a self-parent, a parent the scene does not contain (an ID from another scene included) and a link that would close a cycle (a walk up from the new parent); `destroyEntity` removes the children's `ParentComponent` first. No transform inheritance.
+- `engine/scene/EntityComponents.hpp`: the plain components of one entity as `std::optional`s, with `componentsOf`, `addComponents` and `validate`, used to copy entities between scenes and prefabs.
+- `engine/scene/Prefab.hpp`: `Prefab { id, name, entities }`, `PrefabEntity { localId, parent, components }`; local IDs are `std::uint32_t` of at least 1, unique per prefab; at most 10 000 entities; `validate`, `createPrefab` (given order, local IDs 1, 2, ..., parents outside the set rejected, instance links not copied: no nesting), `instantiatePrefab` (all entities first, values copied, links mapped, rollback on error).
+- `engine/scene/PrefabInstanceComponent.hpp`: `PrefabInstanceComponent { prefab, instance, localId }` with `PrefabInstanceId` (a `TypedUuid` drawn through the new `Scene::generateId()`, unused in the scene); a scene stores each instance's full values plus this link, no overrides.
+- `engine/scene/PrefabDocument.hpp`: `lpe.prefab` version 1 (`id`, `name`, `entities` of `{localId, components}`; a parent is a local ID; no `prefabInstance`), at most 16 MiB; `prefabToJson`, `prefabFromJson`, `savePrefab` (validated, atomic), `loadPrefab`, `loadPrefabAsset` (resolved as a Prefab, the document's ID must match).
+- Scene documents: `parent` and `prefabInstance` in format version 1 (unreleased), parent links checked with paths before building, entities created before components; asset reference checks include the prefab of an instance.
+- The JSON of the plain components moved into the internal `engine/src/scene/ComponentJson.hpp`, shared by scene and prefab documents; scene documents are byte for byte as before.
+
+Implemented tests: `tests/unit/scene/parent_component_test.cpp` (null parent, self, a parent from another scene, cycles by add and replace and a moved subtree, children detached and kept on destroy with deeper links untouched, an ID created again, parent links in scene documents in any order, every broken link with its path), `tests/unit/scene/prefab_test.cpp` (a prefab of a house with links and components; a closed set only, empty, duplicate, unknown, null ID, invalid name, a copy of an instance; every validation rule and the limit; two instances with distinct IDs, own links, the same instance ID per instance, independent values and an unchanged prefab; a failed instantiation leaving the scene unchanged; a scene with instances read back, instance link errors and the registry check), `tests/unit/scene/prefab_document_test.cpp` (the exact layout, round trip, local ID and link errors, unknown component types, envelope errors, registry checks of assets and of the prefab's ID, files saved and loaded through the registry, unknown and wrongly typed assets, an ID that disagrees with the registry, a broken file, a prefab that is not saved), the prefab instance component in `tests/unit/scene/{components,scene_components}_test.cpp`, and the integration test `tests/integration/prefab_project_test.cpp` (a prefab made from a scene, saved, registered in the manifest, loaded through its asset ID and instantiated twice into a loaded scene, which is saved and loaded again with links and instance data).
 
 **Out of scope:** a prefab editor, nested prefabs, prefab variants or inheritance, overrides for every component, live links or automatic updates of instances when the prefab changes, a visual editor.
 

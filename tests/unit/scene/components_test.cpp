@@ -2,6 +2,7 @@
 #include "engine/scene/CameraComponent.hpp"
 #include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/NameComponent.hpp"
+#include "engine/scene/PrefabInstanceComponent.hpp"
 #include "engine/scene/ScriptComponent.hpp"
 #include "engine/scene/StaticMeshComponent.hpp"
 #include "engine/scene/TransformComponent.hpp"
@@ -19,6 +20,8 @@
 using engine::scene::CameraComponent;
 using engine::scene::DirectionalLightComponent;
 using engine::scene::NameComponent;
+using engine::scene::PrefabInstanceComponent;
+using engine::scene::PrefabInstanceId;
 using engine::scene::ScriptComponent;
 using engine::scene::StaticMeshComponent;
 using engine::scene::TransformComponent;
@@ -185,6 +188,22 @@ TEST_CASE("A script component needs a script asset", "[scene][components]")
     CHECK(ScriptComponent{}.enabled);
     CHECK(errorOf(ScriptComponent{}) ==
           "script component: asset is the null asset ID, must name a script asset");
+}
+
+TEST_CASE("A prefab instance link names its prefab, instance and local ID", "[scene][components]")
+{
+    const engine::assets::AssetId prefab{
+        engine::core::Uuid{0x4444444444444444ULL, 0x8444444444444444ULL}};
+    const PrefabInstanceId instance{
+        engine::core::Uuid{0x5555555555554555ULL, 0x8555555555555555ULL}};
+    CHECK_FALSE(validate(PrefabInstanceComponent{prefab, instance, 1}).has_value());
+    CHECK(errorOf(PrefabInstanceComponent{{}, instance, 1}) ==
+          "prefab instance component: prefab is the null asset ID, must name a prefab asset");
+    CHECK(errorOf(PrefabInstanceComponent{prefab, {}, 1}) ==
+          "prefab instance component: instance is the null prefab instance ID, must name the "
+          "instance");
+    CHECK(errorOf(PrefabInstanceComponent{prefab, instance, 0}) ==
+          "prefab instance component: localId is 0, must be at least 1");
 }
 
 TEST_CASE("A camera's lens stays in the ranges of the projection", "[scene][components]")

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <format>
 #include <map>
+#include <type_traits>
 #include <utility>
 
 namespace engine::scene {
@@ -241,6 +242,17 @@ std::optional<core::Error> Scene::destroyEntity(EntityId entity)
     if (found == store->handles.end()) {
         return entityError(entity);
     }
+    // Its children are detached, not destroyed.
+    auto& parents = store->registry.storage<ParentComponent>();
+    std::vector<entt::entity> children;
+    for (const entt::entity handle : static_cast<const entt::sparse_set&>(parents)) {
+        if (parents.get(handle).entity == entity) {
+            children.push_back(handle);
+        }
+    }
+    for (const entt::entity child : children) {
+        (void)store->registry.remove<ParentComponent>(child);
+    }
     // Destroying the EnTT entity removes all of its components.
     (void)store->registry.destroy(found->second);
     store->handles.erase(found);
@@ -294,6 +306,41 @@ void Scene::clear() noexcept
     storage_.reset();
 }
 
+core::Uuid Scene::generateId() noexcept
+{
+    // Version 4 IDs are never null (ADR 0020).
+    return generator_.next();
+}
+
+std::optional<core::Error> Scene::checkParent(EntityId child, EntityId parent) const
+{
+    if (parent == child) {
+        return core::Error{describe(child) +
+                           ": parent component: an entity cannot be its own parent"};
+    }
+    if (!contains(parent)) {
+        return core::Error{std::format("{}: parent component: parent {} does not exist in scene "
+                                       "'{}'",
+                                       describe(child), parent.toString(), name_)};
+    }
+    // Walk up from the parent: reaching the child would close a cycle. The
+    // links already in the scene have none, so the walk ends.
+    EntityId current = parent;
+    for (std::size_t step = 0; step <= entityCount(); ++step) {
+        const auto link = component<ParentComponent>(current);
+        if (!link) {
+            return std::nullopt;
+        }
+        current = link.value().entity;
+        if (current == child) {
+            return core::Error{std::format("{}: parent component: parent {} is a descendant of "
+                                           "the entity, which would make a cycle",
+                                           describe(child), parent.toString())};
+        }
+    }
+    return std::nullopt;
+}
+
 // Each component operation first resolves the entity's EnTT handle, checking
 // every pointer on the way (GCC's -Wnull-dereference at -O3 cannot see that
 // findEntity already did).
@@ -313,6 +360,11 @@ std::optional<core::Error> Scene::addComponent(EntityId entity, const T& value)
     if (auto error = validate(value)) {
         return core::Error{std::format("{}: {}", describe(entity), error->message)};
     }
+    if constexpr (std::is_same_v<T, ParentComponent>) {
+        if (auto error = checkParent(entity, value.entity)) {
+            return error;
+        }
+    }
     store->registry.emplace<T>(*handle, storedForm(value));
     return std::nullopt;
 }
@@ -331,6 +383,11 @@ std::optional<core::Error> Scene::replaceComponent(EntityId entity, const T& val
     }
     if (auto error = validate(value)) {
         return core::Error{std::format("{}: {}", describe(entity), error->message)};
+    }
+    if constexpr (std::is_same_v<T, ParentComponent>) {
+        if (auto error = checkParent(entity, value.entity)) {
+            return error;
+        }
     }
     *stored = storedForm(value);
     return std::nullopt;
@@ -402,6 +459,8 @@ LPE_INSTANTIATE_SCENE_COMPONENT(StaticMeshComponent)
 LPE_INSTANTIATE_SCENE_COMPONENT(CameraComponent)
 LPE_INSTANTIATE_SCENE_COMPONENT(DirectionalLightComponent)
 LPE_INSTANTIATE_SCENE_COMPONENT(ScriptComponent)
+LPE_INSTANTIATE_SCENE_COMPONENT(ParentComponent)
+LPE_INSTANTIATE_SCENE_COMPONENT(PrefabInstanceComponent)
 
 #undef LPE_INSTANTIATE_SCENE_COMPONENT
 

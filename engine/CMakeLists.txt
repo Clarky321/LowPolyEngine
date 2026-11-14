@@ -66,7 +66,11 @@ add_library(engine STATIC
     src/render/opengl/GlShaderProgram.cpp
     src/render/opengl/GlTexture.cpp
     src/scene/AssetReferences.cpp
+    src/scene/ComponentJson.cpp
     src/scene/Components.cpp
+    src/scene/EntityComponents.cpp
+    src/scene/Prefab.cpp
+    src/scene/PrefabDocument.cpp
     src/scene/Scene.cpp
     src/scene/SceneDocument.cpp
     src/scripting/lua/LuaVm.cpp
@@ -84,7 +88,7 @@ target_compile_features(engine PUBLIC cxx_std_20)
 # src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp,
 # nlohmann_json only in src/core/JsonSupport.hpp and the document sources that
 # include it (src/worldgen/SettingsFile.cpp, src/assets/AssetManifest.cpp,
-# src/scene/SceneDocument.cpp), the Dear ImGui backends only in
+# src/scene/ComponentJson.cpp, SceneDocument.cpp and PrefabDocument.cpp), the Dear ImGui backends only in
 # src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp, EnTT only
 # in src/scene/, Lua only in src/scripting/lua/ (ADR 0002, 0004, 0005, 0006,
 # 0008, 0018, 0021, 0022, 0023, 0024).

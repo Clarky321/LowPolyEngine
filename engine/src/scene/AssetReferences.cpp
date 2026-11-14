@@ -42,6 +42,12 @@ std::vector<AssetReferenceProblem> findAssetReferenceProblems(const Scene& scene
             check(scene, registry, entity, kScript, "asset", script.asset,
                   assets::AssetType::Script, problems);
         }
+        if (scene.hasComponent<PrefabInstanceComponent>(entity)) {
+            const PrefabInstanceComponent instance =
+                scene.component<PrefabInstanceComponent>(entity).value();
+            check(scene, registry, entity, PrefabInstanceComponent::kTypeName, "prefab",
+                  instance.prefab, assets::AssetType::Prefab, problems);
+        }
     }
     return problems;
 }

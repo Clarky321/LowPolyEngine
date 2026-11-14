@@ -387,7 +387,7 @@ TEST_CASE("A scene document's entities are checked", "[scene][document]")
           "entities[0].components: expected an object, found array");
     CHECK(errorOf(withComponents(R"("rigidBody": {"mass": 2})")) ==
           "entities[0].components.rigidBody: unknown component type; known: name, transform, "
-          "staticMesh, camera, directionalLight, script");
+          "staticMesh, camera, directionalLight, script, parent, prefabInstance");
     CHECK(errorOf(withComponents(R"("camera": 5)")) ==
           "entities[0].components.camera: expected an object, found number 5");
 }
