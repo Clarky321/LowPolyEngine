@@ -108,7 +108,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 | M4.3 | Asset identity and asset registry | done |
 | M4.4 | Scene documents as versioned JSON | done |
 | M4.5 | Lua runtime and script component | done |
-| M4.6 | Prefab model | in progress |
+| M4.6 | Prefab model | done |
 | M4.7 | Integration, final verification and pull request | planned |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M4.x done (M4.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M4.x)"` finds the commits.
