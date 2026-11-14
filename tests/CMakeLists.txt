@@ -15,6 +15,8 @@ add_executable(lpe_unit_tests
     unit/core/png_decode_test.cpp
     unit/core/result_test.cpp
     unit/core/smoke_test.cpp
+    unit/core/utf8_test.cpp
+    unit/core/uuid_test.cpp
     unit/debug/text_mesh_test.cpp
     unit/geometry/face_normal_test.cpp
     unit/geometry/mesh_data_test.cpp
@@ -26,6 +28,7 @@ add_executable(lpe_unit_tests
     unit/render/light_test.cpp
     unit/render/material_test.cpp
     unit/sandbox/island_preview_assets_test.cpp
+    unit/scene/scene_test.cpp
     unit/sandbox/sky_test.cpp
     unit/sandbox/worldgen_panel_test.cpp
     ${PROJECT_SOURCE_DIR}/sandbox/island-preview/Sky.cpp

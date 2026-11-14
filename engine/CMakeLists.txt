@@ -34,6 +34,8 @@ add_library(engine STATIC
     src/core/FrameClock.cpp
     src/core/Image.cpp
     src/core/Log.cpp
+    src/core/Utf8.cpp
+    src/core/Uuid.cpp
     src/core/Version.cpp
     src/debug/DebugUi.cpp
     src/debug/TextMesh.cpp
@@ -56,6 +58,7 @@ add_library(engine STATIC
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
     src/render/opengl/GlTexture.cpp
+    src/scene/Scene.cpp
     ${worldgen_sources}
 )
 

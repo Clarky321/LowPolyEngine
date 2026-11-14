@@ -103,7 +103,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 
 | ID | Title | Status |
 |---|---|---|
-| M4.1 | Scene core and persistent identifiers | planned |
+| M4.1 | Scene core and persistent identifiers | in progress |
 | M4.2 | EnTT and entity components | planned |
 | M4.3 | Asset identity and asset registry | planned |
 | M4.4 | Scene documents as versioned JSON | planned |
@@ -152,6 +152,17 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 The ADR fixes: size; generation (where the entropy comes from — never the world seed, worldgen streams or `std::hash`; an injectable generator with a fixed seed for tests); the text form and how strictly it is parsed (case, hyphens, length); the null value; uniqueness rules (a duplicate is an error naming the ID; a generated duplicate is drawn again, with a bound); whether the ID of a destroyed entity may be used again (only through explicit creation with that ID); tests.
 
 **Lifecycle rules:** the public API identifies entities only by `EntityId`; there is no long-lived pointer or reference into scene storage, so a destroyed entity cannot be reached through stale data. Every operation on an ID the scene does not contain returns an error naming the ID; `contains` is false after `destroyEntity` and after `clear`. Data attached to an entity is removed with it (from M4.2 on: its components). `clear` keeps the scene's ID and name.
+
+**Decisions taken while implementing** (ADR 0020):
+- ID: 128-bit random IDs in the RFC 9562 version 4 layout. `engine/core/Uuid.hpp`: `core::Uuid` (`high`, `low`, ordered as one big-endian number, all zero is null), `toString` (lower case, canonical 36 characters), `parseUuid(text, kind)` (strict length, hyphens and hex digits, either case, any version; errors with the position and at most 40 quoted bytes, cut at a character boundary), `UuidGenerator` (xoshiro256** with a 256-bit state; `UuidGenerator(seed)` expands the seed with SplitMix64 for tests, `fromEntropy()` uses `std::random_device` and falls back to the clocks), `TypedUuid<Tag>` (one type per kind of object; `parse` rejects the null ID and names the kind).
+- `engine/scene/EntityId.hpp` and `engine/scene/SceneId.hpp`: `EntityId` and `SceneId` as `TypedUuid`s with the kinds "entity ID" and "scene ID".
+- `engine/core/Utf8.hpp`: `decodeUtf8At` and `findInvalidUtf8` (RFC 3629: no overlong forms, surrogates or values above U+10FFFF).
+- `engine/scene/Scene.hpp`: `Scene::create(sceneId, name, generator)` and `Scene::create(name, generator)` (the scene's ID drawn first, the entity IDs after it from the same generator, which the scene keeps); `createEntity()`, `createEntity(id)`, `destroyEntity`, `contains`, `findEntity` (nothing, or the error naming the scene and the ID), `entityIds()` in creation order, `entityCount`, `clear`. Move-only; a moved-from scene has a null ID, an empty name and no entities. Not thread-safe.
+- Storage: two ordered maps, ID → creation sequence and sequence → ID, so lookups, destruction and listing in creation order are all O(log n); an ID created again after its destruction goes to the end.
+- Names: `validateName(name, what)`: not empty, at most 256 bytes, valid UTF-8, no control characters (U+0000–U+001F, U+007F–U+009F); messages start with `what` (`scene name: invalid UTF-8 at byte 2`).
+- Generated IDs that are already in the scene are drawn again, at most 16 times (`kMaxIdAttempts`); a generated ID can never be null (the version bits).
+
+Implemented tests: `tests/unit/core/uuid_test.cpp` (golden IDs of three seeds from an independent Python implementation; version and variant bits over 10 000 IDs; 200 000 unique IDs and distinct first IDs of 1000 seeds; copied generators repeat; entropy generators differ; text round trip in both cases, the null and the all-ones ID, other versions readable; big-endian order; every parse error with its message; long and multi-byte input quoted within 40 bytes as valid UTF-8; typed IDs not convertible into each other or from integers and pointers, parse rejecting null), `tests/unit/core/utf8_test.cpp` (valid text up to U+10FFFF; 15 invalid sequences at their offsets; decoding step by step), `tests/unit/scene/scene_test.cpp` (ID types; scene ID, name and generator; null scene ID; every name rule with its message; create, find, destroy; unknown and null IDs; given IDs once; a taken generated ID drawn again; a destroyed ID back only by explicit creation; creation order across destroys; `clear`; moving; the same ID in two scenes; 100 000 entities created, half destroyed in order, the rest destroyed).
 
 **Out of scope:** components (M4.2), EnTT (M4.2), serialization (M4.4), hierarchy (M4.6), multiple scenes managed by a registry.
 

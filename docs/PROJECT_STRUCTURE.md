@@ -27,11 +27,11 @@ lowpoly-engine/
 │   ├── CMakeLists.txt
 │   ├── include/engine/
 │   │   ├── app/              # Application lifecycle and frame loop (M1)
-│   │   ├── core/             # Clock, Log, Result, files, images, math aliases
+│   │   ├── core/             # Clock, Log, Result, files, images, math aliases, persistent UUIDs (ADR 0020), UTF-8 checks
 │   │   ├── platform/         # Engine-facing window/input interfaces
 │   │   ├── geometry/         # CPU MeshData, primitive builders (M1, ADR 0007), OBJ subset import (M2.9, ADR 0012)
 │   │   ├── render/           # RHI-facing types and renderer interfaces
-│   │   ├── scene/            # Entity, components, world, prefab, document
+│   │   ├── scene/            # Entity, components, world, prefab, document; EntityId, SceneId and the Scene core (M4.1, ADR 0020)
 │   │   ├── assets/           # Asset IDs, handles, registry interfaces
 │   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness, noise, world settings, island placement, shapes, meshes, palettes, local water, clouds, whole archipelagos and settings files (M3.1–M3.12, ADR 0003, ADR 0004, ADR 0013–0017); settingsFields lists the settings for editors
 │   │   ├── scripting/        # Script runtime facade
