@@ -398,6 +398,7 @@ std::vector<EntityId> Scene::entitiesWithComponent() const
 
 LPE_INSTANTIATE_SCENE_COMPONENT(NameComponent)
 LPE_INSTANTIATE_SCENE_COMPONENT(TransformComponent)
+LPE_INSTANTIATE_SCENE_COMPONENT(StaticMeshComponent)
 LPE_INSTANTIATE_SCENE_COMPONENT(CameraComponent)
 LPE_INSTANTIATE_SCENE_COMPONENT(DirectionalLightComponent)
 

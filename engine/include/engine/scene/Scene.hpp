@@ -1,7 +1,7 @@
 #pragma once
 
 // A scene: the entities of one game world document and their components
-// (M4.1, M4.2; ADR 0020, ADR 0021).
+// (M4.1, M4.2, M4.3; ADR 0020, ADR 0021, ADR 0022).
 //
 // Entities are identified only by their persistent EntityId; the scene hands
 // out no pointer or reference into its storage, so a destroyed entity cannot
@@ -24,6 +24,7 @@
 #include "engine/scene/EntityId.hpp"
 #include "engine/scene/NameComponent.hpp"
 #include "engine/scene/SceneId.hpp"
+#include "engine/scene/StaticMeshComponent.hpp"
 #include "engine/scene/TransformComponent.hpp"
 
 #include <concepts>
@@ -51,9 +52,9 @@ inline constexpr int kMaxIdAttempts = 16;
 
 // The component types a scene stores.
 template <typename T>
-concept SceneComponent =
-    std::same_as<T, NameComponent> || std::same_as<T, TransformComponent> ||
-    std::same_as<T, CameraComponent> || std::same_as<T, DirectionalLightComponent>;
+concept SceneComponent = std::same_as<T, NameComponent> || std::same_as<T, TransformComponent> ||
+                         std::same_as<T, StaticMeshComponent> || std::same_as<T, CameraComponent> ||
+                         std::same_as<T, DirectionalLightComponent>;
 
 class Scene {
 public:

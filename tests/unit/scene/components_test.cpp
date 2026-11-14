@@ -2,6 +2,7 @@
 #include "engine/scene/CameraComponent.hpp"
 #include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/NameComponent.hpp"
+#include "engine/scene/StaticMeshComponent.hpp"
 #include "engine/scene/TransformComponent.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -17,6 +18,7 @@
 using engine::scene::CameraComponent;
 using engine::scene::DirectionalLightComponent;
 using engine::scene::NameComponent;
+using engine::scene::StaticMeshComponent;
 using engine::scene::TransformComponent;
 using engine::scene::validate;
 
@@ -156,6 +158,20 @@ TEST_CASE("A transform accepts positive scales within the limits only", "[scene]
     CHECK(errorOf(transform) == "transform component: scale.y is nan, must be finite");
     transform.scale = {1.0F, 1.0F, kInf};
     CHECK(errorOf(transform) == "transform component: scale.z is inf, must be finite");
+}
+
+TEST_CASE("A static mesh needs a mesh; its material may be null", "[scene][components]")
+{
+    const engine::assets::AssetId mesh{
+        engine::core::Uuid{0x1111111111114111ULL, 0x8111111111111111ULL}};
+    const engine::assets::AssetId material{
+        engine::core::Uuid{0x2222222222224222ULL, 0x8222222222222222ULL}};
+    CHECK_FALSE(validate(StaticMeshComponent{mesh, material}).has_value());
+    CHECK_FALSE(validate(StaticMeshComponent{mesh, {}}).has_value());
+    CHECK(errorOf(StaticMeshComponent{}) ==
+          "static mesh component: mesh is the null asset ID, must name a mesh asset");
+    CHECK(errorOf(StaticMeshComponent{{}, material}) ==
+          "static mesh component: mesh is the null asset ID, must name a mesh asset");
 }
 
 TEST_CASE("A camera's lens stays in the ranges of the projection", "[scene][components]")

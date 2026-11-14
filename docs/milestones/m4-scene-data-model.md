@@ -105,7 +105,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 |---|---|---|
 | M4.1 | Scene core and persistent identifiers | done |
 | M4.2 | EnTT and entity components | done |
-| M4.3 | Asset identity and asset registry | planned |
+| M4.3 | Asset identity and asset registry | in progress |
 | M4.4 | Scene documents as versioned JSON | planned |
 | M4.5 | Lua runtime and script component | planned |
 | M4.6 | Prefab model | planned |
@@ -121,7 +121,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Documents follow ADR 0004: an envelope with `format` and `formatVersion`, 64-bit and larger IDs as strings, floats that read back bit for bit, non-throwing parsing, errors with the field path, explicit migrations, no library types in public headers. Each document kind gets its own format id and schema decision.
 - Every new public type and function gets headless unit tests for normal, boundary and failure cases; loaders get round-trip, missing-field, unknown-field, wrong-type, malformed-input, newer-version and limit tests.
 - New dependencies only in the steps that name them: EnTT in M4.2, Lua (and, if chosen, LuaBridge3) in M4.5.
-- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0022; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 and 0021 come from M4.1 and M4.2).
+- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0023; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 to 0022 come from M4.1 to M4.3).
 - The editor, the Scene → renderer bridge and everything in *Out of scope* stay out, even where an API would make them easy.
 - No GPU tier is required for M4.1–M4.6 (no rendering, shader, windowing or loop code changes); the final step runs it as `docs/DEVELOPMENT_WORKFLOW.md` §8 requires. A step that unexpectedly touches such code runs it too.
 
@@ -239,6 +239,18 @@ Implemented tests: `tests/unit/scene/components_test.cpp` (defaults valid, the d
 - Material assets have an ID, a type and a path, but no file format or loader: material files belong to M6 (ADR 0010). Script and prefab files are read by M4.5 and M4.6.
 
 **Decisions to make (ADR "Asset identity and registry"):** manifest vs sidecar files; the path normalization and rejection rules; the case-conflict policy; type checks by extension; what "missing" means (error or a state); the manifest schema and limits; the null asset ID.
+
+**Decisions taken while implementing** (ADR 0022):
+- `engine/assets/AssetId.hpp`: `assets::AssetId`, a `TypedUuid` with the kind "asset ID"; the null ID refers to no asset and is never registered.
+- `engine/assets/AssetType.hpp`: `mesh`, `texture`, `material`, `script`, `prefab`; extensions compared ignoring case: `.obj`, `.png`, `.lua`; materials and prefabs any extension until their formats exist (M6, M4.6).
+- `engine/assets/AssetPath.hpp`: printable ASCII only, at most 256 bytes; `/` separators, empty and `.` segments dropped, `..` resolved and never above the root; rejected with their own messages: absolute, drive-letter and UNC paths, a leading `~`, `\` (not normalized: on Linux it is a file name character), `< > : " | ? *`, segments ending in `.` or a space, Windows device names. `foldCase` (ASCII lower case) for case comparisons.
+- `engine/assets/AssetRegistry.hpp`: `registerAsset`, `unregisterAsset`, `contains`, `find` (a copy of `AssetMetadata`), `findByPath`, `checkType`, `resolve`, `refreshAvailability`, `assets()` in folded path order. Conflicts: duplicate IDs and paths, files or folders that differ only in letter case, a file where a registered folder is and the reverse; all errors name both assets.
+- Availability is a state (`Present`, `Missing`), set on registration and by `refreshAvailability`; a file is present only with exactly the path's spelling, checked folder by folder, so a wrong letter case is missing on Windows as on Linux. `resolve` checks again and names the spelling found on disk.
+- `AssetMetadata` has the ID, type, path, availability and the file name as source name; no format version: versions live inside the asset files (ADR 0004 envelopes), so a copy in the metadata could disagree with the file.
+- `engine/assets/AssetManifest.hpp`: one manifest per project (not sidecars), `lpe.assets.manifest` version 1, entries `id`, `type`, `path` (all required) in path order; unknown fields warned about; at most 100 000 entries and 64 MiB; loading is all or nothing into a new registry; missing files are not errors. nlohmann_json in `engine/src/assets/AssetManifest.cpp` only; its malformed-JSON finder and value descriptions repeat those of `worldgen/SettingsFile.cpp` (shared helpers are M4.4's).
+- `engine/scene/StaticMeshComponent.hpp`: `mesh` (never null) and `material` (null: the renderer's default material); `engine/scene/AssetReferences.hpp`: `findAssetReferenceProblems(scene, registry)` lists unregistered and wrongly typed references in entity order.
+
+Implemented tests: `tests/unit/assets/asset_id_test.cpp` (no conversion between asset IDs and renderer handles, entity or scene IDs, integers or pointers; text form; type names and extensions), `tests/unit/assets/asset_path_test.cpp` (normalization; every rejection rule with its message), `tests/unit/assets/asset_registry_test.cpp` (register and find by ID and path; duplicate IDs and paths; letter-case conflicts of files and folders, also after unregistering; extensions; unregistering; type checks; missing files, folders in place of files, refreshing; a wrong letter case on disk; two project roots; the committed lighthouse mesh and textures resolved and read by `geometry::readObj` and `core::readPng`), `tests/unit/assets/asset_manifest_test.cpp` (exact text; round trip; no list and unknown fields; envelope errors including malformed JSON with line and column and a newer version; every entry field; duplicate IDs, paths and case conflicts in the file; 100 001 entries; files saved, loaded, missing, broken and above 64 MiB), `tests/unit/scene/asset_references_test.cpp`, the static mesh component in `tests/unit/scene/components_test.cpp` and `tests/unit/scene/scene_components_test.cpp`, and the integration test `tests/integration/asset_project_test.cpp` (manifest saved, project folder moved and renamed, the same IDs resolve to the moved files, which the CPU loaders read; the manifest holds no machine path).
 
 **Out of scope:** an asset database, import pipelines, caching, hot reload, an asset browser, glTF (M6), material files (M6), GPU resource caches.
 

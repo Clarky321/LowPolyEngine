@@ -2,6 +2,7 @@
 #include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/NameComponent.hpp"
 #include "engine/scene/Scene.hpp"
+#include "engine/scene/StaticMeshComponent.hpp"
 #include "engine/scene/TransformComponent.hpp"
 
 #include <charconv>
@@ -154,6 +155,16 @@ std::optional<core::Error> validate(const CameraComponent& component)
         return fieldError(kType, "farPlane", component.farPlane,
                           std::format("must be greater than nearPlane * {} ({})",
                                       text(CameraComponent::kMinFarToNearRatio), text(minFar)));
+    }
+    return std::nullopt;
+}
+
+std::optional<core::Error> validate(const StaticMeshComponent& component)
+{
+    if (component.mesh.isNull()) {
+        return core::Error{std::format("{} component: mesh is the null asset ID, must name a "
+                                       "mesh asset",
+                                       StaticMeshComponent::kTypeName)};
     }
     return std::nullopt;
 }

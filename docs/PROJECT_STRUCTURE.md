@@ -31,8 +31,8 @@ lowpoly-engine/
 │   │   ├── platform/         # Engine-facing window/input interfaces
 │   │   ├── geometry/         # CPU MeshData, primitive builders (M1, ADR 0007), OBJ subset import (M2.9, ADR 0012)
 │   │   ├── render/           # RHI-facing types and renderer interfaces
-│   │   ├── scene/            # Entity, components, world, prefab, document; EntityId, SceneId and the Scene core (M4.1, ADR 0020); Name, Transform, Camera, DirectionalLight components (M4.2, ADR 0021)
-│   │   ├── assets/           # Asset IDs, handles, registry interfaces
+│   │   ├── scene/            # Entity, components, world, prefab, document; EntityId, SceneId and the Scene core (M4.1, ADR 0020); Name, Transform, Camera, DirectionalLight components (M4.2, ADR 0021); StaticMeshComponent and asset reference checks (M4.3)
+│   │   ├── assets/           # Asset IDs, handles, registry interfaces; AssetId, AssetType, AssetPath, AssetRegistry, the asset manifest (M4.3, ADR 0022)
 │   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness, noise, world settings, island placement, shapes, meshes, palettes, local water, clouds, whole archipelagos and settings files (M3.1–M3.12, ADR 0003, ADR 0004, ADR 0013–0017); settingsFields lists the settings for editors
 │   │   ├── scripting/        # Script runtime facade
 │   │   ├── camera/           # Camera and camera-controller types

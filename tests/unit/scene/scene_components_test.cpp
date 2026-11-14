@@ -25,6 +25,7 @@ using engine::scene::EntityId;
 using engine::scene::NameComponent;
 using engine::scene::Scene;
 using engine::scene::SceneId;
+using engine::scene::StaticMeshComponent;
 using engine::scene::TransformComponent;
 
 namespace {
@@ -89,6 +90,19 @@ struct Samples<TransformComponent> {
     }
     static constexpr std::string_view kInvalidMessage =
         "transform component: scale.y is 0, must be in [0.0001, 10000]";
+};
+
+template <>
+struct Samples<StaticMeshComponent> {
+    static engine::assets::AssetId asset(std::uint64_t number)
+    {
+        return engine::assets::AssetId{Uuid{0x5555555555554555ULL, 0x8000000000000000ULL | number}};
+    }
+    static StaticMeshComponent first() { return {asset(1), {}}; }
+    static StaticMeshComponent second() { return {asset(2), asset(3)}; }
+    static StaticMeshComponent invalid() { return {{}, asset(3)}; }
+    static constexpr std::string_view kInvalidMessage =
+        "static mesh component: mesh is the null asset ID, must name a mesh asset";
 };
 
 template <>
@@ -158,8 +172,8 @@ double lengthOf(const Vec3& v)
 
 } // namespace
 
-using AllComponents =
-    std::tuple<NameComponent, TransformComponent, CameraComponent, DirectionalLightComponent>;
+using AllComponents = std::tuple<NameComponent, TransformComponent, StaticMeshComponent,
+                                 CameraComponent, DirectionalLightComponent>;
 
 TEMPLATE_LIST_TEST_CASE("A component is added, read, replaced and removed", "[scene][components]",
                         AllComponents)

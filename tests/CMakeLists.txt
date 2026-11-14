@@ -6,6 +6,10 @@ find_package(Catch2 3 REQUIRED CONFIG)
 include(Catch)
 
 add_executable(lpe_unit_tests
+    unit/assets/asset_id_test.cpp
+    unit/assets/asset_manifest_test.cpp
+    unit/assets/asset_path_test.cpp
+    unit/assets/asset_registry_test.cpp
     unit/camera/camera_test.cpp
     unit/camera/free_fly_controller_test.cpp
     unit/core/filesystem_test.cpp
@@ -28,6 +32,7 @@ add_executable(lpe_unit_tests
     unit/render/light_test.cpp
     unit/render/material_test.cpp
     unit/sandbox/island_preview_assets_test.cpp
+    unit/scene/asset_references_test.cpp
     unit/scene/components_test.cpp
     unit/scene/public_headers_test.cpp
     unit/scene/scene_components_test.cpp
@@ -67,12 +72,17 @@ catch_discover_tests(lpe_unit_tests)
 
 add_executable(lpe_integration_tests
     integration/application_test.cpp
+    integration/asset_project_test.cpp
     integration/input_events_test.cpp
     integration/platform_test.cpp
 )
 # SDL directly: input tests push synthetic events into SDL's queue.
 find_package(SDL3 REQUIRED CONFIG)
 target_link_libraries(lpe_integration_tests PRIVATE engine SDL3::SDL3 Catch2::Catch2WithMain)
+# The asset project test (M4.3) copies committed assets into a temporary project.
+target_compile_definitions(lpe_integration_tests PRIVATE
+    LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets"
+)
 lpe_set_project_warnings(lpe_integration_tests)
 catch_discover_tests(lpe_integration_tests
     PROPERTIES
