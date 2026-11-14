@@ -109,6 +109,7 @@ lowpoly-engine/
 │   ├── TESTING_AND_CI.md
 │   ├── DEVELOPMENT_WORKFLOW.md  # branches, one sub-milestone per task, commits, reports
 │   ├── milestones/           # step-by-step plan per milestone (mN-<name>.md)
+│   ├── experiments/          # technical experiments outside the milestones (raven-ui-evaluation.md)
 │   ├── screenshots/          # engine-made captures per milestone (mN/), with README
 │   ├── references/
 │   └── adr/
