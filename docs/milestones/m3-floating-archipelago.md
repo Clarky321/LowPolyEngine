@@ -43,7 +43,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.10 | Clouds | done |
 | M3.11 | Settings as versioned JSON | done |
 | M3.12 | WorldGen panel with Dear ImGui | done |
-| M3.13 | Final verification and pull request | planned |
+| M3.13 | Final verification and pull request | in progress |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M3.x done (M3.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M3.x)"` finds the commits.
 
@@ -319,6 +319,15 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - A seed corpus: different seeds give visibly and measurably different archipelagos; the same seed repeats (hashes); geometry, placement, water and clouds are valid for every seed.
 - `docs/screenshots/m3/README.md` complete, with several seeds; M3 status in `docs/ENGINE_PLAN.md`; `README.md`; ADR statuses.
 - Pull request `milestone/m3-floating-archipelago` → `main`, merged only after the user accepts M3.
+
+**Verification** (2026-11-14, Windows 11, MSVC (VS 2026), NVIDIA GeForce RTX 4060, driver 610.88):
+- From a clean build (`clean.bat all`), Debug and Release with `LPE_WARNINGS_AS_ERRORS=ON`: no warnings. Headless tier 299/299 and GPU tier 76/76 in both configurations; `format-check.bat`: 147 files clean; every `scripts\windows\*.bat` wrapper, including the wrong-argument cases, gives the expected exit code.
+- A fresh clone of the branch (outside the canonical checkout, with `.venv` from `requirements-dev.txt`, deleted afterwards) builds in Debug with warnings as errors and passes both tiers, so every file the build and the tests need is committed. A first attempt in a deep temporary folder failed before compiling because the build paths passed Windows' 260-character limit; the clone in a short folder next to the repository built cleanly.
+- Seed corpus (`tests/unit/worldgen/world_corpus_test.cpp`): the worlds of seeds 0–15 with the default settings are valid in every part — islands inside the bounds and apart from each other, every island mesh valid, closed in size and inside its volume, water valid and on its island, clouds valid, inside the bounds and clear of the islands; all 16 worlds differ (fingerprints of every mesh and placement), with all six palettes, varied water and altitudes; seeds repeat their worlds; the fingerprints of seeds 1 and 42 are golden values that CI checks on Linux. Each part has its own corpus tests too (shapes, meshes, palettes, water, clouds).
+- Exit criterion: several visibly different archipelagos (`005` seed 1, `006` seed 42, `008` seed 7, `009` seed 2026 in `docs/screenshots/m3/`); the same seed repeats (hashes); generation tests pass; the free-fly camera reaches every part of the space (overview and `--island` start views, free flight at 0.5–200 m/s).
+- island-preview by hand in Debug and Release: the archipelago, `--island`, `--settings`, `--save-settings`, `--panel` and `--test-scene` run without errors; `run.bat debug` opens the world without errors or warnings.
+- `docs/screenshots/m3/README.md` lists 001–009; `docs/ENGINE_PLAN.md` and `README.md` describe M3 as done and waiting for acceptance; ADRs 0013–0018 are accepted, ADRs 0003, 0004, 0013 and 0014 list their M3 amendments.
+- Not covered by checks: flying the camera and using the WorldGen panel by hand (needs the user), the GPU tier on Linux (no GPU runner in CI).
 
 ## Risks and open questions
 

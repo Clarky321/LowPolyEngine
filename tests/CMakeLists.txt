@@ -41,6 +41,7 @@ add_executable(lpe_unit_tests
     unit/worldgen/random_test.cpp
     unit/worldgen/settings_fields_test.cpp
     unit/worldgen/settings_file_test.cpp
+    unit/worldgen/world_corpus_test.cpp
     unit/worldgen/world_gen_settings_test.cpp
 )
 target_link_libraries(lpe_unit_tests PRIVATE engine Catch2::Catch2WithMain)
