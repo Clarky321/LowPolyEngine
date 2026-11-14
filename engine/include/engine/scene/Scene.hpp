@@ -1,11 +1,17 @@
 #pragma once
 
-// A scene: the entities of one game world document (M4.1, ADR 0020).
+// A scene: the entities of one game world document and their components
+// (M4.1, M4.2; ADR 0020, ADR 0021).
 //
 // Entities are identified only by their persistent EntityId; the scene hands
 // out no pointer or reference into its storage, so a destroyed entity cannot
 // be reached through stale data: every operation on an ID the scene does not
 // contain fails with an error that names the scene and the ID.
+//
+// Components are plain values. They enter the scene only through addComponent
+// and replaceComponent, which validate them first, so every component in a
+// scene passes its validate; reading one returns a copy. The storage behind
+// this API is EnTT, private to the implementation (ADR 0021).
 //
 // A scene is a value owned by its caller (no global registry), move-only so
 // that entity IDs are not duplicated by accident, and not thread-safe: it is
@@ -13,12 +19,16 @@
 
 #include "engine/core/Result.hpp"
 #include "engine/core/Uuid.hpp"
+#include "engine/scene/CameraComponent.hpp"
+#include "engine/scene/DirectionalLightComponent.hpp"
 #include "engine/scene/EntityId.hpp"
+#include "engine/scene/NameComponent.hpp"
 #include "engine/scene/SceneId.hpp"
+#include "engine/scene/TransformComponent.hpp"
 
+#include <concepts>
 #include <cstddef>
-#include <cstdint>
-#include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -33,11 +43,17 @@ inline constexpr std::size_t kMaxNameBytes = 256;
 // often (with 122 random bits it never happens in practice).
 inline constexpr int kMaxIdAttempts = 16;
 
-// Checks a name of the scene model (a scene's name now): not empty, at most
-// kMaxNameBytes bytes, valid UTF-8, no control characters (U+0000-U+001F,
-// U+007F-U+009F). The error starts with `what`, e.g.
-// "scene name: invalid UTF-8 at byte 3".
+// Checks a name of the scene model (a scene's name, an entity's
+// NameComponent): not empty, at most kMaxNameBytes bytes, valid UTF-8, no
+// control characters (U+0000-U+001F, U+007F-U+009F). The error starts with
+// `what`, e.g. "scene name: invalid UTF-8 at byte 3".
 [[nodiscard]] std::optional<core::Error> validateName(std::string_view name, std::string_view what);
+
+// The component types a scene stores.
+template <typename T>
+concept SceneComponent =
+    std::same_as<T, NameComponent> || std::same_as<T, TransformComponent> ||
+    std::same_as<T, CameraComponent> || std::same_as<T, DirectionalLightComponent>;
 
 class Scene {
 public:
@@ -55,18 +71,20 @@ public:
     Scene& operator=(Scene&& other) noexcept;
     Scene(const Scene&) = delete;
     Scene& operator=(const Scene&) = delete;
-    ~Scene() = default;
+    ~Scene();
 
     [[nodiscard]] SceneId id() const noexcept { return id_; }
     [[nodiscard]] const std::string& name() const noexcept { return name_; }
 
-    // Creates an entity with a new ID from the scene's generator.
+    // Creates an entity, without components, with a new ID from the scene's
+    // generator.
     [[nodiscard]] core::Result<EntityId> createEntity();
-    // Creates an entity with the given ID (loading a document, a later undo).
-    // Fails for the null ID and for an ID the scene already contains.
+    // Creates an entity, without components, with the given ID (loading a
+    // document, a later undo). Fails for the null ID and for an ID the scene
+    // already contains.
     [[nodiscard]] core::Result<EntityId> createEntity(EntityId entity);
 
-    // Destroys the entity and everything attached to it. Fails for an ID the
+    // Destroys the entity together with its components. Fails for an ID the
     // scene does not contain.
     [[nodiscard]] std::optional<core::Error> destroyEntity(EntityId entity);
 
@@ -78,24 +96,67 @@ public:
     // The IDs of all entities in the order they were created (a destroyed
     // entity leaves its place; one created again with its ID goes to the end).
     [[nodiscard]] std::vector<EntityId> entityIds() const;
-    [[nodiscard]] std::size_t entityCount() const noexcept { return byId_.size(); }
+    [[nodiscard]] std::size_t entityCount() const noexcept;
 
-    // Destroys all entities; the scene keeps its ID and name.
+    // Destroys all entities and their components; the scene keeps its ID,
+    // name and generator.
     void clear() noexcept;
 
+    // Component operations. Each fails, changing nothing, for an entity the
+    // scene does not contain; the error names the scene, the entity and the
+    // component type.
+
+    // Adds a component the entity does not have yet (an entity has at most
+    // one component of each type; replaceComponent changes it). Fails for an
+    // invalid value with the error of its validate. Rotations and light
+    // directions are stored normalized.
+    template <SceneComponent T>
+    [[nodiscard]] std::optional<core::Error> addComponent(EntityId entity, const T& value);
+    // Replaces a component the entity has, under the same rules as
+    // addComponent.
+    template <SceneComponent T>
+    [[nodiscard]] std::optional<core::Error> replaceComponent(EntityId entity, const T& value);
+    // Removes a component the entity has.
+    template <SceneComponent T>
+    [[nodiscard]] std::optional<core::Error> removeComponent(EntityId entity);
+    // False for an entity the scene does not contain.
+    template <SceneComponent T>
+    [[nodiscard]] bool hasComponent(EntityId entity) const noexcept;
+    // A copy of a component the entity has.
+    template <SceneComponent T>
+    [[nodiscard]] core::Result<T> component(EntityId entity) const;
+
+    // The entities that have all the given components, in creation order.
+    template <SceneComponent First, SceneComponent... Rest>
+    [[nodiscard]] std::vector<EntityId> entitiesWith() const
+    {
+        std::vector<EntityId> found = entitiesWithComponent<First>();
+        if constexpr (sizeof...(Rest) > 0) {
+            std::erase_if(found,
+                          [this](EntityId entity) { return !(hasComponent<Rest>(entity) && ...); });
+        }
+        return found;
+    }
+
 private:
+    // The EnTT registry and the ID index, defined in Scene.cpp. Null in a new,
+    // cleared or moved-from scene until an entity is created.
+    struct Storage;
+
     Scene(SceneId sceneId, std::string name, core::UuidGenerator generator) noexcept;
 
     [[nodiscard]] std::string describe(EntityId entity) const;
+    [[nodiscard]] Storage& storage();
     void insert(EntityId entity);
+
+    // The entities having a component of type T, in creation order.
+    template <SceneComponent T>
+    [[nodiscard]] std::vector<EntityId> entitiesWithComponent() const;
 
     SceneId id_;
     std::string name_;
     core::UuidGenerator generator_;
-    // Each entity's place in the creation order, and the order itself.
-    std::map<EntityId, std::uint64_t> byId_;
-    std::map<std::uint64_t, EntityId> bySequence_;
-    std::uint64_t nextSequence_ = 0;
+    std::unique_ptr<Storage> storage_;
 };
 
 } // namespace engine::scene

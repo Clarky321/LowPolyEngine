@@ -52,10 +52,10 @@ Official/reference links:
 
 | Library | Use | Decision |
 |---|---|---|
-| GLM | Vectors, matrices, quaternions | Adopted in M1 (`glm/1.0.3`, ADR 0007) behind `engine::math` aliases in `engine/core/Math.hpp`. |
+| GLM | Vectors, matrices, quaternions | Adopted in M1 (`glm/1.0.3`, ADR 0007) behind `engine::math` aliases in `engine/core/Math.hpp` (`math::Quat` since M4.2). |
 | spdlog | Logging | Candidate, not adopted. M1 routes all engine logs through `engine/core/Log.hpp` (levels, categories, `std::format`), which needs no dependency. Swap the implementation behind that header if sinks, files or async logging become necessary. |
 | GLAD 2 | OpenGL function loading | Adopt for OpenGL backend. Generate against the project's target API and pin generated source/metadata. |
-| EnTT | ECS | Candidate/adopt for initial scene runtime. Keep persistent IDs separate from transient EnTT entity handles. |
+| EnTT | ECS | Adopted in M4.2 (`entt/4.0.0`, ADR 0021) as the private storage of `engine::scene::Scene`, included only in `engine/src/scene/Scene.cpp`. Persistent `EntityId`s (ADR 0020) stay separate from the transient EnTT entity handles, which never leave the scene implementation. |
 | Dear ImGui | Editor UI | Adopt for first editor prototype. Use official SDL3 + OpenGL/Vulkan backends where applicable. |
 | Catch2 v3 | Unit/integration testing | Adopt with CTest. Use one main test framework. |
 | Lua 5.5.1 | Embedded scripts | Candidate baseline; validate Conan package and toolchain across target platforms. Lua official release list identifies 5.5.1 (3 Aug 2026) as current at research time. |

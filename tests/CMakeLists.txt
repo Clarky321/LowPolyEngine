@@ -28,6 +28,9 @@ add_executable(lpe_unit_tests
     unit/render/light_test.cpp
     unit/render/material_test.cpp
     unit/sandbox/island_preview_assets_test.cpp
+    unit/scene/components_test.cpp
+    unit/scene/public_headers_test.cpp
+    unit/scene/scene_components_test.cpp
     unit/scene/scene_test.cpp
     unit/sandbox/sky_test.cpp
     unit/sandbox/worldgen_panel_test.cpp
@@ -55,6 +58,10 @@ target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
 # The committed assets island-preview loads are checked headless too.
 target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets")
+# The public header check (M4.2) reads the engine's headers.
+target_compile_definitions(lpe_unit_tests PRIVATE
+    LPE_ENGINE_INCLUDE_DIRECTORY="${PROJECT_SOURCE_DIR}/engine/include"
+)
 lpe_set_project_warnings(lpe_unit_tests)
 catch_discover_tests(lpe_unit_tests)
 

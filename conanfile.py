@@ -42,6 +42,9 @@ class LowPolyEngineConan(ConanFile):
         # Development and debug UI in the sandbox (ADR 0018); its SDL3 and
         # OpenGL 3 backends are built from the package's sources in third_party/.
         self.requires("imgui/1.92.9b")
+        # Entity and component storage inside engine/src/scene/ only
+        # (header-only, private; ADR 0021).
+        self.requires("entt/4.0.0")
         # Unit tests only; never linked into the engine runtime.
         self.test_requires("catch2/3.16.1")
 

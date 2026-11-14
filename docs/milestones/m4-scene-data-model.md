@@ -104,7 +104,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 | ID | Title | Status |
 |---|---|---|
 | M4.1 | Scene core and persistent identifiers | done |
-| M4.2 | EnTT and entity components | planned |
+| M4.2 | EnTT and entity components | in progress |
 | M4.3 | Asset identity and asset registry | planned |
 | M4.4 | Scene documents as versioned JSON | planned |
 | M4.5 | Lua runtime and script component | planned |
@@ -121,7 +121,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Documents follow ADR 0004: an envelope with `format` and `formatVersion`, 64-bit and larger IDs as strings, floats that read back bit for bit, non-throwing parsing, errors with the field path, explicit migrations, no library types in public headers. Each document kind gets its own format id and schema decision.
 - Every new public type and function gets headless unit tests for normal, boundary and failure cases; loaders get round-trip, missing-field, unknown-field, wrong-type, malformed-input, newer-version and limit tests.
 - New dependencies only in the steps that name them: EnTT in M4.2, Lua (and, if chosen, LuaBridge3) in M4.5.
-- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0020; 0019 is the proposed editor UI decision of the Raven evaluation).
+- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0022; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 and 0021 come from M4.1 and M4.2).
 - The editor, the Scene → renderer bridge and everything in *Out of scope* stay out, even where an API would make them easy.
 - No GPU tier is required for M4.1–M4.6 (no rendering, shader, windowing or loop code changes); the final step runs it as `docs/DEVELOPMENT_WORKFLOW.md` §8 requires. A step that unexpectedly touches such code runs it too.
 
@@ -196,6 +196,18 @@ Implemented tests: `tests/unit/core/uuid_test.cpp` (golden IDs of three seeds fr
 - `StaticMeshComponent` is **not** in this step: it refers to asset IDs, which M4.3 introduces (see M4.3).
 
 **Decisions to make (ADR "EnTT as the internal ECS"):** exact package and recipe revision; private linking and how the public API avoids EnTT types (pimpl; component functions declared in the header and instantiated for the supported component set in the implementation, or named functions per component); the component access contract; scene order for enumeration; what happens to components when an entity is destroyed; the numeric limits above.
+
+**Decisions taken while implementing** (ADR 0021):
+- Package `entt/4.0.0`, recipe revision `ca14bea628dd1cfb1e8d444456de278c`, MIT, header-only; `find_package(EnTT)`, `EnTT::EnTT` linked `PRIVATE`, included only in `engine/src/scene/Scene.cpp`.
+- `Scene` keeps a pointer to a private `Scene::Storage` (the `entt::registry` and an ordered `EntityId → entt::entity` map); every EnTT entity carries an internal record with its `EntityId` and creation sequence. The M4.1 API and its tests are unchanged; `clear()` releases the storage, a moved-from scene has none.
+- Components in `engine/scene/{Name,Transform,Camera,DirectionalLight}Component.hpp`: plain structs with `kTypeName`, the limits as `static constexpr` members, defaulted `==` and `validate` (in `engine/src/scene/Components.cpp`); messages `<type> component: <field> is <value>, <rule>`, numbers in plain notation where exact, otherwise the shortest exact form.
+- The concept `SceneComponent` lists the four types; `addComponent`, `replaceComponent`, `removeComponent`, `hasComponent`, `component` (a copy) and `entitiesWith<T, U...>()` are templates constrained by it, explicitly instantiated in `Scene.cpp`.
+- Adding a component the entity already has is an error; replacing or removing one it does not have is an error; every failure changes nothing.
+- Queries collect the first type's pool, sort by creation sequence and filter by the other types: creation order, independent of EnTT's order.
+- Transform: position within ±10⁵; rotation finite with a length within 10⁻³ of 1; scale in [10⁻⁴, 10⁴]. Camera: field of view in [1°, 179°], near ≥ 0.001, far > near × 1.001 (the ranges `camera::projectionMatrix` uses unchanged). Light: direction finite and not zero, color and intensity ≥ 0, color × intensity finite. Rotations and light directions are stored normalized (in double); values already within 10⁻⁶ of unit length stay bit for bit, so storing a stored value again changes nothing.
+- `math::Quat` (= `glm::quat`, constructor (w, x, y, z)) added to `engine/core/Math.hpp`.
+
+Implemented tests: `tests/unit/scene/components_test.cpp` (defaults valid, the default transform is the identity, the camera defaults equal `camera::Camera`'s; every rule of every field with NaN, ±Inf, zero, negative, below and above the limits and its message; huge finite rotations; the extreme valid lenses give exactly `glm::perspective`'s matrix through `camera::projectionMatrix`), `tests/unit/scene/scene_components_test.cpp` (for each of the four types: add, read, replace, remove; a second add, replace or remove of a missing one; invalid values rejected with the field named and the stored value unchanged; unknown, null and destroyed entities for every operation; then several components on one entity; queries by one and two components in creation order across removals, destroys and an ID created again; components gone with their entity and after `clear`; moving a scene; normalized rotations and directions over 10 000 random values each, stored again bit for bit; 100 000 entities with components created, queried and destroyed), `tests/unit/scene/public_headers_test.cpp` (no public header under `engine/include/` includes EnTT or nlohmann_json). The M4.1 tests run unchanged.
 
 **Out of scope:** `StaticMeshComponent` (M4.3), `ScriptComponent` (M4.5), parent links (M4.6), systems and update loops, render extraction, component reflection or automatic serialization.
 

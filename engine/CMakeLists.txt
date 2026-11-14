@@ -4,6 +4,7 @@ find_package(SDL3 REQUIRED CONFIG)
 find_package(glm REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED CONFIG)
 find_package(imgui REQUIRED CONFIG)
+find_package(EnTT REQUIRED CONFIG)
 
 # World generation (src/worldgen/) must give the same float results with every
 # compiler (ADR 0003): GCC and Clang may otherwise contract a * b + c into a
@@ -58,6 +59,7 @@ add_library(engine STATIC
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
     src/render/opengl/GlTexture.cpp
+    src/scene/Components.cpp
     src/scene/Scene.cpp
     ${worldgen_sources}
 )
@@ -71,10 +73,12 @@ target_compile_features(engine PUBLIC cxx_std_20)
 # PRIVATE: SDL is used only in src/platform/sdl3/, GLAD only in
 # src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp,
 # nlohmann_json only in src/worldgen/SettingsFile.cpp, the Dear ImGui backends
-# only in src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp
-# (ADR 0002, 0004, 0005, 0006, 0008, 0018). Public headers include none of
-# them; consumers only get them as link dependencies.
+# only in src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp,
+# EnTT only in src/scene/ (ADR 0002, 0004, 0005, 0006, 0008, 0018, 0021).
+# Public headers include none of them; consumers only get them as link
+# dependencies.
 target_link_libraries(engine PRIVATE
+    EnTT::EnTT
     SDL3::SDL3
     glad
     imgui_backends
