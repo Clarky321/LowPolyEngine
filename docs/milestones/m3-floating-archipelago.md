@@ -43,7 +43,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.10 | Clouds | done |
 | M3.11 | Settings as versioned JSON | done |
 | M3.12 | WorldGen panel with Dear ImGui | done |
-| M3.13 | Final verification and pull request | in progress |
+| M3.13 | Final verification and pull request | done |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M3.x done (M3.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M3.x)"` finds the commits.
 
