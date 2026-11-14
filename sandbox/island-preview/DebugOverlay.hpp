@@ -10,6 +10,7 @@
 #include "engine/render/Renderer.hpp"
 
 #include <string>
+#include <vector>
 
 namespace island_preview {
 
@@ -22,8 +23,9 @@ struct OverlayData {
     float moveSpeed = 0.0F;
     // Under the title, e.g. the milestone and what is shown.
     std::string subtitle;
-    // Facts about the scene (seed, islands, generation time); empty: no line.
-    std::string scene;
+    // Facts about the scene (seed, islands, water, generation time), one entry
+    // per line; none for the test scene.
+    std::vector<std::string> scene;
 };
 
 // Replaces the builder's contents with the overlay for this frame.

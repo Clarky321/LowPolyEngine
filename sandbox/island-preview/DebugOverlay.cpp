@@ -47,13 +47,13 @@ void buildOverlay(engine::debug::TextMeshBuilder& builder, const OverlayData& da
     // Appended in order: GCC 13 at -O3 reports a false array-bounds error for
     // inserting a std::string into the middle of the vector.
     std::vector<std::string> lines;
-    lines.reserve(10U);
+    lines.reserve(9U + data.scene.size());
     lines.push_back(std::format("FPS: {:.0f}   FRAME: {:.2f} MS   MAX: {:.2f} MS",
                                 data.frame.framesPerSecond, data.frame.averageFrameMs,
                                 data.frame.maxFrameMs));
     // The scene facts after the frame statistics, before the renderer lines.
-    if (!data.scene.empty()) {
-        lines.push_back(data.scene);
+    for (const std::string& line : data.scene) {
+        lines.push_back(line);
     }
     lines.push_back(std::format("RENDERER: {}", data.renderer.api));
     lines.push_back(std::format("GL: {}", data.renderer.driverVersion));

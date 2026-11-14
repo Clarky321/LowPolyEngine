@@ -39,7 +39,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.6 | Island mesh | done |
 | M3.7 | Island palettes | done |
 | M3.8 | Floating world preview | done |
-| M3.9 | Local island water | planned |
+| M3.9 | Local island water | in progress |
 | M3.10 | Clouds | planned |
 | M3.11 | Settings as versioned JSON | planned |
 | M3.12 | WorldGen panel with Dear ImGui | planned |
@@ -231,17 +231,23 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** water that belongs to islands only.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0016):
 - Small lakes and ponds in basins of the top surface, other local water surfaces where the relief allows, streams that run downhill, and waterfalls over an island's edge where a stream reaches the rim and the generation result allows it.
 - Water bodies have their own deterministic placement parameters (in `WorldGenSettings`) and their own `RandomStream`.
 - Stylized water surfaces: flat-shaded, translucent material, drawn after the opaque geometry with alpha blending; waterfalls as low-poly ribbons down the underside.
 - No world ocean and no global water plane.
+- `engine/worldgen/IslandWater.hpp`: `generateIslandWater(shape, settings, islands)` returns an island's lakes, the runs of its stream, its waterfall and one translucent, flat-shaded mesh, island-local; `generateArchipelago` adds it to every island (`GeneratedIsland::water`, `Archipelago::waterCounts()`), with the other islands as obstacles for waterfalls. New stream `RandomStream::Water = 7`; lakes, the stream and the waterfall draw from separate keys of it. The water settings of ADR 0013 are used as defined; `maxLakesPerIsland` counts lakes and ponds together (ADR 0013 Amendment 2).
+- The top is sampled on a 48 × 48 grid over the island's bounding square; a priority flood from the rim gives each sample its filled level, and the depressions are the basins.
+- The stream: a spring on higher ground (within `s ≤ 0.7`, at least 1 m above the rim, the highest of 16 drawn that works) walks down the filled surface to the rim. A first version that stopped in the first pit found only 36 of 96 expected streams over 240 islands; now the stream fills the hollows on its way as **ponds** (lakes at their spill level that overflow) and flows on, so it is stored as runs: spring → pond → … → rim. Lakes: other basins (depth ≥ 0.3 m, at least 4 samples, all within `s ≤ 0.9`), deepest first, filled with `lakeChance` to 55–95 % of their depth.
+- Waterfall: where the stream leaves over the rim, with `waterfallChance`: a ribbon (both sides) that leaves horizontally 0.15 m outside the rim and falls freely along a parabola, 0.8–1.4 times the island's underside depth, widening and fading out; left out if it would pass through another island's volume.
+- Colours from data in the generator: lakes by depth from a light, clearer turquoise to a deep blue; streams turquoise; waterfalls light blue-white. The first look (lit like the islands) made waterfalls grey and nearly invisible against the lavender sky: island-preview now draws water unlit (its own colours), after the opaque islands, with alpha blending, island by island from back to front; waterfalls were widened to 2.5 times the stream, widening to 2.5 times again at the bottom.
+- island-preview: `--island N` (archipelago only) starts with a close view of island N (layout order), from 65° beside its waterfall if it has one; an island the world does not have is an error. The log line and the overlay name the water: `archipelago: seed S, P of R islands, T triangles, L lakes, S streams, F waterfalls, generated in X ms` (ponds count as lakes; triangles include water).
 
-**Tests (headless):** every water body lies on or within its island (inside the footprint, at or below the surrounding terrain where it fills a basin); streams descend monotonically; waterfalls start at the rim; water meshes pass `geometry::validate()`; determinism; islands without suitable relief get no water. GPU smoke with water enabled.
+**Tests (headless):** every water body lies on or within its island (inside the footprint, at or below the surrounding terrain where it fills a basin); streams descend monotonically; waterfalls start at the rim; water meshes pass `geometry::validate()`; determinism; islands without suitable relief get no water. GPU smoke with water enabled. Implemented in `tests/unit/worldgen/island_water_test.cpp`: golden lakes, runs, waterfall and mesh hashes for seed 42 (an independent implementation gives the same water for seeds 42, 1 and 7); over 192 islands of 16 seeds: valid meshes with alpha below 1, body ranges in order, no tiny triangles; lakes flat, facing up, inside the footprint, partly under water and enclosed by terrain at or above their level, bottom < level ≤ spill, ponds first; runs chained spring → ponds → rim, never rising, on the sampled terrain, inside the footprint, facing up, every pond on the stream; waterfalls at the rim where the stream leaves, both sides, within their length, clear of all other islands; lakes, ponds, streams and waterfalls each on part of the islands and 10–50 % of the islands dry; repeatable, another seed differs; each setting switches its bodies (disabled, no streams, no lake chance with streams unchanged, no lakes allowed, waterfall chance 0 and 1, all chances at maximum); a flat island gets no water and a round cone no lake or pond. `archipelago_test.cpp`: every island's water equals `generateIslandWater` with the layout as obstacles, counts and triangles include it, and turning water off changes no island. GPU tier: the archipelago log line with the water counts, `island_preview_island_smoke` (`--island 0`), `island_preview_island_out_of_range` and `island_preview_island_not_for_test_scene`.
 
 **Done when:** a seed corpus produces valid local water on some islands and none elsewhere.
 
-**Visual check:** screenshot with lakes, a stream and a waterfall.
+**Visual check:** screenshot with lakes, a stream and a waterfall (`docs/screenshots/m3/003-island-water.png`, `004-meadow-waterfall.png`).
 
 ### M3.10 — Clouds
 

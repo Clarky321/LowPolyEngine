@@ -1,9 +1,10 @@
 // A whole generated archipelago: placement, shapes, meshes and palettes in one
-// call (M3.8).
+// call (M3.8), and the islands' local water (M3.9).
 #include "engine/worldgen/Archipelago.hpp"
 
 #include "engine/worldgen/IslandMesh.hpp"
 #include "engine/worldgen/IslandPalette.hpp"
+#include "engine/worldgen/IslandWater.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -37,6 +38,9 @@ TEST_CASE("The default archipelago has every island meshed and painted", "[world
     const auto palettes = engine::worldgen::choosePalettes(archipelago.layout, settings);
     const auto n = static_cast<std::uint64_t>(settings.mesh.resolution);
     std::uint64_t triangles = 0;
+    std::size_t lakes = 0;
+    std::size_t streams = 0;
+    std::size_t waterfalls = 0;
     for (std::size_t i = 0; i < archipelago.islands.size(); ++i) {
         const auto& island = archipelago.islands[i];
         INFO("island " << island.shape.island.index);
@@ -54,9 +58,41 @@ TEST_CASE("The default archipelago has every island meshed and painted", "[world
                                    static_cast<double>(island.shape.island.radius) * 1.000001;
         }
         CHECK(inside);
-        triangles += island.mesh.triangleCount();
+        // Its water, with the other islands as obstacles for waterfalls.
+        const auto water = engine::worldgen::generateIslandWater(island.shape, settings,
+                                                                 archipelago.layout.islands);
+        CHECK(island.water.lakes == water.lakes);
+        CHECK(island.water.streams == water.streams);
+        CHECK(island.water.waterfalls == water.waterfalls);
+        CHECK(island.water.mesh.positions == water.mesh.positions);
+        triangles += island.mesh.triangleCount() + island.water.mesh.triangleCount();
+        lakes += island.water.lakes.size();
+        streams += island.water.streams.empty() ? 0U : 1U;
+        waterfalls += island.water.waterfalls.size();
     }
     CHECK(archipelago.triangleCount() == triangles);
+    CHECK(archipelago.waterCounts() == engine::worldgen::WaterCounts{lakes, streams, waterfalls});
+    // The default world has water.
+    CHECK(lakes > 0U);
+    CHECK(streams > 0U);
+}
+
+TEST_CASE("Water does not change the islands", "[worldgen][archipelago]")
+{
+    WorldGenSettings settings;
+    settings.mesh.resolution = 12;
+    const Archipelago withWater = archipelagoOf(settings);
+    settings.water.enabled = false;
+    const Archipelago dry = archipelagoOf(settings);
+    REQUIRE(withWater.islands.size() == dry.islands.size());
+    for (std::size_t i = 0; i < dry.islands.size(); ++i) {
+        CHECK(dry.islands[i].water.empty());
+        CHECK(dry.islands[i].shape == withWater.islands[i].shape);
+        CHECK(dry.islands[i].palette == withWater.islands[i].palette);
+        CHECK(dry.islands[i].mesh.positions == withWater.islands[i].mesh.positions);
+        CHECK(dry.islands[i].mesh.colors == withWater.islands[i].mesh.colors);
+    }
+    CHECK(dry.waterCounts() == engine::worldgen::WaterCounts{});
 }
 
 TEST_CASE("The archipelago's meshes are the painted island meshes", "[worldgen][archipelago]")
@@ -85,6 +121,7 @@ TEST_CASE("Archipelagos repeat for a seed and differ between seeds", "[worldgen]
     for (std::size_t i = 0; i < first.islands.size(); ++i) {
         CHECK(first.islands[i].mesh.positions == again.islands[i].mesh.positions);
         CHECK(first.islands[i].mesh.colors == again.islands[i].mesh.colors);
+        CHECK(first.islands[i].water.mesh.positions == again.islands[i].water.mesh.positions);
         CHECK(engine::worldgen::meshHash(first.islands[i].mesh) ==
               engine::worldgen::meshHash(again.islands[i].mesh));
     }

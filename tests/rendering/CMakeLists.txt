@@ -35,11 +35,11 @@ lpe_add_gpu_test(island_preview_render_smoke island-preview --frames 30)
 set_tests_properties(island_preview_render_smoke PROPERTIES
     FAIL_REGULAR_EXPRESSION "\\[error\\]")
 
-# The archipelago of the default seed: all islands placed, counts and
-# generation time in the log.
+# The archipelago of the default seed: all islands placed, counts of
+# triangles and water bodies (M3.9) and the generation time in the log.
 lpe_add_gpu_test(island_preview_archipelago_log island-preview --frames 5)
 set_tests_properties(island_preview_archipelago_log PROPERTIES
-    PASS_REGULAR_EXPRESSION "archipelago: seed 1, 12 of 12 islands, [0-9]+ triangles, generated in [0-9.]+ ms")
+    PASS_REGULAR_EXPRESSION "archipelago: seed 1, 12 of 12 islands, [0-9]+ triangles, [0-9]+ lakes, [0-9]+ streams, [0-9]+ waterfalls, generated in [0-9.]+ ms")
 
 # Another world from the command line, also without errors.
 lpe_add_gpu_test(island_preview_seed_smoke island-preview --seed 42 --frames 30)
@@ -59,6 +59,19 @@ set_tests_properties(island_preview_model_needs_test_scene PROPERTIES
 lpe_add_gpu_test(island_preview_seed_not_for_test_scene island-preview --test-scene --seed 3)
 set_tests_properties(island_preview_seed_not_for_test_scene PROPERTIES
     PASS_REGULAR_EXPRESSION "usage: island-preview")
+lpe_add_gpu_test(island_preview_island_not_for_test_scene island-preview --test-scene --island 0)
+set_tests_properties(island_preview_island_not_for_test_scene PROPERTIES
+    PASS_REGULAR_EXPRESSION "usage: island-preview")
+
+# A close view of one island with its water drawn translucent after the
+# opaque geometry (M3.9), without errors; an island the world does not have is
+# named.
+lpe_add_gpu_test(island_preview_island_smoke island-preview --island 0 --frames 30)
+set_tests_properties(island_preview_island_smoke PROPERTIES
+    FAIL_REGULAR_EXPRESSION "\\[error\\]")
+lpe_add_gpu_test(island_preview_island_out_of_range island-preview --island 12 --frames 1)
+set_tests_properties(island_preview_island_out_of_range PROPERTIES
+    PASS_REGULAR_EXPRESSION "--island 12: the archipelago has 12 islands")
 
 # The --screenshot path used for docs/screenshots works end to end.
 lpe_add_gpu_test(island_preview_screenshot

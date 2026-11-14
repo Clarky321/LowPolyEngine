@@ -33,6 +33,7 @@ add_executable(lpe_unit_tests
     unit/worldgen/island_mesh_test.cpp
     unit/worldgen/island_palette_test.cpp
     unit/worldgen/island_shape_test.cpp
+    unit/worldgen/island_water_test.cpp
     unit/worldgen/noise_test.cpp
     unit/worldgen/random_test.cpp
     unit/worldgen/world_gen_settings_test.cpp

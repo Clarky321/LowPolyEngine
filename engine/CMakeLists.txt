@@ -13,6 +13,7 @@ set(worldgen_sources
     src/worldgen/IslandMesh.cpp
     src/worldgen/IslandPalette.cpp
     src/worldgen/IslandShape.cpp
+    src/worldgen/IslandWater.cpp
     src/worldgen/Noise.cpp
     src/worldgen/Random.cpp
     src/worldgen/WorldGenSettings.cpp

@@ -1,7 +1,8 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
 // By default it generates a floating archipelago from a seed (M3) and shows it
-// under a stylized sky; --test-scene shows the static test scene of M1/M2
-// instead (materials, textures, a directional light, an imported OBJ model).
+// under a stylized sky, with the islands' local water drawn translucent after
+// them; --test-scene shows the static test scene of M1/M2 instead (materials,
+// textures, a directional light, an imported OBJ model).
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
@@ -75,6 +76,9 @@ struct Options {
     std::optional<std::filesystem::path> modelPath;
     // Archipelago only: the world seed instead of the default settings' one.
     std::optional<std::uint64_t> seed;
+    // Archipelago only: start with a close view of this island (layout order)
+    // instead of the overview.
+    std::optional<std::uint64_t> island;
 };
 
 std::optional<std::uint64_t> parseUnsigned(std::string_view text)
@@ -118,6 +122,11 @@ std::optional<Options> parseOptions(int argc, char** argv)
             if (!options.seed) {
                 return std::nullopt;
             }
+        } else if (arg == "--island" && hasValue) {
+            options.island = parseUnsigned(argv[++i]);
+            if (!options.island) {
+                return std::nullopt;
+            }
         } else if (arg == "--test-scene") {
             options.testScene = true;
         } else {
@@ -125,7 +134,8 @@ std::optional<Options> parseOptions(int argc, char** argv)
         }
     }
     // Each option belongs to one of the two scenes.
-    if ((options.modelPath && !options.testScene) || (options.seed && options.testScene)) {
+    if ((options.modelPath && !options.testScene) ||
+        ((options.seed || options.island) && options.testScene)) {
         return std::nullopt;
     }
     if (options.screenshotPath && !options.maxFrames) {
@@ -178,6 +188,27 @@ engine::camera::Camera archipelagoCamera(const engine::worldgen::Archipelago& ar
     return cameraLookingAt(centre + direction * (1.3F * reach + 60.0F), target);
 }
 
+// Close view of one island from above and to the side, at a distance that fits
+// it, looking a little below its rim so the underside shows too. An island
+// with a waterfall is seen from 65 degrees beside the fall, which then hangs
+// against the sky at the island's right side.
+engine::camera::Camera islandCamera(const engine::worldgen::GeneratedIsland& island)
+{
+    const engine::worldgen::PlacedIsland& placed = island.shape.island;
+    engine::math::Vec3 around{0.55F, 0.0F, 0.72F};
+    if (!island.water.waterfalls.empty()) {
+        const engine::math::Vec2 out = island.water.waterfalls.front().outward;
+        constexpr float kCos = 0.4226F; // cos 65 degrees
+        constexpr float kSin = 0.9063F;
+        around = {out.x * kCos - out.y * kSin, 0.0F, out.x * kSin + out.y * kCos};
+    }
+    const engine::math::Vec3 direction =
+        glm::normalize(glm::normalize(around) * 0.85F + engine::math::Vec3{0.0F, 0.38F, 0.0F});
+    const engine::math::Vec3 target =
+        placed.anchor - engine::math::Vec3{0.0F, 0.45F * placed.undersideDepth, 0.0F};
+    return cameraLookingAt(placed.anchor + direction * (2.1F * placed.radius), target);
+}
+
 // Test scene: sunlight chosen in M2.8 to match the earlier baked brightness.
 // Archipelago: a warm sun from above and to the side, and a cool ambient, so
 // tops are bright, cliffs shaded and undersides cool and darker (ADR 0011).
@@ -223,6 +254,8 @@ public:
             renderer.destroyMaterial(object.material);
         }
         objects_.clear();
+        water_.clear();
+        renderer.destroyMaterial(waterMaterial_);
         for (const auto mesh : meshes_) {
             renderer.destroyMesh(mesh);
         }
@@ -302,6 +335,28 @@ public:
             renderer.drawMesh(object.mesh, object.material, model);
         }
 
+        // Water after all opaque geometry, blended, roughly back to front: the
+        // islands' water meshes by distance from the camera.
+        if (!water_.empty()) {
+            renderer.setView({
+                .view = view,
+                .projection = projection,
+                .blend = engine::render::BlendMode::Alpha,
+            });
+            const auto distance = [&](const WaterObject& water) {
+                const engine::math::Vec3 offset = water.position - camera_.position;
+                return glm::dot(offset, offset);
+            };
+            std::sort(water_.begin(), water_.end(),
+                      [&](const WaterObject& a, const WaterObject& b) {
+                          return distance(a) > distance(b);
+                      });
+            for (const auto& water : water_) {
+                renderer.drawMesh(water.mesh, waterMaterial_,
+                                  glm::translate(engine::math::Mat4{1.0F}, water.position));
+            }
+        }
+
         if (showOverlay_) {
             renderOverlay(context);
         }
@@ -344,7 +399,24 @@ private:
             }
             meshes_.push_back(mesh.value());
             objects_.push_back({mesh.value(), material.value(), island.shape.island.anchor, 0.0F});
+            // Translucent through its vertex colours' alpha.
+            if (!island.water.mesh.positions.empty()) {
+                auto water = renderer.createMesh(island.water.mesh);
+                if (!water) {
+                    return water.error();
+                }
+                meshes_.push_back(water.value());
+                water_.push_back({water.value(), island.shape.island.anchor});
+            }
         }
+        // Water shows its own colours, unlit: it reads as light-filled against
+        // the shaded rock, and a waterfall stays bright on any side.
+        auto waterMaterial = renderer.createMaterial(
+            {.baseColor = {1.0F, 1.0F, 1.0F, 1.0F}, .shading = engine::render::Shading::Unlit});
+        if (!waterMaterial) {
+            return waterMaterial.error();
+        }
+        waterMaterial_ = waterMaterial.value();
         auto sky =
             renderer.createMesh(island_preview::buildSkyDome(island_preview::floatingWorldSky()));
         if (!sky) {
@@ -353,19 +425,33 @@ private:
         sky_ = sky.value();
 
         light_ = archipelagoSunlight();
-        camera_ = archipelagoCamera(archipelago);
+        if (options_.island) {
+            if (*options_.island >= archipelago.islands.size()) {
+                return engine::core::Error{
+                    std::format("--island {}: the archipelago has {} islands, numbered from 0",
+                                *options_.island, archipelago.islands.size())};
+            }
+            camera_ = islandCamera(archipelago.islands[*options_.island]);
+        } else {
+            camera_ = archipelagoCamera(archipelago);
+        }
         controller_ = engine::camera::FreeFlyController{{.moveSpeed = 30.0F}};
         subtitle_ = "M3  FLOATING ARCHIPELAGO";
-        sceneLine_ = std::format("SEED: {}   ISLANDS: {} OF {}   TRIANGLES: {}   GEN: {:.0f} MS",
-                                 settings.seed, archipelago.islands.size(),
-                                 archipelago.layout.requestedCount, archipelago.triangleCount(),
-                                 milliseconds);
+        const engine::worldgen::WaterCounts water = archipelago.waterCounts();
+        sceneLines_ = {
+            std::format("SEED: {}   ISLANDS: {} OF {}   TRIANGLES: {}   GEN: {:.0f} MS",
+                        settings.seed, archipelago.islands.size(),
+                        archipelago.layout.requestedCount, archipelago.triangleCount(),
+                        milliseconds),
+            std::format("WATER: {} LAKES   {} STREAMS   {} WATERFALLS", water.lakes, water.streams,
+                        water.waterfalls),
+        };
         engine::core::logInfo("app",
-                              "archipelago: seed {}, {} of {} islands, {} triangles, generated "
-                              "in {:.1f} ms",
+                              "archipelago: seed {}, {} of {} islands, {} triangles, {} lakes, "
+                              "{} streams, {} waterfalls, generated in {:.1f} ms",
                               settings.seed, archipelago.islands.size(),
                               archipelago.layout.requestedCount, archipelago.triangleCount(),
-                              milliseconds);
+                              water.lakes, water.streams, water.waterfalls, milliseconds);
         engine::core::logInfo("app", "hold the right mouse button to look around, WASD to fly, "
                                      "the mouse wheel to change speed, Escape to quit");
         return std::nullopt;
@@ -483,7 +569,7 @@ private:
                                                        .camera = camera_,
                                                        .moveSpeed = controller_.moveSpeed(),
                                                        .subtitle = subtitle_,
-                                                       .scene = sceneLine_,
+                                                       .scene = sceneLines_,
                                                    });
         if (auto error = renderer.updateMesh(overlay_, overlayText_.mesh())) {
             // Not fatal: the scene still renders. Log once, then hide the overlay.
@@ -514,6 +600,14 @@ private:
     // The test scene's objects have a material each; the archipelago's islands
     // share one.
     std::vector<SceneObject> objects_;
+    // The islands' water, drawn after the opaque objects. Its meshes are in
+    // meshes_.
+    struct WaterObject {
+        engine::render::MeshHandle mesh;
+        engine::math::Vec3 position{0.0F};
+    };
+    std::vector<WaterObject> water_;
+    engine::render::MaterialHandle waterMaterial_;
     engine::render::MeshHandle sky_;
     engine::render::LightDesc light_;
     engine::camera::Camera camera_;
@@ -521,7 +615,7 @@ private:
     bool mouseLook_ = false;
     float sceneSeconds_ = 0.0F;
     std::string subtitle_;
-    std::string sceneLine_;
+    std::vector<std::string> sceneLines_;
     engine::render::MeshHandle overlay_;
     engine::debug::TextMeshBuilder overlayText_;
     bool showOverlay_ = true;
@@ -534,8 +628,8 @@ int main(int argc, char** argv)
     const auto options = parseOptions(argc, argv);
     if (!options) {
         std::fprintf(stderr, "usage: island-preview [--frames N] [--assets DIR] "
-                             "[--screenshot FILE.png] [--seed N] [--test-scene [--model "
-                             "FILE.obj]]\n");
+                             "[--screenshot FILE.png] [--seed N] [--island N] [--test-scene "
+                             "[--model FILE.obj]]\n");
         return kExitUsage;
     }
 

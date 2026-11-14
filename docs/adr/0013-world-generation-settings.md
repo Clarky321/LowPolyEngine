@@ -1,6 +1,6 @@
 # ADR 0013: World generation settings
 
-- **Status:** Accepted; amended for M3.4 (Amendment 1)
+- **Status:** Accepted; amended for M3.4 (Amendment 1) and M3.9 (Amendment 2)
 - **Date:** 2026-11-13
 - **Related:** ADR 0003 (generator version, determinism), ADR 0004 (JSON envelope, validation after loading), `docs/milestones/m3-floating-archipelago.md` M3.3, M3.11 and M3.12, `docs/ENGINE_PLAN.md` §6
 
@@ -83,3 +83,13 @@ M3.4 turns the `islands` settings into a layout: `placeIslands(settings)` in `en
 - **Candidates.** Each attempt draws, in this order, the radius from `islands.radius`, the depth ratio from `underside.depthRatio`, x from `[bounds.min.x + radius, bounds.max.x − radius)`, z likewise and the rim altitude from `islands.altitude`, all with `nextFloat` (one output each). Decision 6 guarantees that every such candidate lies inside the bounds, vertically too. The first candidate that keeps the spacing to every island placed before it is taken.
 - **When islands do not fit.** After `kPlacementAttemptsPerIsland` (100) attempts without a fitting candidate, the island is left out and the next one is tried; the layout keeps the indices of the placed islands, and its warning reads, for example, `placed 8 of 40 islands: 32 found no position that keeps the spacing in 100 attempts each`. Placement is pure, so the caller logs the warning. The first island always fits, so a layout is never empty, and the work is bounded by `islands.count × 100` attempts.
 - **Arithmetic.** Distances are compared squared in double (no square root); all values come from correctly rounded IEEE operations, so layouts match bit for bit across platforms (golden tests).
+
+## Amendment 2: local water (M3.9, 2026-11-14)
+
+The water fields keep their names, defaults and ranges; ADR 0016 defines what they control:
+
+- `water.enabled`: no lakes, streams or waterfalls at all when false.
+- `water.lakeChance`: the probability that each suitable basin, deepest first, is filled as a lake.
+- `water.maxLakesPerIsland`: lakes and ponds together. A stream that would need more ponds (filled hollows on its way) is not taken; lakes are placed only while there is room.
+- `water.streamChance`: the probability of a stream on an island; it reaches the rim through its ponds.
+- `water.waterfallChance`: the probability that the stream falls over the rim as a waterfall, unless the fall would pass through another island.
