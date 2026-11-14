@@ -19,6 +19,9 @@ endif()
 
 option(LPE_BUILD_TESTS "Build the tests" ON)
 option(LPE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors in first-party code" OFF)
+# Experiment only (docs/experiments/raven-ui-evaluation.md): never on in the
+# presets or CI; needs a Raven checkout, see sandbox/raven-evaluation/.
+option(LPE_BUILD_RAVEN_EVALUATION "Build the Raven UI evaluation prototype" OFF)
 
 # All executables of a configuration go to one folder (build/<preset>/bin/<Config>/
 # with Visual Studio) so scripts/windows/run.bat can find them by target name.
@@ -39,6 +42,9 @@ add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/stb_image_write)
 add_subdirectory(engine)
 add_subdirectory(sandbox/island-preview)
+if(LPE_BUILD_RAVEN_EVALUATION)
+    add_subdirectory(sandbox/raven-evaluation)
+endif()
 
 if(LPE_BUILD_TESTS)
     add_subdirectory(tests)
