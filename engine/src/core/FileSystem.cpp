@@ -1,5 +1,7 @@
 #include "engine/core/FileSystem.hpp"
 
+#include "engine/core/Uuid.hpp"
+
 #include <cstddef>
 #include <exception>
 #include <fstream>
@@ -66,6 +68,55 @@ std::optional<Error> writeBinaryFile(const std::filesystem::path& path,
     file.close();
     if (!file) {
         return Error{"error while writing file '" + toUtf8(path) + "'"};
+    }
+    return std::nullopt;
+}
+
+std::optional<Error> writeFileAtomically(const std::filesystem::path& path,
+                                         std::span<const std::uint8_t> bytes)
+{
+    const std::string name = toUtf8(path);
+    if (path.empty() || !path.has_filename()) {
+        return Error{"cannot write '" + name + "': not a file path"};
+    }
+    std::error_code error;
+    const std::filesystem::path folder =
+        path.has_parent_path() ? path.parent_path() : std::filesystem::path(".");
+    if (!std::filesystem::is_directory(folder, error)) {
+        return Error{"cannot write '" + name + "': the folder '" + toUtf8(folder) +
+                     "' does not exist"};
+    }
+    if (std::filesystem::is_directory(path, error)) {
+        return Error{"cannot write '" + name + "': it is a folder"};
+    }
+
+    // In the same folder, so that the rename stays on one file system. The
+    // random part keeps two writers apart.
+    std::filesystem::path temporary = path;
+    temporary += ".tmp-" + toString(UuidGenerator::fromEntropy().next()).substr(0, 8);
+    {
+        std::ofstream file(temporary, std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!file) {
+            return Error{"cannot write '" + name + "': cannot create the temporary file '" +
+                         toUtf8(temporary) + "'"};
+        }
+        // char and std::uint8_t have the same size and representation.
+        file.write(reinterpret_cast<const char*>(bytes.data()),
+                   static_cast<std::streamsize>(bytes.size()));
+        file.close();
+        if (!file) {
+            std::filesystem::remove(temporary, error);
+            return Error{"cannot write '" + name + "': error while writing the temporary file"};
+        }
+    }
+    std::filesystem::rename(temporary, path, error);
+    if (error) {
+        // The generic message ("permission denied") is the same English text
+        // everywhere; the system one may be in the system's code page.
+        const std::string reason = error.default_error_condition().message();
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        return Error{"cannot replace '" + name + "': " + reason};
     }
     return std::nullopt;
 }

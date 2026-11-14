@@ -1,8 +1,8 @@
 #include "engine/assets/AssetManifest.hpp"
 
-#include "engine/core/FileSystem.hpp"
+#include "../core/JsonSupport.hpp"
 
-#include <nlohmann/json.hpp>
+#include "engine/core/FileSystem.hpp"
 
 #include <array>
 #include <format>
@@ -14,35 +14,13 @@ namespace engine::assets {
 
 namespace {
 
-using Json = nlohmann::json;
-using OrderedJson = nlohmann::ordered_json;
+using core::json::describe;
+using core::json::Json;
+using core::json::OrderedJson;
+using core::json::shortened;
 
 constexpr std::array<std::string_view, 3> kEnvelopeFields{"format", "formatVersion", "assets"};
 constexpr std::array<std::string_view, 3> kAssetFields{"id", "type", "path"};
-
-// At most 40 bytes of text from the file, cut at a character boundary.
-std::string shortened(std::string_view text)
-{
-    constexpr std::size_t kMaxBytes = 40;
-    if (text.size() <= kMaxBytes) {
-        return std::string(text);
-    }
-    std::size_t cut = kMaxBytes - 3;
-    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0U) == 0x80U) {
-        --cut;
-    }
-    return std::string(text.substr(0, cut)) + "...";
-}
-
-// A JSON value in a message: its type, and the value itself if it is short.
-std::string describe(const Json& value)
-{
-    if (value.is_object() || value.is_array() || value.is_null()) {
-        return value.type_name();
-    }
-    return std::format("{} {}", value.type_name(),
-                       shortened(value.dump(-1, ' ', false, Json::error_handler_t::replace)));
-}
 
 bool isOneOf(std::string_view key, std::span<const std::string_view> known)
 {
@@ -78,68 +56,6 @@ std::string typeList()
     return list;
 }
 
-// Finds where malformed JSON goes wrong, without exceptions: a parser that
-// accepts every value and records the first syntax error (as in
-// worldgen/SettingsFile.cpp).
-class SyntaxErrorFinder final : public nlohmann::json_sax<Json> {
-public:
-    bool null() override { return true; }
-    bool boolean(bool) override { return true; }
-    bool number_integer(number_integer_t) override { return true; }
-    bool number_unsigned(number_unsigned_t) override { return true; }
-    bool number_float(number_float_t, const string_t&) override { return true; }
-    bool string(string_t&) override { return true; }
-    bool binary(binary_t&) override { return true; }
-    bool start_object(std::size_t) override { return true; }
-    bool key(string_t&) override { return true; }
-    bool end_object() override { return true; }
-    bool start_array(std::size_t) override { return true; }
-    bool end_array() override { return true; }
-    bool parse_error(std::size_t, const std::string&,
-                     const nlohmann::detail::exception& error) override
-    {
-        // "[json.exception.parse_error.101] parse error at line 2, column 5: ..."
-        message = error.what();
-        if (const auto bracket = message.find("] "); bracket != std::string::npos) {
-            message.erase(0, bracket + 2U);
-        }
-        return false;
-    }
-
-    std::string message;
-};
-
-std::optional<core::Error> readEnvelope(const Json& root)
-{
-    const auto formatField = root.find("format");
-    if (formatField == root.end()) {
-        return core::Error{std::format("format: missing, expected \"{}\"", kManifestFormat)};
-    }
-    if (!formatField->is_string() || formatField->get<std::string>() != kManifestFormat) {
-        return core::Error{std::format("format: expected \"{}\", found {}", kManifestFormat,
-                                       describe(*formatField))};
-    }
-    const auto version = root.find("formatVersion");
-    if (version == root.end()) {
-        return core::Error{"formatVersion: missing"};
-    }
-    if (!version->is_number_integer()) {
-        return core::Error{
-            std::format("formatVersion: expected an integer, found {}", describe(*version))};
-    }
-    const auto number = version->get<std::int64_t>();
-    if (number < 1) {
-        return core::Error{
-            std::format("formatVersion: {} is not a version (the first is 1)", number)};
-    }
-    if (number > kManifestFormatVersion) {
-        return core::Error{std::format("formatVersion: {} is newer than this program reads ({}); "
-                                       "a newer version of the engine wrote the file",
-                                       number, kManifestFormatVersion)};
-    }
-    return std::nullopt;
-}
-
 } // namespace
 
 std::string manifestToJson(const AssetRegistry& registry)
@@ -162,9 +78,8 @@ std::string manifestToJson(const AssetRegistry& registry)
 core::Result<LoadedManifest> manifestFromJson(std::string_view text,
                                               const std::filesystem::path& projectRoot)
 {
-    SyntaxErrorFinder finder;
-    if (!Json::sax_parse(text, &finder)) {
-        return core::Error{"malformed JSON: " + finder.message};
+    if (auto syntax = core::json::syntaxError(text)) {
+        return core::Error{"malformed JSON: " + *syntax};
     }
     const Json root = Json::parse(text, nullptr, false);
     if (root.is_discarded()) {
@@ -173,8 +88,9 @@ core::Result<LoadedManifest> manifestFromJson(std::string_view text,
     if (!root.is_object()) {
         return core::Error{std::format("expected a JSON object, found {}", describe(root))};
     }
-    if (auto error = readEnvelope(root)) {
-        return *error;
+    if (auto version = core::json::readEnvelope(root, kManifestFormat, kManifestFormatVersion);
+        !version) {
+        return version.error();
     }
 
     LoadedManifest loaded{AssetRegistry(projectRoot), {}};

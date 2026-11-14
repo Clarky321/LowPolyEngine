@@ -1,6 +1,6 @@
 # ADR 0004: Serialization format for world generation settings
 
-- **Status:** Accepted; amended for M3.11 (Amendment 1)
+- **Status:** Accepted; amended for M3.11 (Amendment 1) and M4.4 (Amendment 2)
 - **Date:** 2026-11-09
 - **Related:** ADR 0003, `docs/ENGINE_PLAN.md` M3/M4
 
@@ -68,3 +68,10 @@ Rules:
 - **Errors** are `core::Error` values; nothing throws across the boundary. `loadSettings` prefixes the file name; `saveSettings` refuses settings that do not pass `validate()`, so a saved file always loads.
 - **Migrations.** Version 1 is the first; there is nothing to migrate yet. The first change of the layout raises `kSettingsFormatVersion` and adds a migration from each older version before the fields are read.
 - **island-preview** reads a file with `--settings FILE.json` (its `--seed` still replaces the file's seed) and writes the settings in use with `--save-settings FILE.json`; warnings are logged, errors stop the start with the file and field.
+
+## Amendment 2: shared document code and more document kinds (M4.4, 2026-11-14)
+
+- **Document kinds:** world settings (`lpe.worldgen.settings`, Amendment 1), the asset manifest (`lpe.assets.manifest`, M4.3, ADR 0022) and scene documents (`lpe.scene`, M4.4, ADR 0023). Each has its own format id, version and schema decision.
+- **Shared code:** `engine/src/core/JsonSupport.hpp` (internal) holds what the documents share: the float writer of Amendment 1 (`floatNumber`), the description of a JSON value in messages, the non-throwing syntax check with line and column, the envelope check (`readEnvelope`: format id, integer version from 1 to the current one, a newer version named as such), and the field readers. The world settings file uses it unchanged in behavior; its files stay byte for byte the same (`assets/worlds/default.json` and the settings tests). nlohmann_json is included only there and in the document sources.
+- **Migrations:** `engine/src/core/DocumentMigration.hpp` (internal) applies migrations `vN → vN+1` in order before the fields are read (rule 5); it is generic over the document type and tested with a test-only document. No format has a migration yet.
+- **Atomic writes:** `core::writeFileAtomically` writes to a temporary file in the target's folder and renames it over the target, so a failed save leaves an existing file as it was; scene documents use it (ADR 0023). The settings file and the asset manifest still write in place and create missing folders.

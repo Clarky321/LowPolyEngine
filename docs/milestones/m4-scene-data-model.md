@@ -106,7 +106,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 | M4.1 | Scene core and persistent identifiers | done |
 | M4.2 | EnTT and entity components | done |
 | M4.3 | Asset identity and asset registry | done |
-| M4.4 | Scene documents as versioned JSON | planned |
+| M4.4 | Scene documents as versioned JSON | in progress |
 | M4.5 | Lua runtime and script component | planned |
 | M4.6 | Prefab model | planned |
 | M4.7 | Integration, final verification and pull request | planned |
@@ -121,7 +121,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Documents follow ADR 0004: an envelope with `format` and `formatVersion`, 64-bit and larger IDs as strings, floats that read back bit for bit, non-throwing parsing, errors with the field path, explicit migrations, no library types in public headers. Each document kind gets its own format id and schema decision.
 - Every new public type and function gets headless unit tests for normal, boundary and failure cases; loaders get round-trip, missing-field, unknown-field, wrong-type, malformed-input, newer-version and limit tests.
 - New dependencies only in the steps that name them: EnTT in M4.2, Lua (and, if chosen, LuaBridge3) in M4.5.
-- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0023; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 to 0022 come from M4.1 to M4.3).
+- Decisions about dependencies, public APIs and file formats get an ADR in the sub-milestone that makes them, numbered when written (the next free number is 0024; 0019 is the proposed editor UI decision of the Raven evaluation, 0020 to 0023 come from M4.1 to M4.4).
 - The editor, the Scene → renderer bridge and everything in *Out of scope* stay out, even where an API would make them easy.
 - No GPU tier is required for M4.1–M4.6 (no rendering, shader, windowing or loop code changes); the final step runs it as `docs/DEVELOPMENT_WORKFLOW.md` §8 requires. A step that unexpectedly touches such code runs it too.
 
@@ -280,6 +280,17 @@ Implemented tests: `tests/unit/assets/asset_id_test.cpp` (no conversion between 
 - Errors are returned as `core::Error` with the field path (e.g. `entities[3].components.transform.scale.y: must be > 0`) and logged by the caller.
 
 **Decisions to make (ADR "Scene document format"):** format id and layout; ID text form in documents; unknown fields and unknown component types (warning and dropped, error, or kept — dropping loses data on the next save, so the ADR must choose consciously); unknown asset references (error, or a warning with the reference kept unchanged — never silently replaced); limits; whether components may be omitted vs written with defaults; the atomic-write behavior on Windows and Linux.
+
+**Decisions taken while implementing** (ADR 0023, ADR 0004 Amendment 2):
+- `engine/scene/SceneDocument.hpp`: `sceneToJson`, `sceneFromJson(text, generator, registry = nullptr)`, `saveScene`, `loadScene`; `LoadedScene` (the new scene and the warnings). Format `lpe.scene`, version 1: `id`, `name`, `entities` in creation order, each `{"id", "components"}`; component keys `name`, `transform`, `staticMesh`, `camera`, `directionalLight`, written in that order with every field; vectors as objects with named members (`{"x", "y", "z"}`, `{"w", "x", "y", "z"}`, `{"r", "g", "b"}`); a null material as JSON `null`; no other metadata.
+- An absent component key: the entity does not have it. Missing fields take the component's C++ defaults; `name.value` and `staticMesh.mesh` are required. Unknown fields: warnings with their path. Unknown component types: errors (dropping one would lose it on the next save).
+- Asset references: errors naming the field when a registry is given; unchecked and kept as they are without one.
+- Limits: 100 000 entities, 64 MiB per document (checked before reading the file and before parsing text), names 256 bytes.
+- Errors: the field path, then the component's `validate` message without its "… component:" prefix.
+- Shared internal code, nlohmann_json included only there and in the document sources: `engine/src/core/JsonSupport.hpp` (float writer, value descriptions, syntax check, envelope check, field readers), now also used by `worldgen/SettingsFile.cpp` (its files byte for byte the same) and `assets/AssetManifest.cpp`; `engine/src/core/DocumentMigration.hpp` (`migrateDocument`, generic over the document type; no migrations for version 1).
+- `core::writeFileAtomically` (`engine/core/FileSystem.hpp`): temporary file `<name>.tmp-<random>` in the target's folder, renamed over the target; the folder must exist; on failure the target is unchanged and the temporary file removed; no flush to the disk. The settings file and the asset manifest keep their in-place writes.
+
+Implemented tests: `tests/unit/scene/scene_document_test.cpp` (the exact layout of a scene with every component and of an empty one; round trip of a scene with non-ASCII names, every component, `-0.0`, a subnormal, a destroyed entity in the order, compared field by field and bit for bit, and written again to the same bytes; new IDs after loading come from the given generator; defaults, an entity without components and warnings for unknown fields at every level; every envelope, entity and component error with its path; asset references with a registry — unknown, wrong type for mesh and material — and unchecked without; 100 000 entities load, 100 001 do not; text above 64 MiB; files saved, replaced, refused for a missing folder and a moved-from scene, missing, a folder, broken and above 64 MiB), `tests/unit/core/document_migration_test.cpp` (migrations in order from any version, none needed, versions out of range, a missing migration, a failing one), `tests/unit/core/atomic_write_test.cpp` (create and replace, no temporary file left, a missing folder, a folder as target, an empty path, a read-only file in a read-only folder left unchanged), and the integration tests `tests/integration/scene_document_test.cpp` (a scene referring to a project's mesh and material saved, destroyed and loaded with the registry from the project's manifest; another registry rejects it; a save into a missing folder or over a read-only file fails and leaves the old file; a broken file next to a loaded scene leaves that scene unchanged).
 
 **Out of scope:** binary formats, scene streaming, linking a scene to world generation settings (M5), prefab documents (M4.6), script components (M4.5).
 

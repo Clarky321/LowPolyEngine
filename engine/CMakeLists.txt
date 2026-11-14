@@ -38,6 +38,7 @@ add_library(engine STATIC
     src/core/FileSystem.cpp
     src/core/FrameClock.cpp
     src/core/Image.cpp
+    src/core/JsonSupport.cpp
     src/core/Log.cpp
     src/core/Utf8.cpp
     src/core/Uuid.cpp
@@ -66,6 +67,7 @@ add_library(engine STATIC
     src/scene/AssetReferences.cpp
     src/scene/Components.cpp
     src/scene/Scene.cpp
+    src/scene/SceneDocument.cpp
     ${worldgen_sources}
 )
 
@@ -77,10 +79,11 @@ target_compile_features(engine PUBLIC cxx_std_20)
 
 # PRIVATE: SDL is used only in src/platform/sdl3/, GLAD only in
 # src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp,
-# nlohmann_json only in src/worldgen/SettingsFile.cpp and
-# src/assets/AssetManifest.cpp, the Dear ImGui backends only in
+# nlohmann_json only in src/core/JsonSupport.hpp and the document sources that
+# include it (src/worldgen/SettingsFile.cpp, src/assets/AssetManifest.cpp,
+# src/scene/SceneDocument.cpp), the Dear ImGui backends only in
 # src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp, EnTT only
-# in src/scene/ (ADR 0002, 0004, 0005, 0006, 0008, 0018, 0021, 0022).
+# in src/scene/ (ADR 0002, 0004, 0005, 0006, 0008, 0018, 0021, 0022, 0023).
 # Public headers include none of them; consumers only get them as link
 # dependencies.
 target_link_libraries(engine PRIVATE
