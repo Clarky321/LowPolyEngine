@@ -15,7 +15,7 @@ std::uint64_t Archipelago::triangleCount() const noexcept
     for (const GeneratedIsland& island : islands) {
         count += island.mesh.triangleCount() + island.water.mesh.triangleCount();
     }
-    return count;
+    return count + clouds.triangleCount();
 }
 
 WaterCounts Archipelago::waterCounts() const noexcept
@@ -53,6 +53,7 @@ core::Result<Archipelago> generateArchipelago(const WorldGenSettings& settings)
         island.water = generateIslandWater(island.shape, settings, archipelago.layout.islands);
         archipelago.islands.push_back(std::move(island));
     }
+    archipelago.clouds = generateClouds(settings, archipelago.layout.islands);
     return archipelago;
 }
 

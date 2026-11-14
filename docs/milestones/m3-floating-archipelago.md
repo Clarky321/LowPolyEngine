@@ -40,7 +40,7 @@ M2 draws lit, flat-shaded, partly textured meshes. M3 generates the first real c
 | M3.7 | Island palettes | done |
 | M3.8 | Floating world preview | done |
 | M3.9 | Local island water | done |
-| M3.10 | Clouds | planned |
+| M3.10 | Clouds | in progress |
 | M3.11 | Settings as versioned JSON | planned |
 | M3.12 | WorldGen panel with Dear ImGui | planned |
 | M3.13 | Final verification and pull request | planned |
@@ -253,16 +253,22 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Goal:** minimalist low-poly clouds in the air between islands.
 
-**Scope:**
+**Scope** (decisions taken while implementing, ADR 0017):
 - Deterministic cloud clusters of low-poly shapes around and between islands at different altitudes, with different sizes and densities, from their own `RandomStream::Clouds` seed.
 - Clouds keep clearance from island volumes.
 - Slow drift along a wind direction from the settings, computed from the initial position and time (a display effect, wrapped inside the world bounds); the initial placement repeats exactly for a seed.
+- `engine/worldgen/Clouds.hpp`: `generateClouds(settings, islands)` returns the placed clusters (index, anchor at the centre of the flat base, radius, height = 0.65 × radius, density, puffs, one opaque cluster-local mesh), the requested count and a warning; `generateArchipelago` adds them (`Archipelago::clouds`, triangles included) with the layout as obstacles.
+- Placement like the islands': per cluster up to 100 attempts of radius, x, z and base altitude; the cluster's cylinder must lie inside the bounds and keep `islandClearance` from every island volume horizontally or vertically; a cluster without room is left out with a warning.
+- Shape: the density varies by ±0.25 per cluster and gives 1 + round(8 × density) puffs: a core puff at the centre and smaller ones inside an ellipse along a random long axis (0.55 as wide); each puff is a once-subdivided icosphere (80 faces) with its vertices moved in and out by up to 12 %, three quarters as high as wide, cut flat at the base.
+- Colours from data by the facing of a face: white on top, lavender blue underneath. The first look, lit like the islands, showed grey boulders; clouds are now drawn unlit (the water's material), opaque, after the islands.
+- Drift: `cloudDrift(cluster, settings, seconds)` moves the anchor along the wind, wraps X and Z into the bounds and shrinks the cloud within one radius of the edge where it wraps, so it never jumps into view. While drifting a cloud can pass an island (the clearance holds for the placement).
+- island-preview: the log line and the overlay name the clouds: `…, F waterfalls, C clouds, generated in X ms`.
 
-**Tests (headless):** counts, sizes, densities and altitudes within the settings; inside the world bounds; clearance from islands; determinism of the initial placement; the drift formula (position at time t, wrapping). GPU smoke with clouds.
+**Tests (headless):** counts, sizes, densities and altitudes within the settings; inside the world bounds; clearance from islands; determinism of the initial placement; the drift formula (position at time t, wrapping). GPU smoke with clouds. Implemented in `tests/unit/worldgen/clouds_test.cpp`: golden clusters, puffs and mesh hashes for seed 42 (an independent implementation gives the same clouds for seeds 42 and 1); over 16 seeds: counts and warning, indices, radius, height, altitude and density within the settings, the whole volume inside the bounds, the puff count from the density, the core puff first, clearance from every island; valid opaque meshes inside their cluster volume with 70–80 faces per puff, colours by facing, flat bottoms facing down; spread of sizes, altitudes, densities and puff counts; repeatable, independent of water, mesh resolution and wind, the density reshapes without moving clusters, another seed differs; no clusters, density 0 and 1, clouds above all islands, and a crowded world with a warning; the drift: anchor and full size at time 0, movement along 0°, 90° and 30°, calm wind, wrapping after one world length, shrinking at the seam, never leaving the bounds. `archipelago_test.cpp`: the archipelago's clouds equal `generateClouds` with the layout, its triangles include them, and clouds change no island or water. GPU tier: the archipelago log line with 20 clouds; the smoke runs draw the drifting clouds.
 
 **Done when:** clouds appear at varied altitudes, repeat for a seed and drift without errors.
 
-**Visual check:** screenshot with clouds between islands.
+**Visual check:** screenshot with clouds between islands (`docs/screenshots/m3/005-clouds.png`, `006-clouds-seed-42.png`).
 
 ### M3.11 — Settings as versioned JSON
 

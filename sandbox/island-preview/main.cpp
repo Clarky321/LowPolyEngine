@@ -1,8 +1,9 @@
 // Island preview sandbox: the first end-to-end executable (docs/ENGINE_PLAN.md).
 // By default it generates a floating archipelago from a seed (M3) and shows it
-// under a stylized sky, with the islands' local water drawn translucent after
-// them; --test-scene shows the static test scene of M1/M2 instead (materials,
-// textures, a directional light, an imported OBJ model).
+// under a stylized sky, with low-poly clouds drifting between the islands and
+// the islands' local water drawn translucent after them; --test-scene shows
+// the static test scene of M1/M2 instead (materials, textures, a directional
+// light, an imported OBJ model).
 //
 // Controls: hold the right mouse button to look around; W/A/S/D move, E/Space
 // up, Q/Ctrl down, Shift faster, mouse wheel changes the speed. F1 toggles the
@@ -21,6 +22,7 @@
 #include "engine/core/Version.hpp"
 #include "engine/geometry/ObjImport.hpp"
 #include "engine/worldgen/Archipelago.hpp"
+#include "engine/worldgen/Clouds.hpp"
 #include "engine/worldgen/WorldGenSettings.hpp"
 
 #include <glm/geometric.hpp>
@@ -50,6 +52,9 @@ constexpr bool kDebugBuild = true;
 
 // Behind the sky dome (archipelago) or the test scene's horizon.
 constexpr engine::render::Color kClearColor{0.53F, 0.74F, 0.86F, 1.0F};
+
+// A drifting cloud smaller than this share of its size is not drawn.
+constexpr float kMinCloudScale = 1.0e-3F;
 
 // Frames rendered before a --screenshot is taken when --frames is not given.
 // Long enough for the frame statistics to fill their first window.
@@ -255,6 +260,7 @@ public:
         }
         objects_.clear();
         water_.clear();
+        clouds_.clear();
         renderer.destroyMaterial(waterMaterial_);
         for (const auto mesh : meshes_) {
             renderer.destroyMesh(mesh);
@@ -334,6 +340,19 @@ public:
             }
             renderer.drawMesh(object.mesh, object.material, model);
         }
+        // Clouds where the wind has moved them; a cloud shrinks away at the
+        // edge of the world before it wraps around.
+        for (const auto& cloud : clouds_) {
+            const engine::worldgen::CloudDrift drift = engine::worldgen::cloudDrift(
+                cloud.cluster, settings_, static_cast<double>(sceneSeconds_));
+            if (drift.scale < kMinCloudScale) {
+                continue;
+            }
+            const engine::math::Mat4 model =
+                glm::scale(glm::translate(engine::math::Mat4{1.0F}, drift.position),
+                           engine::math::Vec3{drift.scale});
+            renderer.drawMesh(cloud.mesh, cloudMaterial_, model);
+        }
 
         // Water after all opaque geometry, blended, roughly back to front: the
         // islands' water meshes by distance from the camera.
@@ -366,7 +385,7 @@ private:
     std::optional<engine::core::Error> startArchipelago(engine::app::AppContext& context)
     {
         auto& renderer = context.renderer();
-        engine::worldgen::WorldGenSettings settings;
+        engine::worldgen::WorldGenSettings& settings = settings_;
         if (options_.seed) {
             settings.seed = *options_.seed;
         }
@@ -383,6 +402,9 @@ private:
         const engine::worldgen::Archipelago& archipelago = generated.value();
         if (!archipelago.layout.warning.empty()) {
             engine::core::logWarning("app", "archipelago: {}", archipelago.layout.warning);
+        }
+        if (!archipelago.clouds.warning.empty()) {
+            engine::core::logWarning("app", "clouds: {}", archipelago.clouds.warning);
         }
 
         // Island colours are vertex colours (palettes); one white lit material
@@ -417,6 +439,19 @@ private:
             return waterMaterial.error();
         }
         waterMaterial_ = waterMaterial.value();
+        // Clouds are opaque and, like water, show their own colours unlit:
+        // white tops and lavender undersides, light on every side.
+        cloudMaterial_ = waterMaterial_;
+        for (const auto& cluster : archipelago.clouds.clusters) {
+            auto mesh = renderer.createMesh(cluster.mesh);
+            if (!mesh) {
+                return mesh.error();
+            }
+            meshes_.push_back(mesh.value());
+            CloudObject cloud{mesh.value(), cluster};
+            cloud.cluster.mesh = {};
+            clouds_.push_back(std::move(cloud));
+        }
         auto sky =
             renderer.createMesh(island_preview::buildSkyDome(island_preview::floatingWorldSky()));
         if (!sky) {
@@ -443,15 +478,16 @@ private:
                         settings.seed, archipelago.islands.size(),
                         archipelago.layout.requestedCount, archipelago.triangleCount(),
                         milliseconds),
-            std::format("WATER: {} LAKES   {} STREAMS   {} WATERFALLS", water.lakes, water.streams,
-                        water.waterfalls),
+            std::format("WATER: {} LAKES   {} STREAMS   {} WATERFALLS   CLOUDS: {}", water.lakes,
+                        water.streams, water.waterfalls, archipelago.clouds.clusters.size()),
         };
         engine::core::logInfo("app",
                               "archipelago: seed {}, {} of {} islands, {} triangles, {} lakes, "
-                              "{} streams, {} waterfalls, generated in {:.1f} ms",
+                              "{} streams, {} waterfalls, {} clouds, generated in {:.1f} ms",
                               settings.seed, archipelago.islands.size(),
                               archipelago.layout.requestedCount, archipelago.triangleCount(),
-                              water.lakes, water.streams, water.waterfalls, milliseconds);
+                              water.lakes, water.streams, water.waterfalls,
+                              archipelago.clouds.clusters.size(), milliseconds);
         engine::core::logInfo("app", "hold the right mouse button to look around, WASD to fly, "
                                      "the mouse wheel to change speed, Escape to quit");
         return std::nullopt;
@@ -608,6 +644,17 @@ private:
     };
     std::vector<WaterObject> water_;
     engine::render::MaterialHandle waterMaterial_;
+    // The cloud clusters (without their meshes, which are uploaded and kept in
+    // meshes_), drawn where the wind has moved them; their material is the
+    // water's one.
+    struct CloudObject {
+        engine::render::MeshHandle mesh;
+        engine::worldgen::CloudCluster cluster;
+    };
+    std::vector<CloudObject> clouds_;
+    engine::render::MaterialHandle cloudMaterial_;
+    // The archipelago's settings: the clouds' wind and the world bounds.
+    engine::worldgen::WorldGenSettings settings_;
     engine::render::MeshHandle sky_;
     engine::render::LightDesc light_;
     engine::camera::Camera camera_;

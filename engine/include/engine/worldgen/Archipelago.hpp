@@ -1,11 +1,13 @@
 #pragma once
 
-// A whole generated archipelago: the steps of M3.4 to M3.7 and the local water
-// of M3.9 run in order for valid settings. Pure CPU data; the caller uploads
-// the meshes and draws each island and its water at the island's anchor.
+// A whole generated archipelago: the steps of M3.4 to M3.7, the local water
+// of M3.9 and the clouds of M3.10 run in order for valid settings. Pure CPU
+// data; the caller uploads the meshes, draws each island and its water at the
+// island's anchor and each cloud cluster where it has drifted (cloudDrift).
 
 #include "engine/core/Result.hpp"
 #include "engine/geometry/MeshData.hpp"
+#include "engine/worldgen/Clouds.hpp"
 #include "engine/worldgen/IslandLayout.hpp"
 #include "engine/worldgen/IslandPalette.hpp"
 #include "engine/worldgen/IslandShape.hpp"
@@ -44,16 +46,18 @@ struct Archipelago {
     IslandLayout layout;
     // One per placed island, in layout order.
     std::vector<GeneratedIsland> islands;
+    // The cloud clusters around and between the islands.
+    CloudField clouds;
 
-    // Triangles of all island and water meshes.
+    // Triangles of all island, water and cloud meshes.
     [[nodiscard]] std::uint64_t triangleCount() const noexcept;
     [[nodiscard]] WaterCounts waterCounts() const noexcept;
 };
 
 // Places the islands, shapes them, builds their meshes with mesh.resolution,
-// paints them with their palettes and generates their water (with the layout's
-// islands as obstacles for waterfalls). Invalid settings give validate()'s
-// error.
+// paints them with their palettes, generates their water (with the layout's
+// islands as obstacles for waterfalls) and places the clouds clear of the
+// islands. Invalid settings give validate()'s error.
 [[nodiscard]] core::Result<Archipelago> generateArchipelago(const WorldGenSettings& settings);
 
 } // namespace engine::worldgen

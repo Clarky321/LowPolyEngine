@@ -9,6 +9,7 @@ find_package(glm REQUIRED CONFIG)
 # contract. Every worldgen source belongs in this list.
 set(worldgen_sources
     src/worldgen/Archipelago.cpp
+    src/worldgen/Clouds.cpp
     src/worldgen/IslandLayout.cpp
     src/worldgen/IslandMesh.cpp
     src/worldgen/IslandPalette.cpp

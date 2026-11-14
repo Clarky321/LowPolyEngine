@@ -1,7 +1,8 @@
 // A whole generated archipelago: placement, shapes, meshes and palettes in one
-// call (M3.8), and the islands' local water (M3.9).
+// call (M3.8), the islands' local water (M3.9) and the clouds (M3.10).
 #include "engine/worldgen/Archipelago.hpp"
 
+#include "engine/worldgen/Clouds.hpp"
 #include "engine/worldgen/IslandMesh.hpp"
 #include "engine/worldgen/IslandPalette.hpp"
 #include "engine/worldgen/IslandWater.hpp"
@@ -70,6 +71,15 @@ TEST_CASE("The default archipelago has every island meshed and painted", "[world
         streams += island.water.streams.empty() ? 0U : 1U;
         waterfalls += island.water.waterfalls.size();
     }
+    // The clouds, placed clear of the layout's islands.
+    const auto clouds = engine::worldgen::generateClouds(settings, archipelago.layout.islands);
+    REQUIRE(archipelago.clouds.clusters.size() == clouds.clusters.size());
+    CHECK(archipelago.clouds.clusters.size() == 20U);
+    for (std::size_t i = 0; i < clouds.clusters.size(); ++i) {
+        CHECK(archipelago.clouds.clusters[i].anchor == clouds.clusters[i].anchor);
+        CHECK(archipelago.clouds.clusters[i].mesh.positions == clouds.clusters[i].mesh.positions);
+    }
+    triangles += clouds.triangleCount();
     CHECK(archipelago.triangleCount() == triangles);
     CHECK(archipelago.waterCounts() == engine::worldgen::WaterCounts{lakes, streams, waterfalls});
     // The default world has water.
@@ -93,6 +103,22 @@ TEST_CASE("Water does not change the islands", "[worldgen][archipelago]")
         CHECK(dry.islands[i].mesh.colors == withWater.islands[i].mesh.colors);
     }
     CHECK(dry.waterCounts() == engine::worldgen::WaterCounts{});
+}
+
+TEST_CASE("Clouds do not change the islands or their water", "[worldgen][archipelago]")
+{
+    WorldGenSettings settings;
+    settings.mesh.resolution = 12;
+    const Archipelago cloudy = archipelagoOf(settings);
+    settings.clouds.clusterCount = 0;
+    settings.clouds.density = 1.0F;
+    const Archipelago clear = archipelagoOf(settings);
+    CHECK(clear.clouds.clusters.empty());
+    REQUIRE(cloudy.islands.size() == clear.islands.size());
+    for (std::size_t i = 0; i < clear.islands.size(); ++i) {
+        CHECK(clear.islands[i].mesh.positions == cloudy.islands[i].mesh.positions);
+        CHECK(clear.islands[i].water.mesh.positions == cloudy.islands[i].water.mesh.positions);
+    }
 }
 
 TEST_CASE("The archipelago's meshes are the painted island meshes", "[worldgen][archipelago]")

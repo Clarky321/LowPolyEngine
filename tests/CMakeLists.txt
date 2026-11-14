@@ -29,6 +29,7 @@ add_executable(lpe_unit_tests
     unit/sandbox/sky_test.cpp
     ${PROJECT_SOURCE_DIR}/sandbox/island-preview/Sky.cpp
     unit/worldgen/archipelago_test.cpp
+    unit/worldgen/clouds_test.cpp
     unit/worldgen/island_layout_test.cpp
     unit/worldgen/island_mesh_test.cpp
     unit/worldgen/island_palette_test.cpp

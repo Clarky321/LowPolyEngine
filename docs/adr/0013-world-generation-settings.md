@@ -1,6 +1,6 @@
 # ADR 0013: World generation settings
 
-- **Status:** Accepted; amended for M3.4 (Amendment 1) and M3.9 (Amendment 2)
+- **Status:** Accepted; amended for M3.4 (Amendment 1), M3.9 (Amendment 2) and M3.10 (Amendment 3)
 - **Date:** 2026-11-13
 - **Related:** ADR 0003 (generator version, determinism), ADR 0004 (JSON envelope, validation after loading), `docs/milestones/m3-floating-archipelago.md` M3.3, M3.11 and M3.12, `docs/ENGINE_PLAN.md` §6
 
@@ -93,3 +93,14 @@ The water fields keep their names, defaults and ranges; ADR 0016 defines what th
 - `water.maxLakesPerIsland`: lakes and ponds together. A stream that would need more ponds (filled hollows on its way) is not taken; lakes are placed only while there is room.
 - `water.streamChance`: the probability of a stream on an island; it reaches the rim through its ponds.
 - `water.waterfallChance`: the probability that the stream falls over the rim as a waterfall, unless the fall would pass through another island.
+
+## Amendment 3: clouds (M3.10, 2026-11-14)
+
+The cloud fields keep their names, defaults and ranges; ADR 0017 defines what they control:
+
+- `clouds.clusterCount`: clusters requested; one that finds no room is left out, with a warning.
+- `clouds.altitude`: the height of a cluster's flat base. Its top lies 0.65 times its radius higher and must stay within `bounds.max.y`.
+- `clouds.size`: a cluster's horizontal radius.
+- `clouds.density`: the mean density; each cluster varies it by up to ±0.25 (within 0 to 1) and gets 1 + round(8 × density) puffs.
+- `clouds.windDirectionDegrees`, `clouds.windSpeed`: the drift, a display effect.
+- `clouds.islandClearance`: the gap a cluster's volume keeps from every island volume, horizontally or vertically, when placed.

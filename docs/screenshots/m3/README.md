@@ -8,6 +8,8 @@ build\windows-msvc-debug\bin\Debug\island-preview.exe --seed 42 --screenshot doc
 build\windows-msvc-debug\bin\Debug\island-preview.exe --seed 19 --island 9 --screenshot docs\screenshots\m3\<file>.png
 ```
 
+From M3.10 on, the clouds drift during the 120 frames (about 1.2 s at the 100 frames per second of the Debug build), a metre or two along the wind.
+
 Machine: Windows 11, NVIDIA GeForce RTX 4060, driver reporting OpenGL "4.5.0 NVIDIA 610.88", 1280×720 framebuffer, vsync on.
 
 The sub-milestone column names the commit that added the image: `git log --grep "(M3.x)"` finds it (the image is captured before its commit exists, so no hash is written here).
@@ -18,5 +20,7 @@ The sub-milestone column names the commit that added the image: `git log --grep 
 | `002-seed-42.png` | M3.8 | The same program with `--seed 42`: another layout (islands further apart and smaller on average), other palettes (more Autumn and Sandstone), same sky and light. |
 | `003-island-water.png` | M3.9 | Local water, `--seed 19 --island 9`: the start camera beside one island's waterfall. On its Autumn top a lake lies in a hollow and a stream runs from a spring on the higher ground to the rim, where it falls as a waterfall: a light ribbon that curves away from the island along the path of falling water and fades out far below the underside. The water is translucent and drawn after the islands; lakes are lighter where they are shallow. Neighbouring islands, one with water of its own, float around it. The world has 17 lakes and ponds, 8 streams and 5 waterfalls on 12 islands. |
 | `004-meadow-waterfall.png` | M3.9 | `--seed 15 --island 9`: a Meadow island with water in hollows of its top, a stream to the rim and its waterfall; no ocean or water plane anywhere, only water that belongs to an island. The world has 9 lakes and ponds, 6 streams and 3 waterfalls. |
+| `005-clouds.png` | M3.10 | The default world (seed 1) as in `001`, now with 20 low-poly cloud clusters around and between the islands at different heights, generated in about 530 ms in the Debug build, 172 264 triangles. Each cluster is a few flat-bottomed puffs, stretched along its own axis, white where its faces look up and lavender blue underneath; small clusters far away read as wisps, the large one in front of the middle islands as a cumulus. The clouds keep their distance from the islands and drift slowly along the wind. |
+| `006-clouds-seed-42.png` | M3.10 | `--seed 42`, like `002`, with its clouds: clusters fill the air between the islands at many heights; two of the five waterfalls of this world hang below the central islands. |
 
 Earlier images show the program as it was at their sub-milestone.
