@@ -146,6 +146,8 @@ private:
     Scene(SceneId sceneId, std::string name, core::UuidGenerator generator) noexcept;
 
     [[nodiscard]] std::string describe(EntityId entity) const;
+    // The error for an entity the scene does not contain (or the null ID).
+    [[nodiscard]] core::Error entityError(EntityId entity) const;
     [[nodiscard]] Storage& storage();
     void insert(EntityId entity);
 

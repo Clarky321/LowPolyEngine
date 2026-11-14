@@ -79,6 +79,30 @@ DirectionalLightComponent storedForm(const DirectionalLightComponent& value)
     return stored;
 }
 
+// The persistent IDs of the given EnTT entities, in creation order. The
+// record pool is reached through a checked pointer (a const registry has no
+// pool for a type it has never stored).
+std::vector<EntityId> inCreationOrder(const entt::registry& registry,
+                                      const entt::sparse_set& entities)
+{
+    const auto* const recordPool = registry.storage<EntityRecord>();
+    if (recordPool == nullptr) {
+        return {};
+    }
+    std::vector<EntityRecord> records;
+    records.reserve(entities.size());
+    for (const entt::entity handle : entities) {
+        records.push_back(recordPool->get(handle));
+    }
+    std::ranges::sort(records, {}, &EntityRecord::sequence);
+    std::vector<EntityId> ids;
+    ids.reserve(records.size());
+    for (const EntityRecord& record : records) {
+        ids.push_back(record.id);
+    }
+    return ids;
+}
+
 } // namespace
 
 struct Scene::Storage {
@@ -209,54 +233,60 @@ core::Result<EntityId> Scene::createEntity(EntityId entity)
 
 std::optional<core::Error> Scene::destroyEntity(EntityId entity)
 {
-    if (auto error = findEntity(entity)) {
-        return error;
+    Storage* const store = storage_.get();
+    if (store == nullptr) {
+        return entityError(entity);
     }
-    const auto found = storage_->handles.find(entity);
+    const auto found = store->handles.find(entity);
+    if (found == store->handles.end()) {
+        return entityError(entity);
+    }
     // Destroying the EnTT entity removes all of its components.
-    (void)storage_->registry.destroy(found->second);
-    storage_->handles.erase(found);
+    (void)store->registry.destroy(found->second);
+    store->handles.erase(found);
     return std::nullopt;
 }
 
 bool Scene::contains(EntityId entity) const noexcept
 {
-    return storage_ && storage_->find(entity) != nullptr;
+    const Storage* const store = storage_.get();
+    return store != nullptr && store->find(entity) != nullptr;
 }
 
-std::optional<core::Error> Scene::findEntity(EntityId entity) const
+core::Error Scene::entityError(EntityId entity) const
 {
     if (entity.isNull()) {
         return core::Error{std::format("scene '{}': the null entity ID is not an identity", name_)};
     }
-    if (!contains(entity)) {
-        return core::Error{describe(entity) + ": does not exist"};
+    return core::Error{describe(entity) + ": does not exist"};
+}
+
+std::optional<core::Error> Scene::findEntity(EntityId entity) const
+{
+    if (contains(entity)) {
+        return std::nullopt;
     }
-    return std::nullopt;
+    return entityError(entity);
 }
 
 std::vector<EntityId> Scene::entityIds() const
 {
-    if (!storage_) {
+    const Storage* const store = storage_.get();
+    if (store == nullptr) {
         return {};
     }
-    std::vector<EntityRecord> records;
-    records.reserve(storage_->handles.size());
-    for (const auto& entry : storage_->handles) {
-        records.push_back(storage_->registry.get<EntityRecord>(entry.second));
+    const entt::sparse_set* const all = store->registry.storage<EntityRecord>();
+    if (all == nullptr) {
+        return {};
     }
-    std::ranges::sort(records, {}, &EntityRecord::sequence);
-    std::vector<EntityId> ids;
-    ids.reserve(records.size());
-    for (const EntityRecord& record : records) {
-        ids.push_back(record.id);
-    }
-    return ids;
+    // Every entity has a record, so the record pool holds all of them.
+    return inCreationOrder(store->registry, *all);
 }
 
 std::size_t Scene::entityCount() const noexcept
 {
-    return storage_ ? storage_->handles.size() : 0;
+    const Storage* const store = storage_.get();
+    return store != nullptr ? store->handles.size() : 0;
 }
 
 void Scene::clear() noexcept
@@ -264,49 +294,57 @@ void Scene::clear() noexcept
     storage_.reset();
 }
 
+// Each component operation first resolves the entity's EnTT handle, checking
+// every pointer on the way (GCC's -Wnull-dereference at -O3 cannot see that
+// findEntity already did).
+
 template <SceneComponent T>
 std::optional<core::Error> Scene::addComponent(EntityId entity, const T& value)
 {
-    if (auto error = findEntity(entity)) {
-        return error;
+    Storage* const store = storage_.get();
+    const entt::entity* const handle = store != nullptr ? store->find(entity) : nullptr;
+    if (store == nullptr || handle == nullptr) {
+        return entityError(entity);
     }
-    const entt::entity handle = *storage_->find(entity);
-    if (storage_->registry.all_of<T>(handle)) {
+    if (store->registry.all_of<T>(*handle)) {
         return core::Error{
             std::format("{}: already has a {} component", describe(entity), T::kTypeName)};
     }
     if (auto error = validate(value)) {
         return core::Error{std::format("{}: {}", describe(entity), error->message)};
     }
-    storage_->registry.emplace<T>(handle, storedForm(value));
+    store->registry.emplace<T>(*handle, storedForm(value));
     return std::nullopt;
 }
 
 template <SceneComponent T>
 std::optional<core::Error> Scene::replaceComponent(EntityId entity, const T& value)
 {
-    if (auto error = findEntity(entity)) {
-        return error;
+    Storage* const store = storage_.get();
+    const entt::entity* const handle = store != nullptr ? store->find(entity) : nullptr;
+    if (store == nullptr || handle == nullptr) {
+        return entityError(entity);
     }
-    const entt::entity handle = *storage_->find(entity);
-    if (!storage_->registry.all_of<T>(handle)) {
+    T* const stored = store->registry.try_get<T>(*handle);
+    if (stored == nullptr) {
         return core::Error{std::format("{}: has no {} component", describe(entity), T::kTypeName)};
     }
     if (auto error = validate(value)) {
         return core::Error{std::format("{}: {}", describe(entity), error->message)};
     }
-    storage_->registry.get<T>(handle) = storedForm(value);
+    *stored = storedForm(value);
     return std::nullopt;
 }
 
 template <SceneComponent T>
 std::optional<core::Error> Scene::removeComponent(EntityId entity)
 {
-    if (auto error = findEntity(entity)) {
-        return error;
+    Storage* const store = storage_.get();
+    const entt::entity* const handle = store != nullptr ? store->find(entity) : nullptr;
+    if (store == nullptr || handle == nullptr) {
+        return entityError(entity);
     }
-    const entt::entity handle = *storage_->find(entity);
-    if (storage_->registry.remove<T>(handle) == 0) {
+    if (store->registry.remove<T>(*handle) == 0) {
         return core::Error{std::format("{}: has no {} component", describe(entity), T::kTypeName)};
     }
     return std::nullopt;
@@ -315,21 +353,20 @@ std::optional<core::Error> Scene::removeComponent(EntityId entity)
 template <SceneComponent T>
 bool Scene::hasComponent(EntityId entity) const noexcept
 {
-    if (!storage_) {
-        return false;
-    }
-    const entt::entity* handle = storage_->find(entity);
-    return handle != nullptr && storage_->registry.all_of<T>(*handle);
+    const Storage* const store = storage_.get();
+    const entt::entity* const handle = store != nullptr ? store->find(entity) : nullptr;
+    return store != nullptr && handle != nullptr && store->registry.all_of<T>(*handle);
 }
 
 template <SceneComponent T>
 core::Result<T> Scene::component(EntityId entity) const
 {
-    if (auto error = findEntity(entity)) {
-        return *error;
+    const Storage* const store = storage_.get();
+    const entt::entity* const handle = store != nullptr ? store->find(entity) : nullptr;
+    if (store == nullptr || handle == nullptr) {
+        return entityError(entity);
     }
-    const entt::registry& registry = storage_->registry;
-    const T* found = registry.try_get<T>(*storage_->find(entity));
+    const T* const found = store->registry.try_get<T>(*handle);
     if (found == nullptr) {
         return core::Error{std::format("{}: has no {} component", describe(entity), T::kTypeName)};
     }
@@ -339,26 +376,15 @@ core::Result<T> Scene::component(EntityId entity) const
 template <SceneComponent T>
 std::vector<EntityId> Scene::entitiesWithComponent() const
 {
-    if (!storage_) {
+    const Storage* const store = storage_.get();
+    if (store == nullptr) {
         return {};
     }
-    const entt::registry& registry = storage_->registry;
-    const entt::sparse_set* pool = registry.storage<T>();
+    const entt::sparse_set* const pool = store->registry.storage<T>();
     if (pool == nullptr) {
         return {};
     }
-    std::vector<EntityRecord> records;
-    records.reserve(pool->size());
-    for (const entt::entity handle : *pool) {
-        records.push_back(registry.get<EntityRecord>(handle));
-    }
-    std::ranges::sort(records, {}, &EntityRecord::sequence);
-    std::vector<EntityId> ids;
-    ids.reserve(records.size());
-    for (const EntityRecord& record : records) {
-        ids.push_back(record.id);
-    }
-    return ids;
+    return inCreationOrder(store->registry, *pool);
 }
 
 // The component operations exist for exactly the SceneComponent types.
