@@ -1,6 +1,6 @@
 # LowPolyEngine
 
-A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M3 — procedural floating sky archipelago** is done on the branch `milestone/m3-floating-archipelago` and waits for acceptance and the merge into `main`: a seeded archipelago of floating islands at different altitudes, with rocky undersides, their own palettes, local water (lakes, streams, waterfalls) and low-poly clouds between them, in the art direction of *AER: Memories of Old* (plan, status and verification of each step: `docs/milestones/m3-floating-archipelago.md`; island-preview generates and shows the floating islands — placement in 3D, shapes, closed flat-shaded meshes, palettes, local lakes, streams with ponds and waterfalls, drifting low-poly clouds — under a stylized sky, saves and loads world settings as versioned JSON, and edits them in a Dear ImGui panel that regenerates the world in place; screenshots of several seeds: `docs/screenshots/m3/`). Done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context), M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay) and M2 (normals and UVs, PNG textures, materials with a base color and an optional texture, one directional light with flat shading, import of a documented OBJ subset; pull request #3). See `docs/ENGINE_PLAN.md` for the roadmap.
+A C++20 low-poly 3D engine and editor with Lua gameplay scripting. Current stage: **M4 — scene document and data model** is done on the branch `milestone/m4-scene-data-model` and waits for acceptance and the merge into `main` (plan, status and verification of each step: `docs/milestones/m4-scene-data-model.md`): entities with persistent IDs and components stored in EnTT (M4.1, M4.2), persistent asset IDs with portable project-relative paths, an asset registry and manifest, and static mesh components (M4.3), scenes saved and loaded as versioned JSON documents (M4.4), sandboxed Lua scripts that move entities through a small engine API with every error contained, and a Conan lockfile (M4.5), parent links and prefabs saved as documents and instantiated into scenes (M4.6), and an end-to-end check of all of it (M4.7); M4 adds no rendering of scenes and no editor UI; a separate Raven UI evaluation for the M5 editor ended with a conditional pass on Windows (`docs/experiments/raven-ui-evaluation.md`; Raven is preliminarily preferred for the M5 editor, final acceptance after further checks in ADR 0019; Dear ImGui stays meanwhile). Done and merged into `main`: **M3 — procedural floating sky archipelago** (pull request #4, `0befa66`): a seeded archipelago of floating islands at different altitudes, with rocky undersides, their own palettes, local water (lakes, streams, waterfalls) and low-poly clouds between them, in the art direction of *AER: Memories of Old* (plan, status and verification of each step: `docs/milestones/m3-floating-archipelago.md`; island-preview generates and shows the floating islands — placement in 3D, shapes, closed flat-shaded meshes, palettes, local lakes, streams with ponds and waterfalls, drifting low-poly clouds — under a stylized sky, saves and loads world settings as versioned JSON, and edits them in a Dear ImGui panel that regenerates the world in place; screenshots of several seeds: `docs/screenshots/m3/`). Also done and merged into `main`: M0 (build, CI, SDL3 window, OpenGL 4.5 context), M1 (application loop, frame timing, keyboard/mouse input, free-fly camera, mesh rendering from CPU `MeshData`, debug overlay) and M2 (normals and UVs, PNG textures, materials with a base color and an optional texture, one directional light with flat shading, import of a documented OBJ subset; pull request #3). See `docs/ENGINE_PLAN.md` for the roadmap.
 
 ![island-preview in M3.10: a generated archipelago of floating islands with their own palettes, rocky undersides and low-poly clouds between them under a pastel sky](docs/screenshots/m3/005-clouds.png)
 
@@ -63,13 +63,24 @@ Conan and clang-format are taken from `.venv` first; other tools from `PATH`, th
 ### Build and test manually (Debug)
 
 ```powershell
-.venv\Scripts\conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --build=missing -of build/windows-msvc-debug/conan
+.venv\Scripts\conan install . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --lockfile=conan.lock --build=missing -of build/windows-msvc-debug/conan
 cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug
 ```
 
 For Release, replace `Debug` with `Release` and `windows-msvc-debug` with `windows-msvc-release`. Conan must run before CMake: it generates the toolchain file the preset points to.
+
+`conan.lock` pins every package version and recipe revision for both the Windows and the Linux profile (ADR 0024); `conan install` fails if `conanfile.py` asks for something the lockfile does not hold. After changing a requirement, create the lockfile again for all four configurations:
+
+```powershell
+.venv\Scripts\conan lock create . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Debug --lockfile-out=conan.lock
+.venv\Scripts\conan lock create . -pr:h=profiles/windows-msvc -pr:b=profiles/windows-msvc -s build_type=Release --lockfile=conan.lock --lockfile-out=conan.lock
+.venv\Scripts\conan lock create . -pr:h=profiles/linux-gcc -pr:b=profiles/linux-gcc -s build_type=Debug --lockfile=conan.lock --lockfile-out=conan.lock
+.venv\Scripts\conan lock create . -pr:h=profiles/linux-gcc -pr:b=profiles/linux-gcc -s build_type=Release --lockfile=conan.lock --lockfile-out=conan.lock
+```
+
+The first command starts a new lockfile; the others add what each configuration needs (the Linux profile also needs `xorg/system`, `pkgconf`, `meson` and `ninja`). Conan computes the Linux graph on Windows too; nothing is built.
 
 Options: `-DLPE_BUILD_TESTS=OFF` skips tests; `-DLPE_WARNINGS_AS_ERRORS=ON` (or the environment variable `LPE_WARNINGS_AS_ERRORS=ON`, which CI sets) turns warnings into errors.
 
@@ -81,7 +92,7 @@ Supported baseline: Ubuntu 24.04 with GCC 13 (what CI uses). Ninja comes from `r
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
 export PATH="$PWD/.venv/bin:$PATH"
-conan install . -pr:h=profiles/linux-gcc -pr:b=profiles/linux-gcc -s build_type=Debug --build=missing -of build/linux-gcc-debug/conan
+conan install . -pr:h=profiles/linux-gcc -pr:b=profiles/linux-gcc -s build_type=Debug --lockfile=conan.lock --build=missing -of build/linux-gcc-debug/conan
 cmake --preset linux-gcc-debug
 cmake --build --preset linux-gcc-debug
 ctest --preset linux-gcc-debug
@@ -106,7 +117,10 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
 
 - `engine/` — engine library (`engine` CMake target), one folder per domain:
   - `app/` — application lifecycle and frame loop (`Application`, `run`).
-  - `core/` — results, logging, frame clock, files, PNG images, math aliases (GLM).
+  - `core/` — results, logging, frame clock, files (with atomic replacement), PNG images, math aliases (GLM), persistent 128-bit IDs and their generator (ADR 0020), UTF-8 checks.
+  - `scene/` — the scene model (M4): entity and scene IDs and the scene core that creates, finds and destroys entities by ID (M4.1); validated name, transform, camera and directional light components, stored in EnTT inside `src/scene/Scene.cpp` only (M4.2); the static mesh component with mesh and material asset IDs and the check of a scene's asset references (M4.3); scene documents as versioned JSON, saved atomically and loaded all or nothing (M4.4, ADR 0023); the script component (M4.5); parent links, prefabs, prefab documents and instantiation (M4.6, ADR 0025); no GPU, SDL or ImGui code.
+  - `scripting/` — the Lua script runtime (M4.5, ADR 0024): one sandboxed Lua 5.5 VM with an instruction budget and a memory limit, scripts with `start` and `update` that read and move entities through the `engine` table; Lua only in `src/scripting/lua/`, no Lua type in public headers.
+  - `assets/` — asset identity (M4.3, ADR 0022): asset IDs and types, portable project-relative asset paths, the asset registry (types, paths, letter-case conflicts, files present or missing) and the asset manifest as versioned JSON; loads no files and holds no GPU resources.
   - `platform/` — window, OpenGL context, input; SDL3 only in `engine/src/platform/sdl3/`.
   - `geometry/` — CPU-side `MeshData`, primitive builders and OBJ subset import (ADR 0012); no GPU or SDL code.
   - `worldgen/` — deterministic world generation, pure CPU: seeded random numbers (ADR 0003), 2D noise (ADR 0003 Amendment 2), the validated world settings (ADR 0013), island placement in 3D (ADR 0013 Amendment 1), island shapes: outline, top surface and underside (ADR 0014), closed island meshes (ADR 0014 Amendment 1) and island palettes as vertex colours (ADR 0015), local water: lakes, streams with ponds and waterfalls (ADR 0016), clouds and their drift (ADR 0017), whole archipelagos (ADR 0014 Amendment 2) and settings files as versioned JSON (ADR 0004 Amendment 1); no GPU, SDL or ImGui code.
@@ -126,5 +140,5 @@ Full rules: `docs/DEVELOPMENT_WORKFLOW.md`. In short:
 - `third_party/stb_image/` — compiles the stb PNG decoder the same way, PNG only (ADR 0008).
 - `cmake/` — shared CMake modules (warning policy).
 - `profiles/` — Conan profiles.
-- `docs/` — plan, tech stack, structure, testing strategy, development workflow, ADRs; `docs/milestones/` holds the step-by-step plan of each milestone.
+- `docs/` — plan, tech stack, structure, testing strategy, development workflow, ADRs; `docs/milestones/` holds the step-by-step plan of each milestone, `docs/experiments/` the plans and reports of technical experiments outside the milestones (the Raven UI evaluation).
 - `CLAUDE.md`, `AGENTS.md`, `.claude/skills/engine-dev/` — instructions for AI-assisted development.

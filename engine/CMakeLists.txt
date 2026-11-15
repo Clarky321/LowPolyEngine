@@ -4,6 +4,8 @@ find_package(SDL3 REQUIRED CONFIG)
 find_package(glm REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED CONFIG)
 find_package(imgui REQUIRED CONFIG)
+find_package(EnTT REQUIRED CONFIG)
+find_package(lua REQUIRED CONFIG)
 
 # World generation (src/worldgen/) must give the same float results with every
 # compiler (ADR 0003): GCC and Clang may otherwise contract a * b + c into a
@@ -28,12 +30,19 @@ set_source_files_properties(${worldgen_sources} PROPERTIES
 
 add_library(engine STATIC
     src/app/Application.cpp
+    src/assets/AssetManifest.cpp
+    src/assets/AssetPath.cpp
+    src/assets/AssetRegistry.cpp
+    src/assets/AssetType.cpp
     src/camera/Camera.cpp
     src/camera/FreeFlyController.cpp
     src/core/FileSystem.cpp
     src/core/FrameClock.cpp
     src/core/Image.cpp
+    src/core/JsonSupport.cpp
     src/core/Log.cpp
+    src/core/Utf8.cpp
+    src/core/Uuid.cpp
     src/core/Version.cpp
     src/debug/DebugUi.cpp
     src/debug/TextMesh.cpp
@@ -56,6 +65,16 @@ add_library(engine STATIC
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
     src/render/opengl/GlTexture.cpp
+    src/scene/AssetReferences.cpp
+    src/scene/ComponentJson.cpp
+    src/scene/Components.cpp
+    src/scene/EntityComponents.cpp
+    src/scene/Prefab.cpp
+    src/scene/PrefabDocument.cpp
+    src/scene/Scene.cpp
+    src/scene/SceneDocument.cpp
+    src/scripting/lua/LuaVm.cpp
+    src/scripting/lua/ScriptRuntime.cpp
     ${worldgen_sources}
 )
 
@@ -67,14 +86,20 @@ target_compile_features(engine PUBLIC cxx_std_20)
 
 # PRIVATE: SDL is used only in src/platform/sdl3/, GLAD only in
 # src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp,
-# nlohmann_json only in src/worldgen/SettingsFile.cpp, the Dear ImGui backends
-# only in src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp
-# (ADR 0002, 0004, 0005, 0006, 0008, 0018). Public headers include none of
-# them; consumers only get them as link dependencies.
+# nlohmann_json only in src/core/JsonSupport.hpp and the document sources that
+# include it (src/worldgen/SettingsFile.cpp, src/assets/AssetManifest.cpp,
+# src/scene/ComponentJson.cpp, SceneDocument.cpp and PrefabDocument.cpp), the Dear ImGui backends only in
+# src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp, EnTT only
+# in src/scene/, Lua only in src/scripting/lua/ (ADR 0002, 0004, 0005, 0006,
+# 0008, 0018, 0021, 0022, 0023, 0024).
+# Public headers include none of them; consumers only get them as link
+# dependencies.
 target_link_libraries(engine PRIVATE
+    EnTT::EnTT
     SDL3::SDL3
     glad
     imgui_backends
+    lua::lua
     nlohmann_json::nlohmann_json
     stb_image
     stb_image_write

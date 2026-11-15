@@ -1,11 +1,10 @@
 #include "engine/worldgen/SettingsFile.hpp"
 
+#include "../core/JsonSupport.hpp"
 #include "FloatingPointRules.hpp"
 #include "SettingsFields.hpp"
 
 #include "engine/core/FileSystem.hpp"
-
-#include <nlohmann/json.hpp>
 
 #include <array>
 #include <charconv>
@@ -26,8 +25,12 @@ namespace engine::worldgen {
 
 namespace {
 
-using Json = nlohmann::json;
-using OrderedJson = nlohmann::ordered_json;
+using core::json::describe;
+using core::json::Json;
+using core::json::OrderedJson;
+using core::json::readBool;
+using core::json::readFloat;
+using core::json::readInteger;
 
 constexpr std::string_view kWaterEnabled = "water.enabled";
 
@@ -90,89 +93,6 @@ OrderedJson& slot(OrderedJson& root, std::string_view path)
     }
 }
 
-// The JSON number for a float: the double nearest to the float's shortest
-// decimal form, which the writer prints with those few digits, if it reads
-// back to the same float; the float's exact value otherwise.
-double jsonFloat(float value)
-{
-    std::array<char, 64> buffer{};
-    const auto written = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
-    if (written.ec == std::errc{}) {
-        double shortest = 0.0;
-        const auto read = std::from_chars(buffer.data(), written.ptr, shortest);
-        if (read.ec == std::errc{} && read.ptr == written.ptr &&
-            static_cast<float>(shortest) == value) {
-            return shortest;
-        }
-    }
-    return static_cast<double>(value);
-}
-
-// A JSON value in a message: its type, and the value itself if it is short.
-std::string describe(const Json& value)
-{
-    if (value.is_object() || value.is_array() || value.is_null()) {
-        return value.type_name();
-    }
-    std::string text = value.dump(-1, ' ', false, Json::error_handler_t::replace);
-    if (text.size() > 40U) {
-        text = text.substr(0, 37U) + "...";
-    }
-    return std::format("{} {}", value.type_name(), text);
-}
-
-template <typename T>
-std::optional<core::Error> readInteger(const Json& value, std::string_view path, T& out)
-{
-    if (!value.is_number_integer()) {
-        return core::Error{std::format("{}: expected an integer, found {}", path, describe(value))};
-    }
-    const auto outside = [&] {
-        return core::Error{std::format("{}: {} is outside the range of the field's type ({} to {})",
-                                       path, value.dump(), std::numeric_limits<T>::min(),
-                                       std::numeric_limits<T>::max())};
-    };
-    if (value.is_number_unsigned()) {
-        const auto number = value.get<std::uint64_t>();
-        if (number > static_cast<std::uint64_t>(std::numeric_limits<T>::max())) {
-            return outside();
-        }
-        out = static_cast<T>(number);
-    } else {
-        const auto number = value.get<std::int64_t>();
-        if (number < static_cast<std::int64_t>(std::numeric_limits<T>::min()) ||
-            number > static_cast<std::int64_t>(std::numeric_limits<T>::max())) {
-            return outside();
-        }
-        out = static_cast<T>(number);
-    }
-    return std::nullopt;
-}
-
-std::optional<core::Error> readFloat(const Json& value, std::string_view path, float& out)
-{
-    if (!value.is_number()) {
-        return core::Error{std::format("{}: expected a number, found {}", path, describe(value))};
-    }
-    const auto number = value.get<double>();
-    if (!(std::abs(number) <= static_cast<double>(std::numeric_limits<float>::max()))) {
-        return core::Error{
-            std::format("{}: {} is outside the range of a float", path, value.dump())};
-    }
-    out = static_cast<float>(number);
-    return std::nullopt;
-}
-
-std::optional<core::Error> readBool(const Json& value, std::string_view path, bool& out)
-{
-    if (!value.is_boolean()) {
-        return core::Error{
-            std::format("{}: expected true or false, found {}", path, describe(value))};
-    }
-    out = value.get<bool>();
-    return std::nullopt;
-}
-
 // The value at a dotted path, or nullptr if the file leaves it out; an error
 // if something on the way is not an object.
 core::Result<const Json*> lookUp(const Json& root, std::string_view path)
@@ -233,36 +153,6 @@ void collectUnknown(const Json& node, const std::string& prefix, std::vector<std
     }
 }
 
-// Finds where malformed JSON goes wrong, without exceptions: a parser that
-// accepts every value and records the first syntax error.
-class SyntaxErrorFinder final : public nlohmann::json_sax<Json> {
-public:
-    bool null() override { return true; }
-    bool boolean(bool) override { return true; }
-    bool number_integer(number_integer_t) override { return true; }
-    bool number_unsigned(number_unsigned_t) override { return true; }
-    bool number_float(number_float_t, const string_t&) override { return true; }
-    bool string(string_t&) override { return true; }
-    bool binary(binary_t&) override { return true; }
-    bool start_object(std::size_t) override { return true; }
-    bool key(string_t&) override { return true; }
-    bool end_object() override { return true; }
-    bool start_array(std::size_t) override { return true; }
-    bool end_array() override { return true; }
-    bool parse_error(std::size_t, const std::string&,
-                     const nlohmann::detail::exception& error) override
-    {
-        // "[json.exception.parse_error.101] parse error at line 2, column 5: ..."
-        message = error.what();
-        if (const auto bracket = message.find("] "); bracket != std::string::npos) {
-            message.erase(0, bracket + 2U);
-        }
-        return false;
-    }
-
-    std::string message;
-};
-
 } // namespace
 
 std::string settingsToJson(const WorldGenSettings& settings)
@@ -275,7 +165,7 @@ std::string settingsToJson(const WorldGenSettings& settings)
     forEachField(settings, [&](std::string_view path, const auto& value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, float>) {
-            slot(root, path) = jsonFloat(value);
+            slot(root, path) = core::json::floatNumber(value);
         } else {
             slot(root, path) = value;
         }
@@ -285,9 +175,8 @@ std::string settingsToJson(const WorldGenSettings& settings)
 
 core::Result<LoadedSettings> settingsFromJson(std::string_view text)
 {
-    SyntaxErrorFinder finder;
-    if (!Json::sax_parse(text, &finder)) {
-        return core::Error{"malformed JSON: " + finder.message};
+    if (auto syntax = core::json::syntaxError(text)) {
+        return core::Error{"malformed JSON: " + *syntax};
     }
     const Json root = Json::parse(text, nullptr, false);
     if (root.is_discarded()) {

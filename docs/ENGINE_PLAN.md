@@ -128,15 +128,16 @@ Water is local to islands: small lakes and ponds, streams and waterfalls, each p
 
 ## 7. Scene, entities and authoring model
 
-Use an ECS or ECS-like component model, with EnTT as the initial candidate. Start with a small component set:
+Use an ECS or ECS-like component model, with EnTT as the initial candidate. M4 implements this model in the steps of `docs/milestones/m4-scene-data-model.md`. Start with a small component set:
 
 - `TransformComponent`
-- `StaticMeshComponent`
+- `StaticMeshComponent` (mesh and material referenced by asset ID)
 - `CameraComponent`
-- `LightComponent`
-- `MaterialComponent` or material reference on the mesh renderer
+- `DirectionalLightComponent` (the renderer has one directional light; other light kinds come with renderer support)
 - `ScriptComponent`
 - `NameComponent` / editor metadata
+- `ParentComponent`, a parent link between entities that prefabs need for references inside them (M4.6, ADR 0025; a relationship only, no transform inheritance in M4)
+- `PrefabInstanceComponent`, the link from an instance's entities to their prefab (M4.6, ADR 0025)
 
 Use stable UUID-like IDs for saved entities and assets. Runtime EnTT handles are transient. A scene document should contain entities, components, references and version metadata. Prefabs are reusable entity/component compositions with overrides. Decide JSON vs another format by testing human readability, schema migration and dependency availability; do not persist implementation-specific object layout.
 
@@ -144,7 +145,7 @@ The editor should use commands for mutations (create, delete, rename, transform,
 
 ## 8. Lua integration
 
-Use PUC Lua 5.5.x as the first embedded scripting runtime. LuaBridge3 is a candidate wrapper; also evaluate direct Lua C API bindings. Pin one choice after a proof-of-concept and CI build.
+Use PUC Lua 5.5.x as the first embedded scripting runtime. M4.5 adopted `lua/5.5.0` compiled as C++ with a small project-owned binding layer over the C API instead of LuaBridge3 (ADR 0024).
 
 C++ exposes a narrow facade such as:
 
@@ -170,7 +171,7 @@ First panels:
 5. Console: logs, script errors and diagnostics.
 6. Project/assets: browse assets and open/save project.
 
-Then add transform gizmos, undo/redo, asset import, prefab editor, brush-based terrain edits and richer materials. Validate Raven in a standalone prototype; only consider replacing ImGui after a short decision record demonstrates a real advantage and the viewport integration works on target platforms.
+Then add transform gizmos, undo/redo, asset import, prefab editor, brush-based terrain edits and richer materials. Validate Raven in a standalone prototype; only consider replacing ImGui after a short decision record demonstrates a real advantage and the viewport integration works on target platforms. The prototype's plan, isolation rules, results and decision criteria are in `docs/experiments/raven-ui-evaluation.md`: a conditional pass on Windows (2026-11-14). Raven is preliminarily preferred for the M5 editor; ADR 0019 (still proposed) lists the checks before its final acceptance, and Dear ImGui stays until then.
 
 The engine editor should author characters as entities assembled from components and imported assets. Modeling, UV work, rigging and detailed mesh creation should initially happen in external tools such as Blender; the engine imports those assets, sets up materials/colliders/animation references and attaches Lua behavior. Do not attempt to build Blender inside this engine.
 
@@ -219,7 +220,7 @@ The engine editor should author characters as entities assembled from components
 
 **Exit:** several visibly different archipelagos are generated; same seed repeats; generation tests pass; the free-fly camera moves freely through the 3D space.
 
-**Status:** done on the branch `milestone/m3-floating-archipelago` (2026-11-14), waiting for the user's acceptance and the merge into `main`. Delivered as M3.1–M3.13 (`docs/milestones/m3-floating-archipelago.md`): deterministic randomness and noise of its own (ADR 0003); versioned, validated world settings (ADR 0013); islands placed in 3D with spacing (ADR 0013 Amendment 1); island shapes with an irregular outline, uneven tops and rocky undersides in strata, closed flat-shaded meshes and per-island palettes (ADR 0014, 0015); local water — lakes, streams that fill hollows as ponds, waterfalls over the rim (ADR 0016); drifting low-poly clouds (ADR 0017); the archipelago under a stylized sky in island-preview; settings saved and loaded as versioned JSON with nlohmann_json (ADR 0004 Amendment 1); a Dear ImGui WorldGen panel that edits every setting and regenerates the world in place (ADR 0018). Exit criterion: a corpus of 16 seeds gives 16 different, valid worlds (geometry, placement, water and clouds), each seed repeats its world, and golden hashes match on Windows and Linux; screenshots of seeds 1, 42, 7 and 2026 show visibly different archipelagos; the free-fly camera reaches the whole space (start views, `--island`). CI green on Windows MSVC and Linux GCC (Debug and Release) for every step; the GPU tier passes locally. Screenshots: `docs/screenshots/m3/`.
+**Status:** done (2026-11-14); accepted by the user and merged into `main` through pull request #4 (`0befa66`). Delivered as M3.1–M3.13 (`docs/milestones/m3-floating-archipelago.md`): deterministic randomness and noise of its own (ADR 0003); versioned, validated world settings (ADR 0013); islands placed in 3D with spacing (ADR 0013 Amendment 1); island shapes with an irregular outline, uneven tops and rocky undersides in strata, closed flat-shaded meshes and per-island palettes (ADR 0014, 0015); local water — lakes, streams that fill hollows as ponds, waterfalls over the rim (ADR 0016); drifting low-poly clouds (ADR 0017); the archipelago under a stylized sky in island-preview; settings saved and loaded as versioned JSON with nlohmann_json (ADR 0004 Amendment 1); a Dear ImGui WorldGen panel that edits every setting and regenerates the world in place (ADR 0018). Exit criterion: a corpus of 16 seeds gives 16 different, valid worlds (geometry, placement, water and clouds), each seed repeats its world, and golden hashes match on Windows and Linux; screenshots of seeds 1, 42, 7 and 2026 show visibly different archipelagos; the free-fly camera reaches the whole space (start views, `--island`). CI green on Windows MSVC and Linux GCC (Debug and Release) for every step; the GPU tier passes locally. Screenshots: `docs/screenshots/m3/`.
 
 ### M4 — Scene document and data model
 
@@ -228,6 +229,8 @@ The engine editor should author characters as entities assembled from components
 - Lua VM and first script component/event binding proof.
 
 **Exit:** save/load a scene without losing entity identity or component values; a Lua script can alter a permitted property and errors are contained.
+
+**Status:** done on the branch `milestone/m4-scene-data-model` (2026-11-15), waiting for the user's acceptance and the merge into `main`. Delivered as M4.1–M4.7 (`docs/milestones/m4-scene-data-model.md`): persistent 128-bit entity, scene and asset IDs (ADR 0020); a scene core whose components — name, transform, camera, directional light — are stored in EnTT behind the scene's own API (ADR 0021); asset IDs with portable project-relative paths, an asset registry with a manifest, and static mesh components (ADR 0022); scenes saved and loaded as versioned JSON documents with staged validation and atomic writes (ADR 0023, ADR 0004 Amendment 2); sandboxed Lua 5.5 scripts that change permitted transform values through a small engine API, with instruction and memory limits and every error contained, and a Conan lockfile (ADR 0024); parent links between entities and prefabs saved as documents and instantiated into scenes (ADR 0025). Exit criterion: an end-to-end test saves, destroys and loads a scene with every component type, asset references and prefab instances without changing any ID or value, runs its Lua scripts (one moves its entity, a failing one is contained) and writes the same document bytes on Windows and Linux. CI green on Windows MSVC and Linux GCC (Debug and Release) for every step; the GPU tier passes locally. Scene, Assets and Scripting stay free of renderer, OpenGL, SDL and Dear ImGui code; WorldGen stays independent of them. M4 adds no rendering of scenes and no editor UI. The Raven UI evaluation for M5 (`docs/experiments/raven-ui-evaluation.md`) was a separate experiment, not an M4 exit criterion; its ADR 0019 stays proposed.
 
 ### M5 — Minimal editor
 

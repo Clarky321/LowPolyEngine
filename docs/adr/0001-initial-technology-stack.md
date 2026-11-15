@@ -49,6 +49,17 @@ Accepted because these parts are implemented, built with warnings as errors and 
 
 Not verified yet, still candidates to be confirmed by the milestone that first needs them: GLM, spdlog, EnTT, Lua 5.5 (Conan Center has 5.5.0, not 5.5.1) with LuaBridge3 or a project-owned facade, Dear ImGui, Docker.
 
+Confirmed later by the milestone that first needed them:
+
+| Decision | Verified by |
+|---|---|
+| GLM | `glm/1.0.3` behind `engine/core/Math.hpp` (M1.5, ADR 0007) |
+| Dear ImGui | `imgui/1.92.9b`, debug UI and the WorldGen panel (M3.12, ADR 0018) |
+| EnTT | `entt/4.0.0`, private storage of `engine::scene::Scene` in `engine/src/scene/Scene.cpp` (M4.2, ADR 0021) |
+| Lua 5.5 with a project-owned facade | `lua/5.5.0` compiled as C++, private to `engine/src/scripting/lua/`, with a small binding layer over the C API instead of LuaBridge3 (M4.5, ADR 0024) |
+
+Still candidates: spdlog (not adopted; `engine/core/Log.hpp` needs no dependency), Docker. LuaBridge3 was not taken (ADR 0024).
+
 ## Revisit when
 
 - A non-OpenGL backend becomes a real requirement.

@@ -6,6 +6,7 @@
 // Conventions: right-handed coordinates, +Y up, angles in radians, column
 // vectors (p' = M * p), OpenGL clip space with depth in [-1, 1].
 
+#include <glm/ext/quaternion_float.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -17,5 +18,8 @@ using Vec2 = glm::vec2;
 using Vec3 = glm::vec3;
 using Vec4 = glm::vec4;
 using Mat4 = glm::mat4;
+// A rotation as a unit quaternion. The constructor takes (w, x, y, z), so
+// Quat{1, 0, 0, 0} is no rotation; the members are named w, x, y and z.
+using Quat = glm::quat;
 
 } // namespace engine::math
