@@ -701,7 +701,7 @@ private:
         const engine::math::Vec3 horizon =
             island_preview::skyColor(island_preview::floatingWorldSky(), 0.0F);
         renderer_->beginFrame(width, height, {horizon.r, horizon.g, horizon.b, 1.0F});
-        if (viewportMode_ == ViewportMode::Texture) {
+        if (viewportMode_ == ViewportMode::Texture && Rwindow_is_valid(window_ui_) != 0) {
             renderViewportTexture(width, height);
             renderer_->beginFrame(width, height, {horizon.r, horizon.g, horizon.b, 1.0F});
         }
@@ -828,7 +828,10 @@ private:
     void updateStats()
     {
         const double now = std::chrono::duration<double>(Clock::now() - startTime_).count();
-        if (now - lastStatsTime_ < 0.5 || window_ui_ == R_INVALID_ID) {
+        // A close request Raven accepted destroys the window (and its widgets)
+        // inside Rhost_inject_close, before this frame's Rdraw_frame.
+        if (now - lastStatsTime_ < 0.5 || window_ui_ == R_INVALID_ID ||
+            Rwindow_is_valid(window_ui_) == 0) {
             return;
         }
         const std::uint64_t frames = frames_ - statsFrames_;
