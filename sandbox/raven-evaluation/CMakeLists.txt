@@ -43,7 +43,9 @@ target_include_directories(raven-evaluation PRIVATE "${PROJECT_SOURCE_DIR}/sandb
 # SDL3 directly: the prototype owns the one window and the one loop, and hands
 # raw SDL events to Raven's host platform (the engine's Platform hides them).
 # GLAD: the Raven backend issues OpenGL calls itself, on the engine's context.
-target_link_libraries(raven-evaluation PRIVATE engine SDL3::SDL3 glad raven)
+# imgui_backends: Dear ImGui's SDL3 and OpenGL 3 backends, for --with-imgui
+# (Dear ImGui stays the debug UI next to Raven, ADR 0019).
+target_link_libraries(raven-evaluation PRIVATE engine SDL3::SDL3 glad raven imgui_backends)
 target_compile_definitions(raven-evaluation PRIVATE
     LPE_RAVEN_COMMIT="${LPE_RAVEN_COMMIT}"
     LPE_RAVEN_SHADER_DIR="${LPE_RAVEN_SOURCE_DIR}/src/render/vulkan/shaders"

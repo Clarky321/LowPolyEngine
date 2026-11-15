@@ -11,7 +11,9 @@
 // Modes: interactive (default), --self-test (scripted input through SDL's
 // event queue and checks), --stress N (Raven started and stopped N times),
 // --benchmark (frame times of both viewport modes), --frames N with
-// --screenshot FILE (a picture of frame N).
+// --screenshot FILE (a picture of frame N), --input-check (real OS input
+// from input_driver.py, docs/experiments/raven-final-validation.md), and
+// --with-imgui (Dear ImGui's debug UI drawn next to Raven).
 
 #include "GlRavenBackend.hpp"
 #include "SdlRavenHost.hpp"
@@ -31,6 +33,9 @@
 #include <SDL3/SDL.h>
 #include <glad/gl.h>
 #include <glm/geometric.hpp>
+#include <imgui.h>
+#include <imgui_impl_opengl3.h>
+#include <imgui_impl_sdl3.h>
 
 #include <algorithm>
 #include <array>
@@ -39,6 +44,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -99,6 +105,10 @@ struct Options {
     bool selfTest = false;
     std::uint32_t stressCycles = 0;
     bool benchmark = false;
+    // Phases driven by real OS input from input_driver.py.
+    bool inputCheck = false;
+    // Dear ImGui's debug UI next to Raven, on the same window and context.
+    bool withImGui = false;
     bool textureMode = false;
     bool vsync = true;
     // Raven's look: dark (default), light, glass (needs backdrop copies), windows.
@@ -129,6 +139,10 @@ std::optional<Options> parseOptions(int argc, char** argv)
             options.screenshot = std::filesystem::path(argv[++i]);
         } else if (arg == "--self-test") {
             options.selfTest = true;
+        } else if (arg == "--input-check") {
+            options.inputCheck = true;
+        } else if (arg == "--with-imgui") {
+            options.withImGui = true;
         } else if (arg == "--stress" && hasValue &&
                    parseNumber(argv[i + 1], options.stressCycles)) {
             ++i;
@@ -235,11 +249,17 @@ public:
         if (!startRaven()) {
             return 1;
         }
+        if (options_.withImGui && !startImGui()) {
+            return 1;
+        }
         if (options_.benchmark) {
             return runBenchmark();
         }
         if (options_.selfTest) {
             buildSelfTest();
+        }
+        if (options_.inputCheck) {
+            buildInputCheck();
         }
         std::uint64_t frame = 0;
         while (running_) {
@@ -251,6 +271,9 @@ public:
             runFrame();
             if (options_.selfTest) {
                 advanceSelfTest();
+            }
+            if (options_.inputCheck) {
+                advanceInputCheck();
             }
             if (last) {
                 break;
@@ -484,6 +507,7 @@ private:
             {"inspector.seed", &inspectorSeed_},
             {"inspector.details", &inspectorDetails_},
             {"inspector.focus", &focusButton_},
+            {"inspector.notes", &inspectorNotes_},
             {"console.tabs", &consoleTabs_},
             {"console", &console_},
             {"console.frame", &frameLabel_},
@@ -520,6 +544,7 @@ private:
 
     void shutdownAll()
     {
+        stopImGui();
         (void)stopRaven();
         if (renderer_) {
             world_.release(*renderer_);
@@ -648,12 +673,28 @@ private:
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            if (options_.inputCheck &&
+                (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) &&
+                event.key.key == SDLK_F9) {
+                // The input driver's "done" key: for the check, not the UI.
+                if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+                    driverDone_ = true;
+                }
+                continue;
+            }
+            noteInput(event);
+            if (imguiStarted_ && !routeThroughImGui(event)) {
+                continue;
+            }
             // Keys and buttons held when the window loses the focus are
             // released by the host (SdlRavenHost), which gives Raven their
             // key-ups; the camera then hears them through the viewport.
             (void)host_->handleEvent(event);
         }
         updateCamera(static_cast<float>(delta));
+        if (focusLossFrames_ > 0 && --focusLossFrames_ == 0) {
+            focusLossPosition_ = camera_.position;
+        }
 
         const int width = host_->pixelWidth();
         const int height = host_->pixelHeight();
@@ -667,12 +708,23 @@ private:
         updateStats();
         const std::uint64_t uiFramesBefore = raven_eval::backendStats().frames;
         const auto uiStart = Clock::now();
-        if (Rdraw_frame() == R_FALSE) {
+        bool drawn = true;
+        if (options_.benchmark) {
+            drawn = Rdraw_frame() != R_FALSE;
+        } else if (!raven_eval::sameGlStateAround([&drawn] { drawn = Rdraw_frame() != R_FALSE; },
+                                                  raven_eval::GlStateGroups::Restored)) {
+            // Everything Raven did this frame, its texture uploads included.
+            ++frameStateMismatches_;
+        }
+        if (!drawn) {
             running_ = false;
         }
         uiMilliseconds_ += millisecondsSince(uiStart);
         if (raven_eval::backendStats().frames == uiFramesBefore) {
             ++framesWithoutUi_;
+        }
+        if (imguiStarted_ && running_) {
+            drawImGui();
         }
         if (screenshotPath_) {
             saveScreenshot(*screenshotPath_);
@@ -978,6 +1030,630 @@ private:
             return "";
         }
         return self->consoleLines_[static_cast<std::size_t>(index)].c_str();
+    }
+
+    // ---- Dear ImGui next to Raven (--with-imgui) ------------------------
+    //
+    // Raven is the editor's interface; Dear ImGui stays the engine's debug UI
+    // (ADR 0018, ADR 0019). Both on one window, one context and one loop: each
+    // SDL event goes to Dear ImGui first, and to Raven unless Dear ImGui wants
+    // the mouse or the keyboard for it; Dear ImGui draws after Raven's frame.
+
+    bool startImGui()
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        ImGui::StyleColorsDark();
+        // The display's scale, as Raven gets it.
+        ImGui::GetStyle().ScaleAllSizes(host_->scale());
+        ImGui::GetStyle().FontScaleDpi = host_->scale();
+        if (!ImGui_ImplSDL3_InitForOpenGL(window_, context_)) {
+            engine::core::logError("app", "Dear ImGui SDL3 backend failed");
+            ImGui::DestroyContext();
+            return false;
+        }
+        if (!ImGui_ImplOpenGL3_Init("#version 410 core")) {
+            engine::core::logError("app", "Dear ImGui OpenGL backend failed");
+            ImGui_ImplSDL3_Shutdown();
+            ImGui::DestroyContext();
+            return false;
+        }
+        imguiStarted_ = true;
+        log("Dear ImGui " + std::string(ImGui::GetVersion()) + " next to Raven");
+        return true;
+    }
+
+    void stopImGui()
+    {
+        if (!imguiStarted_) {
+            return;
+        }
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplSDL3_Shutdown();
+        ImGui::DestroyContext();
+        imguiStarted_ = false;
+    }
+
+    // Gives the event to Dear ImGui; true if Raven should get it as well.
+    bool routeThroughImGui(const SDL_Event& event)
+    {
+        ImGui_ImplSDL3_ProcessEvent(&event);
+        const ImGuiIO& io = ImGui::GetIO();
+        switch (event.type) {
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_WHEEL:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (io.WantCaptureMouse && host_->heldButtons() == 0) {
+                ++imguiMouseEvents_;
+                return false;
+            }
+            return true;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            // Raven still gets the release of a press it got.
+            if (io.WantCaptureMouse && host_->heldButtons() == 0) {
+                ++imguiMouseEvents_;
+                return false;
+            }
+            return true;
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_TEXT_INPUT:
+            if (io.WantCaptureKeyboard) {
+                ++imguiKeyboardEvents_;
+                return false;
+            }
+            return true;
+        case SDL_EVENT_KEY_UP:
+            if (io.WantCaptureKeyboard && host_->heldKeys() == 0) {
+                ++imguiKeyboardEvents_;
+                return false;
+            }
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    void drawImGui()
+    {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+        const ImGuiIO& io = ImGui::GetIO();
+        // Inside the viewport's top-left corner, away from the widgets the
+        // checks click.
+        float x = 0.0F;
+        float y = 0.0F;
+        float w = 0.0F;
+        float h = 0.0F;
+        Rwidget_get_rect(viewport_, &x, &y, &w, &h);
+        const float toPoints = host_->scale() / std::max(SDL_GetWindowPixelDensity(window_), 0.01F);
+        ImGui::SetNextWindowPos(ImVec2((x + 12.0F) * toPoints, (y + 12.0F) * toPoints),
+                                ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(250.0F * host_->scale(), 0.0F), ImGuiCond_Always);
+        ImGui::Begin("Dear ImGui (debug UI)", nullptr,
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse |
+                         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+        ImGui::TextUnformatted("Drawn after Raven's frame");
+        if (ImGui::Button("ImGui button")) {
+            ++imguiClicks_;
+        }
+        const float density = io.DisplayFramebufferScale.x;
+        const auto pixelRect = [density] {
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+            return std::array<float, 4>{min.x * density, min.y * density, (max.x - min.x) * density,
+                                        (max.y - min.y) * density};
+        };
+        imguiButtonRect_ = pixelRect();
+        ImGui::InputText("##text", imguiText_.data(), imguiText_.size());
+        imguiInputRect_ = pixelRect();
+        ImGui::Text("clicks %llu", static_cast<unsigned long long>(imguiClicks_));
+        ImGui::End();
+        ImGui::Render();
+        if (!raven_eval::sameGlStateAround(
+                [] { ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData()); },
+                raven_eval::GlStateGroups::All)) {
+            ++imguiStateMismatches_;
+        }
+    }
+
+    // ---- input check: real OS input from input_driver.py ---------------
+    //
+    // The driver sends real keyboard and mouse input through the operating
+    // system (SendInput on Windows, XTEST through xdotool on X11) and works
+    // the system clipboard. The two talk through this program's standard
+    // output: for each phase the program prepares the widgets and prints
+    // "@@READY <phase> ...", the driver acts and then presses F9, and the
+    // program checks the result and prints "@@CHECK <phase>.<what> PASS|FAIL
+    // <detail>" and "@@DONE <phase>". F9 is the driver's own key and goes
+    // neither to Raven nor to Dear ImGui.
+
+    struct InputPhase {
+        std::string name;
+        std::function<std::string()> prepare;
+        std::function<void()> check;
+    };
+
+    void emit(const std::string& line)
+    {
+        std::printf("%s\n", line.c_str());
+        std::fflush(stdout);
+    }
+
+    void expect(const std::string& what, bool passed, const std::string& detail)
+    {
+        inputResults_.push_back(StepResult{what, passed, detail});
+        emit(std::format("@@CHECK {} {} {}", what, passed ? "PASS" : "FAIL", detail));
+    }
+
+    // A widget's rectangle in the window's pixels: "name=x,y,w,h".
+    [[nodiscard]] std::string rectOf(std::string_view name, Rid widget) const
+    {
+        float x = 0.0F;
+        float y = 0.0F;
+        float w = 0.0F;
+        float h = 0.0F;
+        Rwidget_get_rect(widget, &x, &y, &w, &h);
+        const float s = host_->scale();
+        return std::format("{}={:.1f},{:.1f},{:.1f},{:.1f}", name, x * s, y * s, w * s, h * s);
+    }
+
+    [[nodiscard]] std::array<float, 2> centreOf(Rid widget) const
+    {
+        float x = 0.0F;
+        float y = 0.0F;
+        float w = 0.0F;
+        float h = 0.0F;
+        Rwidget_get_rect(widget, &x, &y, &w, &h);
+        const float s = host_->scale();
+        return {(x + w * 0.5F) * s, (y + h * 0.5F) * s};
+    }
+
+    // Raven got the last press within a pixel of the widget's centre, where
+    // the driver clicked.
+    void expectPressAtCentre(const std::string& what, Rid widget)
+    {
+        const auto centre = centreOf(widget);
+        const float dx = static_cast<float>(host_->lastPressX()) - centre[0];
+        const float dy = static_cast<float>(host_->lastPressY()) - centre[1];
+        expect(what, std::abs(dx) <= 1.5F && std::abs(dy) <= 1.5F,
+               std::format("press at ({}, {}) px, centre ({:.1f}, {:.1f}) px", host_->lastPressX(),
+                           host_->lastPressY(), centre[0], centre[1]));
+    }
+
+    [[nodiscard]] std::string inputText() const
+    {
+        const char* text = Rtext_input_get_text(inspectorName_);
+        return text != nullptr ? text : "";
+    }
+
+    void focusName(const char* text)
+    {
+        updatingInspector_ = true;
+        Rtext_input_set_text(inspectorName_, text);
+        updatingInspector_ = false;
+        Rwidget_focus(inspectorName_);
+    }
+
+    void expectText(const std::string& what, const std::string& expected)
+    {
+        const std::string text = inputText();
+        expect(what, text == expected, std::format("text '{}', expected '{}'", text, expected));
+    }
+
+    [[nodiscard]] static std::string clipboardText()
+    {
+        char* text = SDL_GetClipboardText();
+        std::string result = text != nullptr ? text : "";
+        SDL_free(text);
+        return result;
+    }
+
+    void addPhase(std::string name, std::function<std::string()> prepare,
+                  std::function<void()> check)
+    {
+        phases_.push_back({std::move(name), std::move(prepare), std::move(check)});
+    }
+
+    void buildInputCheck()
+    {
+        addPhase(
+            "focus", [] { return std::string(); },
+            [this] {
+                expect("focus.keyboard", SDL_GetKeyboardFocus() == window_,
+                       "SDL keyboard focus on the window");
+                expect("focus.text-input", SDL_TextInputActive(window_), "SDL text input active");
+                if (options_.screenshot) {
+                    screenshotPath_ = options_.screenshot;
+                }
+            });
+        addPhase(
+            "click-input",
+            [this] {
+                Rwindow_clear_focus(window_ui_);
+                focusName("");
+                Rwindow_clear_focus(window_ui_);
+                before_.buttons = host_->stats().mouseButtons;
+                return rectOf("target", inspectorName_);
+            },
+            [this] {
+                expectPressAtCentre("click-input.position", inspectorName_);
+                expect("click-input.focus", Rwidget_is_focused(inspectorName_) != 0,
+                       "the TextInput has the keyboard after the click");
+                const auto buttons = host_->stats().mouseButtons - before_.buttons;
+                expect("click-input.events", buttons == 2,
+                       std::format("{} button events (down and up expected)", buttons));
+            });
+        const auto clickRegenerate = [this](const std::string& phase) {
+            addPhase(
+                phase,
+                [this] {
+                    before_.regenerations = regenerations_;
+                    before_.imguiClicks = imguiClicks_;
+                    return rectOf("target", regenerateButton_);
+                },
+                [this, phase] {
+                    expectPressAtCentre(phase + ".position", regenerateButton_);
+                    expect(phase + ".clicked", regenerations_ == before_.regenerations + 1,
+                           std::format("regenerations {} -> {}", before_.regenerations,
+                                       regenerations_));
+                    if (imguiStarted_) {
+                        expect(phase + ".imgui-untouched", imguiClicks_ == before_.imguiClicks,
+                               std::format("ImGui clicks {} -> {}", before_.imguiClicks,
+                                           imguiClicks_));
+                    }
+                });
+        };
+        clickRegenerate("click-button");
+        addPhase(
+            "type-ascii",
+            [this] {
+                focusName("");
+                before_.position = camera_.position;
+                before_.codepoints = host_->stats().codepoints;
+                return std::string();
+            },
+            [this] {
+                const std::string expected = "wasd Hello, World 123.!?;:-_()";
+                expectText("type-ascii.text", expected);
+                const auto codepoints = host_->stats().codepoints - before_.codepoints;
+                expect(
+                    "type-ascii.no-duplicates", codepoints == expected.size(),
+                    std::format("{} code points for {} characters", codepoints, expected.size()));
+                const float moved = glm::length(camera_.position - before_.position);
+                expect("type-ascii.camera-still", moved == 0.0F,
+                       std::format("camera moved {:.3f} m while WASD went into the text", moved));
+            });
+        addPhase(
+            "type-layout",
+            [this] {
+                focusName("");
+                return std::string();
+            },
+            [this] { expectText("type-layout.text", "Привет, мир!"); });
+        addPhase(
+            "type-unicode",
+            [this] {
+                focusName("");
+                return std::string();
+            },
+            [this] { expectText("type-unicode.text", "Тестовый текст: 123."); });
+        addPhase(
+            "editing",
+            [this] {
+                focusName("Тестовый текст: 123.");
+                return std::string();
+            },
+            [this] {
+                expectText("editing.text", "текстX: 123.Тестов");
+                const std::string clip = clipboardText();
+                expect("editing.cut-to-clipboard", clip == "Тестовый",
+                       std::format("clipboard '{}'", clip));
+            });
+        addPhase(
+            "select-all-copy",
+            [this] {
+                focusName("Привет, мир!");
+                before_.clipboardWrites = host_->stats().clipboardWrites;
+                return std::string();
+            },
+            [this] {
+                const std::string clip = clipboardText();
+                expect("select-all-copy.clipboard", clip == "Привет, мир!",
+                       std::format("clipboard '{}'", clip));
+                const auto writes = host_->stats().clipboardWrites - before_.clipboardWrites;
+                expect("select-all-copy.once", writes == 1,
+                       std::format("{} clipboard writes for one Ctrl+C", writes));
+                expectText("select-all-copy.text-kept", "Привет, мир!");
+            });
+        addPhase(
+            "paste-external",
+            [this] {
+                focusName("");
+                before_.clipboardReads = host_->stats().clipboardReads;
+                return std::string();
+            },
+            [this] {
+                expectText("paste-external.text", "Вставка ✓ αβγ 🙂");
+                const auto reads = host_->stats().clipboardReads - before_.clipboardReads;
+                expect("paste-external.once", reads == 1,
+                       std::format("{} clipboard reads for one Ctrl+V", reads));
+            });
+        addPhase(
+            "paste-multiline-input",
+            [this] {
+                focusName("");
+                return std::string();
+            },
+            [this] {
+                // A single-line editor keeps the first line (Raven's textedit.c).
+                expectText("paste-multiline-input.first-line", "Первая строка");
+            });
+        addPhase(
+            "paste-multiline-editor",
+            [this] {
+                Rtext_editor_set_text(inspectorNotes_, "");
+                Rwidget_focus(inspectorNotes_);
+                return std::string();
+            },
+            [this] {
+                const char* text = Rtext_editor_get_text(inspectorNotes_);
+                const std::string got = text != nullptr ? text : "";
+                const int lines = Rtext_editor_get_line_count(inspectorNotes_);
+                std::string shown;
+                for (const char c : got) {
+                    if (c == '\r') {
+                        shown += "\\r";
+                    } else if (c == '\n') {
+                        shown += "\\n";
+                    } else {
+                        shown += c;
+                    }
+                }
+                expect("paste-multiline-editor.lines",
+                       lines == 3 && got == "Первая строка\nВторая строка\nТретья",
+                       std::format("{} lines, text '{}'", lines, shown));
+            });
+        addPhase(
+            "paste-empty",
+            [this] {
+                focusName("abc");
+                before_.ravenErrors = ravenErrors().errors;
+                return std::string();
+            },
+            [this] {
+                expectText("paste-empty.text-kept", "abc");
+                expect("paste-empty.no-error", ravenErrors().errors == before_.ravenErrors,
+                       std::format("{} Raven errors", ravenErrors().errors));
+            });
+        addPhase(
+            "switch-and-paste",
+            [this] {
+                focusName("");
+                before_.focusChanges = host_->stats().focusChanges;
+                return std::string();
+            },
+            [this] {
+                expectText("switch-and-paste.text", "После переключения");
+                expect("switch-and-paste.input-focus", Rwidget_is_focused(inspectorName_) != 0,
+                       "the TextInput still has Raven's keyboard after the window came back");
+                const auto changes = host_->stats().focusChanges - before_.focusChanges;
+                expect("switch-and-paste.focus-events", changes >= 2,
+                       std::format("{} window focus changes (lost and gained)", changes));
+            });
+        addPhase(
+            "focus-loss",
+            [this] {
+                Rwidget_focus(viewport_);
+                before_.position = camera_.position;
+                before_.focusLosses = windowFocusLosses_;
+                before_.releasedKeys = host_->stats().releasedKeys;
+                before_.releasedButtons = host_->stats().releasedButtons;
+                sdlKeyUps_ = {};
+                return rectOf("target", viewport_);
+            },
+            [this] {
+                const float movedBefore = glm::length(focusLossPosition_ - before_.position);
+                expect("focus-loss.keys-worked", movedBefore > 0.1F,
+                       std::format("the held keys flew the camera {:.2f} m before the focus "
+                                   "loss",
+                                   movedBefore));
+                expect("focus-loss.lost", windowFocusLosses_ > before_.focusLosses,
+                       std::format("{} window focus losses",
+                                   windowFocusLosses_ - before_.focusLosses));
+                const float movedAfter = glm::length(camera_.position - focusLossPosition_);
+                expect("focus-loss.camera-still", movedAfter == 0.0F,
+                       std::format("camera moved {:.3f} m after the focus loss", movedAfter));
+                const bool appKeys =
+                    keys_.w || keys_.a || keys_.s || keys_.d || keys_.q || keys_.e || keys_.shift;
+                expect("focus-loss.app-keys", !appKeys && !looking_,
+                       std::format("viewport keys {}, looking {}", appKeys ? "held" : "free",
+                                   looking_));
+                expect("focus-loss.raven-held", host_->heldKeys() == 0 && host_->heldButtons() == 0,
+                       std::format("{} keys and {} buttons held for Raven", host_->heldKeys(),
+                                   host_->heldButtons()));
+                const bool* state = SDL_GetKeyboardState(nullptr);
+                const bool sdlHeld = state[SDL_SCANCODE_W] || state[SDL_SCANCODE_LSHIFT] ||
+                                     state[SDL_SCANCODE_LCTRL] || state[SDL_SCANCODE_LALT];
+                const SDL_MouseButtonFlags buttons = SDL_GetMouseState(nullptr, nullptr);
+                expect("focus-loss.sdl-state", !sdlHeld && buttons == 0,
+                       std::format("SDL: W/Shift/Ctrl/Alt {}, mouse buttons 0x{:X}",
+                                   sdlHeld ? "held" : "up", static_cast<unsigned>(buttons)));
+                expect("focus-loss.viewport-focus",
+                       Rwindow_get_focused_widget(window_ui_) == viewport_,
+                       "the viewport has Raven's keyboard again after the window came back");
+                const auto host = host_->stats();
+                emit(std::format(
+                    "@@INFO focus-loss: SDL sent key-ups W {} Shift {} Ctrl {} Alt {} and "
+                    "button-ups {}; the host released {} keys and {} buttons itself",
+                    sdlKeyUps_[0], sdlKeyUps_[1], sdlKeyUps_[2], sdlKeyUps_[3], sdlButtonUps_,
+                    host.releasedKeys - before_.releasedKeys,
+                    host.releasedButtons - before_.releasedButtons));
+            });
+        addPhase(
+            "resize",
+            [this] {
+                before_.size = {host_->pixelWidth(), host_->pixelHeight()};
+                before_.resizes = viewportResizes_;
+                return std::format("pixels={}x{}", host_->pixelWidth(), host_->pixelHeight());
+            },
+            [this] {
+                int w = 0;
+                int h = 0;
+                Rviewport_get_pixel_size(viewport_, &w, &h);
+                expect("resize.window",
+                       host_->pixelWidth() > before_.size[0] &&
+                           host_->pixelHeight() > before_.size[1],
+                       std::format("window {}x{} -> {}x{} px", before_.size[0], before_.size[1],
+                                   host_->pixelWidth(), host_->pixelHeight()));
+                expect("resize.viewport",
+                       viewportResizes_ > before_.resizes && w == viewportSize_[0] &&
+                           h == viewportSize_[1],
+                       std::format("viewport {}x{} px, {} resize callbacks", w, h,
+                                   viewportResizes_ - before_.resizes));
+            });
+        clickRegenerate("click-after-resize");
+        if (imguiStarted_) {
+            addPhase(
+                "imgui-click",
+                [this] {
+                    before_.imguiClicks = imguiClicks_;
+                    before_.buttons = host_->stats().mouseButtons;
+                    const auto& r = imguiButtonRect_;
+                    return std::format("target={:.1f},{:.1f},{:.1f},{:.1f}", r[0], r[1], r[2],
+                                       r[3]);
+                },
+                [this] {
+                    expect("imgui-click.clicked", imguiClicks_ == before_.imguiClicks + 1,
+                           std::format("ImGui clicks {} -> {}", before_.imguiClicks, imguiClicks_));
+                    const auto buttons = host_->stats().mouseButtons - before_.buttons;
+                    expect("imgui-click.raven-untouched", buttons == 0,
+                           std::format("{} button events reached Raven", buttons));
+                });
+            addPhase(
+                "imgui-type",
+                [this] {
+                    focusName("keep");
+                    imguiText_.fill('\0');
+                    before_.codepoints = host_->stats().codepoints;
+                    const auto& r = imguiInputRect_;
+                    return std::format("target={:.1f},{:.1f},{:.1f},{:.1f}", r[0], r[1], r[2],
+                                       r[3]);
+                },
+                [this] {
+                    const std::string typed = imguiText_.data();
+                    expect("imgui-type.text", typed == "imgui",
+                           std::format("ImGui text '{}'", typed));
+                    expectText("imgui-type.raven-untouched", "keep");
+                    const auto codepoints = host_->stats().codepoints - before_.codepoints;
+                    expect("imgui-type.raven-codepoints", codepoints == 0,
+                           std::format("{} code points reached Raven", codepoints));
+                });
+            clickRegenerate("raven-click-with-imgui");
+        }
+    }
+
+    void startInputCheck()
+    {
+        SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
+        const void* hwnd =
+            SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+        const Sint64 x11 = SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+        int pointsW = 0;
+        int pointsH = 0;
+        SDL_GetWindowSize(window_, &pointsW, &pointsH);
+        emit(std::format("@@WINDOW hwnd={} x11={} video={}",
+                         static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(hwnd)),
+                         static_cast<long long>(x11), SDL_GetCurrentVideoDriver()));
+        emit(std::format("@@SCALE display={:.3f} content={:.3f} density={:.3f} points={}x{} "
+                         "pixels={}x{} raven={:.3f} imgui={}",
+                         SDL_GetWindowDisplayScale(window_),
+                         SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window_)),
+                         SDL_GetWindowPixelDensity(window_), pointsW, pointsH, host_->pixelWidth(),
+                         host_->pixelHeight(), host_->scale(), imguiStarted_ ? "on" : "off"));
+        inputStarted_ = true;
+    }
+
+    void advanceInputCheck()
+    {
+        if (!running_) {
+            return;
+        }
+        if (!inputStarted_) {
+            if (frames_ >= 30) {
+                startInputCheck();
+            }
+            return;
+        }
+        if (phase_ >= phases_.size()) {
+            if (!closeAnnounced_) {
+                emit("@@READY close");
+                closeAnnounced_ = true;
+            }
+            return;
+        }
+        InputPhase& phase = phases_[phase_];
+        if (!phasePrepared_) {
+            const std::string payload = phase.prepare();
+            emit("@@READY " + phase.name + (payload.empty() ? "" : " " + payload));
+            phasePrepared_ = true;
+            driverDone_ = false;
+            settle_ = 0;
+            phaseStart_ = Clock::now();
+            return;
+        }
+        if (!driverDone_) {
+            if (millisecondsSince(phaseStart_) > 60000.0) {
+                expect(phase.name + ".driver", false, "no F9 from the driver within 60 s");
+                running_ = false;
+            }
+            return;
+        }
+        // Events before F9 reached Raven in the same poll; let it handle them.
+        if (++settle_ < 3) {
+            return;
+        }
+        phase.check();
+        emit("@@DONE " + phase.name);
+        ++phase_;
+        phasePrepared_ = false;
+    }
+
+    // What the checks need to know about input before it reaches the UI.
+    void noteInput(const SDL_Event& event)
+    {
+        switch (event.type) {
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+            ++windowFocusLosses_;
+            // Where the camera is once the releases have been handled.
+            focusLossFrames_ = 2;
+            break;
+        case SDL_EVENT_KEY_UP:
+            switch (event.key.scancode) {
+            case SDL_SCANCODE_W:
+                ++sdlKeyUps_[0];
+                break;
+            case SDL_SCANCODE_LSHIFT:
+                ++sdlKeyUps_[1];
+                break;
+            case SDL_SCANCODE_LCTRL:
+                ++sdlKeyUps_[2];
+                break;
+            case SDL_SCANCODE_LALT:
+                ++sdlKeyUps_[3];
+                break;
+            default:
+                break;
+            }
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            ++sdlButtonUps_;
+            break;
+        default:
+            break;
+        }
     }
 
     // ---- self-test: input through SDL's own queue ----------------------
@@ -1603,13 +2279,42 @@ private:
                     static_cast<unsigned long long>(host.closeRequests),
                     static_cast<unsigned long long>(host.cursorChanges),
                     static_cast<unsigned long long>(host.wakeUps));
+        std::printf("[summary] OpenGL state around Raven's frames: %u mismatches; Dear ImGui "
+                    "%s, %u state mismatches around its renderer, %llu mouse and %llu keyboard "
+                    "events kept from Raven\n",
+                    frameStateMismatches_, imguiStarted_ || options_.withImGui ? "on" : "off",
+                    imguiStateMismatches_, static_cast<unsigned long long>(imguiMouseEvents_),
+                    static_cast<unsigned long long>(imguiKeyboardEvents_));
+        std::printf("[summary] focus: %llu keys and %llu buttons released by the host\n",
+                    static_cast<unsigned long long>(host.releasedKeys),
+                    static_cast<unsigned long long>(host.releasedButtons));
         for (const auto& message : ravenErrors().messages) {
             std::printf("[raven] %s\n", message.c_str());
         }
         bool ok = backend.glErrors == 0 && backend.stateMismatches == 0 &&
+                  frameStateMismatches_ == 0 && imguiStateMismatches_ == 0 &&
                   backend.wrongThreadCalls == 0 && renderer_->errorCount() == 0 &&
                   ravenErrors().errors == 0 && memory.allocation_count == 0 &&
                   backend.liveTextures == 0;
+        if (options_.inputCheck) {
+            std::size_t passed = 0;
+            for (const auto& result : inputResults_) {
+                passed += result.passed ? 1 : 0;
+            }
+            const bool allPhases = phase_ == phases_.size();
+            emit(std::format("@@CHECK close.raven-callback {} {} close callbacks",
+                             closeCallbacks_ == 1 && closedByRaven ? "PASS" : "FAIL",
+                             closeCallbacks_));
+            emit(std::format("@@CHECK close.clean-shutdown {} OpenGL errors {}, state mismatches "
+                             "{} + {} + {}, Raven errors {}, Raven blocks after Rshutdown {}, "
+                             "backend textures {}",
+                             ok ? "PASS" : "FAIL", backend.glErrors, backend.stateMismatches,
+                             frameStateMismatches_, imguiStateMismatches_, ravenErrors().errors,
+                             memory.allocation_count, backend.liveTextures));
+            std::printf("[input-check] %zu of %zu checks passed, %zu of %zu phases run\n", passed,
+                        inputResults_.size(), phase_, phases_.size());
+            ok = ok && allPhases && passed == inputResults_.size() && closeCallbacks_ == 1;
+        }
         if (options_.selfTest) {
             std::size_t passed = 0;
             for (const auto& result : results_) {
@@ -1686,6 +2391,34 @@ private:
     std::uint64_t viewportEvents_ = 0;
     std::uint64_t viewportResizes_ = 0;
     std::uint64_t viewportFocusLosses_ = 0;
+    std::uint64_t windowFocusLosses_ = 0;
+    int focusLossFrames_ = 0;
+    engine::math::Vec3 focusLossPosition_{0.0F};
+    std::array<int, 4> sdlKeyUps_{};
+    int sdlButtonUps_ = 0;
+    // Frames after which the state the backend restores differed (checked
+    // around Rdraw_frame, from outside the backend).
+    std::uint32_t frameStateMismatches_ = 0;
+    Rid inspectorNotes_ = R_INVALID_ID;
+
+    bool imguiStarted_ = false;
+    std::uint64_t imguiClicks_ = 0;
+    std::array<char, 64> imguiText_{};
+    std::array<float, 4> imguiButtonRect_{};
+    std::array<float, 4> imguiInputRect_{};
+    std::uint32_t imguiStateMismatches_ = 0;
+    std::uint64_t imguiMouseEvents_ = 0;
+    std::uint64_t imguiKeyboardEvents_ = 0;
+
+    std::vector<InputPhase> phases_;
+    std::vector<StepResult> inputResults_;
+    std::size_t phase_ = 0;
+    bool inputStarted_ = false;
+    bool phasePrepared_ = false;
+    bool driverDone_ = false;
+    bool closeAnnounced_ = false;
+    int settle_ = 0;
+    Clock::time_point phaseStart_ = Clock::now();
     std::uint64_t treeSelections_ = 0;
     std::uint64_t dockChanges_ = 0;
     std::string dockLayoutBefore_;
@@ -1698,6 +2431,14 @@ private:
         std::uint64_t selections = 0;
         std::uint64_t focusLosses = 0;
         std::uint64_t releasedKeys = 0;
+        std::uint64_t releasedButtons = 0;
+        std::uint64_t buttons = 0;
+        std::uint64_t imguiClicks = 0;
+        std::uint64_t codepoints = 0;
+        std::uint64_t clipboardWrites = 0;
+        std::uint64_t clipboardReads = 0;
+        std::uint64_t focusChanges = 0;
+        std::uint32_t ravenErrors = 0;
         std::uint64_t dockChanges = 0;
         std::uint64_t regenerations = 0;
         std::uint64_t resizes = 0;
@@ -1724,7 +2465,8 @@ int main(int argc, char** argv)
         std::fprintf(stderr,
                      "usage: raven-evaluation [--frames N] [--screenshot FILE.png] [--self-test] "
                      "[--stress N] [--benchmark] [--texture-mode] [--no-vsync] [--seed N] "
-                     "[--size WxH] [--look dark|light|glass|windows] [--ui-scale F]\n");
+                     "[--size WxH] [--look dark|light|glass|windows] [--ui-scale F] "
+                     "[--input-check] [--with-imgui]\n");
         return 2;
     }
     try {

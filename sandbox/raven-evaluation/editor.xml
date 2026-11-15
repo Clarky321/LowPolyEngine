@@ -38,6 +38,9 @@
 					</Grid>
 					<Label Name="inspector.details" Wrap="true" Opacity="0.8"/>
 					<Button Name="inspector.focus" Text="Fly to the island" OnClicked="island.focus"/>
+					<!-- Several lines of text (raven-final-validation: multi-line clipboard). -->
+					<Label>Notes</Label>
+					<TextEditor Name="inspector.notes" Language="None" AutoPairs="false" Completion="false" Height="90"/>
 				</VBox>
 			</ScrollBox>
 

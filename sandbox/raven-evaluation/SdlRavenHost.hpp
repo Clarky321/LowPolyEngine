@@ -75,6 +75,9 @@ public:
     // Keys and mouse buttons Raven was told are down and not yet up.
     [[nodiscard]] std::size_t heldKeys() const noexcept { return heldKeys_.size(); }
     [[nodiscard]] std::size_t heldButtons() const noexcept { return heldButtons_.size(); }
+    // Where the last button went down, in the window's pixels (what Raven got).
+    [[nodiscard]] int lastPressX() const noexcept { return lastPressX_; }
+    [[nodiscard]] int lastPressY() const noexcept { return lastPressY_; }
 
 private:
     // Sends Raven the releases of everything still held (before focus loss).

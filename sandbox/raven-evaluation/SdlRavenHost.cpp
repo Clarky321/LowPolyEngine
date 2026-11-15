@@ -349,6 +349,10 @@ bool SdlRavenHost::handleEvent(const SDL_Event& event)
         mouseX_ = pixel(event.button.x);
         mouseY_ = pixel(event.button.y);
         const auto held = std::find(heldButtons_.begin(), heldButtons_.end(), button);
+        if (down) {
+            lastPressX_ = mouseX_;
+            lastPressY_ = mouseY_;
+        }
         if (down && held == heldButtons_.end()) {
             heldButtons_.push_back(button);
         } else if (!down && held != heldButtons_.end()) {
