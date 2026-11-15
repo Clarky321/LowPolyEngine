@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstring>
 #include <exception>
+#include <functional>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -24,10 +25,18 @@ namespace {
 constexpr GLuint kTextureUnit = 0;
 constexpr GLuint kBackdropUnit = 1;
 constexpr GLuint kBackdropBlurUnit = 2;
-constexpr int kSavedUnits = 3;
+// Texture units whose bindings are saved, restored and compared: the three
+// the backend uses and the next ones the engine might use.
+constexpr int kSavedUnits = 8;
+// Generic vertex attributes whose current values are compared (the engine
+// sets them for meshes without normals or UVs).
+constexpr int kCheckedAttributes = 4;
+// Indexed uniform buffer bindings that are compared.
+constexpr int kCheckedUniformBuffers = 4;
 
-// The OpenGL state the backend changes, saved before and restored after.
-struct GlState {
+// The OpenGL state the backend changes: saved before its work and restored
+// after it.
+struct RestoredState {
     GLint program = 0;
     GLint vertexArray = 0;
     GLint arrayBuffer = 0;
@@ -56,13 +65,50 @@ struct GlState {
     GLint unpackBuffer = 0;
     GLint packAlignment = 4;
     GLint packBuffer = 0;
+    // RenderFrame clears with Raven's colour.
+    std::array<GLfloat, 4> clearColor{};
+
+    friend bool operator==(const RestoredState&, const RestoredState&) = default;
+};
+
+// State the backend never changes. It is only read, so that a change there
+// is counted as a state mismatch too.
+struct CheckedState {
+    GLint elementArrayBuffer = 0;
+    GLboolean framebufferSrgb = GL_FALSE;
+    GLint depthFunc = 0;
+    GLint cullFaceMode = 0;
+    GLint frontFace = 0;
+    std::array<GLint, 2> polygonMode{};
+    GLint stencilFunc = 0;
+    GLint stencilRef = 0;
+    GLint stencilValueMask = 0;
+    GLint stencilWriteMask = 0;
+    GLint stencilFail = 0;
+    GLint stencilPassDepthFail = 0;
+    GLint stencilPassDepthPass = 0;
+    std::array<GLfloat, 4> blendColor{};
+    GLboolean primitiveRestart = GL_FALSE;
+    GLboolean sampleAlphaToCoverage = GL_FALSE;
+    GLint uniformBuffer = 0;
+    std::array<GLint, kCheckedUniformBuffers> uniformBuffers{};
+    std::array<std::array<GLfloat, 4>, kCheckedAttributes> attributes{};
+
+    friend bool operator==(const CheckedState&, const CheckedState&) = default;
+};
+
+struct GlState {
+    RestoredState restored;
+    CheckedState checked;
 
     friend bool operator==(const GlState&, const GlState&) = default;
 };
 
 GlState captureState()
 {
-    GlState state;
+    GlState result;
+    RestoredState& state = result.restored;
+    CheckedState& checked = result.checked;
     glGetIntegerv(GL_CURRENT_PROGRAM, &state.program);
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &state.vertexArray);
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &state.arrayBuffer);
@@ -95,7 +141,33 @@ GlState captureState()
     glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &state.unpackBuffer);
     glGetIntegerv(GL_PACK_ALIGNMENT, &state.packAlignment);
     glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &state.packBuffer);
-    return state;
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, state.clearColor.data());
+    glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &checked.elementArrayBuffer);
+    checked.framebufferSrgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
+    glGetIntegerv(GL_DEPTH_FUNC, &checked.depthFunc);
+    glGetIntegerv(GL_CULL_FACE_MODE, &checked.cullFaceMode);
+    glGetIntegerv(GL_FRONT_FACE, &checked.frontFace);
+    glGetIntegerv(GL_POLYGON_MODE, checked.polygonMode.data());
+    glGetIntegerv(GL_STENCIL_FUNC, &checked.stencilFunc);
+    glGetIntegerv(GL_STENCIL_REF, &checked.stencilRef);
+    glGetIntegerv(GL_STENCIL_VALUE_MASK, &checked.stencilValueMask);
+    glGetIntegerv(GL_STENCIL_WRITEMASK, &checked.stencilWriteMask);
+    glGetIntegerv(GL_STENCIL_FAIL, &checked.stencilFail);
+    glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, &checked.stencilPassDepthFail);
+    glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, &checked.stencilPassDepthPass);
+    glGetFloatv(GL_BLEND_COLOR, checked.blendColor.data());
+    checked.primitiveRestart = glIsEnabled(GL_PRIMITIVE_RESTART);
+    checked.sampleAlphaToCoverage = glIsEnabled(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glGetIntegerv(GL_UNIFORM_BUFFER_BINDING, &checked.uniformBuffer);
+    for (int index = 0; index < kCheckedUniformBuffers; ++index) {
+        glGetIntegeri_v(GL_UNIFORM_BUFFER_BINDING, static_cast<GLuint>(index),
+                        &checked.uniformBuffers[static_cast<std::size_t>(index)]);
+    }
+    for (int index = 0; index < kCheckedAttributes; ++index) {
+        glGetVertexAttribfv(static_cast<GLuint>(index), GL_CURRENT_VERTEX_ATTRIB,
+                            checked.attributes[static_cast<std::size_t>(index)].data());
+    }
+    return result;
 }
 
 void enableIf(GLenum capability, GLboolean enabled)
@@ -107,8 +179,9 @@ void enableIf(GLenum capability, GLboolean enabled)
     }
 }
 
-void restoreState(const GlState& state)
+void restoreState(const GlState& saved)
 {
+    const RestoredState& state = saved.restored;
     glUseProgram(static_cast<GLuint>(state.program));
     glBindVertexArray(static_cast<GLuint>(state.vertexArray));
     glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(state.arrayBuffer));
@@ -141,6 +214,10 @@ void restoreState(const GlState& state)
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, static_cast<GLuint>(state.unpackBuffer));
     glPixelStorei(GL_PACK_ALIGNMENT, state.packAlignment);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(state.packBuffer));
+    glClearColor(state.clearColor[0], state.clearColor[1], state.clearColor[2],
+                 state.clearColor[3]);
+    // The checked group is not written: the backend does not change it, and
+    // binding an element buffer here would change the bound vertex array.
 }
 
 // Unpack state for texture uploads (DSA calls do not touch bindings, but
@@ -687,7 +764,18 @@ void captureBackdrop(const RDrawData& data)
     applyUiState(data);
 }
 
-void callViewport(const RDrawData& data, const RDrawCommand& command, const GlState& host)
+// The checked state the application left after its viewport callback: its
+// own changes, which the backend keeps (it never writes that state). The
+// element buffer belongs to the vertex array, which the backend restores.
+void keepApplicationState(const GlState& after, GlState& expected)
+{
+    const GLint elementArrayBuffer = expected.checked.elementArrayBuffer;
+    expected.checked = after.checked;
+    expected.checked.elementArrayBuffer = elementArrayBuffer;
+}
+
+void callViewport(const RDrawData& data, const RDrawCommand& command, const GlState& host,
+                  GlState& expected)
 {
     if (command.callback == nullptr || command.rect[2] <= 0 || command.rect[3] <= 0) {
         return;
@@ -721,6 +809,7 @@ void callViewport(const RDrawData& data, const RDrawCommand& command, const GlSt
               info.clip_height);
     ++backend().stats.viewportCallbacks;
     command.callback(&info, command.user_data);
+    keepApplicationState(captureState(), expected);
     applyUiState(data);
 }
 
@@ -759,6 +848,7 @@ void renderFrame(const RDrawData* data, RCapture* capture)
         const auto started = std::chrono::steady_clock::now();
         Backend& b = backend();
         const GlState host = captureState();
+        GlState expected = host;
         applyUiState(*data);
         glClearColor(data->clear_color[0], data->clear_color[1], data->clear_color[2],
                      data->clear_color[3]);
@@ -769,7 +859,7 @@ void renderFrame(const RDrawData* data, RCapture* capture)
         for (Ruint i = 0; i < data->command_count; ++i) {
             const RDrawCommand& command = data->commands[i];
             if (command.type == R_DRAW_CALLBACK) {
-                callViewport(*data, command, host);
+                callViewport(*data, command, host, expected);
                 continue;
             }
             if (command.type == R_DRAW_BACKDROP) {
@@ -800,7 +890,7 @@ void renderFrame(const RDrawData* data, RCapture* capture)
         }
         countGlErrors("RenderFrame");
         restoreState(host);
-        if (!(captureState() == host)) {
+        if (!(captureState() == expected)) {
             ++b.stats.stateMismatches;
         }
         ++b.stats.frames;
@@ -858,6 +948,14 @@ const RBackendVTable& openGlBackend()
 const BackendStats& backendStats()
 {
     return backend().stats;
+}
+
+bool sameGlStateAround(const std::function<void()>& work, GlStateGroups groups)
+{
+    const GlState before = captureState();
+    work();
+    const GlState after = captureState();
+    return groups == GlStateGroups::All ? after == before : after.restored == before.restored;
 }
 
 } // namespace raven_eval

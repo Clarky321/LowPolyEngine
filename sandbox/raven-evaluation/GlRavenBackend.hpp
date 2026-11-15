@@ -20,6 +20,7 @@
 #include <raven/raven_backend.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 namespace raven_eval {
@@ -57,5 +58,19 @@ void setPresentedWindow(Rid window);
 [[nodiscard]] const RBackendVTable& openGlBackend();
 
 [[nodiscard]] const BackendStats& backendStats();
+
+// The parts of the OpenGL state RenderFrame compares: what the backend
+// restores (program, bindings, framebuffers, viewport, scissor, blend, depth,
+// cull, stencil test, masks, pixel storage, clear colour), and what it only
+// reads (element buffer, sRGB, depth function, cull mode, front face,
+// polygon mode, stencil functions and operations, blend colour, primitive
+// restart, alpha to coverage, uniform buffer bindings, current attributes).
+enum class GlStateGroups { Restored, All };
+
+// Runs `work` and tells whether the given part of the state is the same
+// afterwards. For checks of other code on the same context: Raven's whole
+// frame (Restored: the viewport callback may legitimately change the rest,
+// which is the engine's own state), Dear ImGui's renderer (All).
+[[nodiscard]] bool sameGlStateAround(const std::function<void()>& work, GlStateGroups groups);
 
 } // namespace raven_eval
