@@ -5,6 +5,8 @@
 
 #include "RavenSession.hpp"
 
+#include "engine/core/FileSystem.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <Raven.h>
@@ -12,8 +14,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <string>
 #include <string_view>
 
@@ -61,12 +61,6 @@ void onApplyClicked(Rid button, void* userData)
     Rlabel_set_text(state.status, status.c_str());
 }
 
-std::string readFile(const std::filesystem::path& path)
-{
-    std::ifstream file(path, std::ios::binary);
-    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-}
-
 } // namespace
 
 TEST_CASE("Raven is the pinned upstream release", "[ui][raven]")
@@ -82,8 +76,12 @@ TEST_CASE("Raven is the pinned upstream release", "[ui][raven]")
     // The build's pin and the vendored copy's README name the same release and commit.
     CHECK(std::string_view{LPE_RAVEN_VERSION} == kReviewedVersion);
     CHECK(std::string_view{LPE_RAVEN_COMMIT} == kReviewedCommit);
-    const std::string readme =
-        readFile(std::filesystem::path(LPE_RAVEN_SOURCE_DIRECTORY) / "README.md");
+    // (engine::core::readTextFile: GCC 13 at -O3 reports a false null dereference
+    // inside std::istreambuf_iterator, see the CI log of M5.1.)
+    const auto readmeFile =
+        engine::core::readTextFile(std::filesystem::path(LPE_RAVEN_SOURCE_DIRECTORY) / "README.md");
+    REQUIRE(readmeFile);
+    const std::string& readme = readmeFile.value();
     CHECK(readme.find(std::string(kReviewedCommit)) != std::string::npos);
     CHECK(readme.find("Raven " + std::string(kReviewedVersion)) != std::string::npos);
 }
