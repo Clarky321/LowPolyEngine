@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The empty shell of lpe-editor (M5.2, ADR 0027): a toolbar above a DockArea
+  with the viewport, the hierarchy, the inspector and the console. The areas
+  are empty; later steps fill them (M5.3 the viewport, M5.7 hierarchy and
+  console, M5.8 the inspector). The engine embeds this file at build time and
+  gives Raven its text (no live reload, no search places: ADR 0026).
+
+  Sizes are fractions of the window (Slot.DockSize), so the panels follow the
+  window and the display scale; the minimum sizes keep a small window usable
+  at 150 % (1280x760 pixels are 853x507 logical units there).
+-->
+<Window Title="LowPolyEngine Editor" Width="1280" Height="760">
+	<VBox>
+		<!-- The toolbar: a strip for the editor's commands (empty in M5.2). -->
+		<HBox Name="toolbar" Height="34" Spacing="4" Slot.Padding="6,4"/>
+		<Separator/>
+
+		<DockArea Name="dock" Slot.Fill="1">
+			<Viewport Name="viewport" Slot.Title="Viewport" Slot.Closable="false"/>
+
+			<VBox Name="hierarchy" Slot.Title="Hierarchy" Slot.Dock="Left" Slot.DockSize="0.2"
+				Slot.Closable="false" MinWidth="120"/>
+
+			<VBox Name="inspector" Slot.Title="Inspector" Slot.Dock="Right" Slot.DockSize="0.22"
+				Slot.Closable="false" MinWidth="140"/>
+
+			<VBox Name="console" Slot.Title="Console" Slot.Dock="Bottom" Slot.DockTo="viewport"
+				Slot.DockSize="0.26" Slot.Closable="false" MinHeight="60"/>
+		</DockArea>
+	</VBox>
+</Window>

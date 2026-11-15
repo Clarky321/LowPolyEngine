@@ -10,6 +10,7 @@ set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
 # and island-preview's world on the GPU with the debug UI (M3.12).
 add_executable(lpe_gpu_tests
     application_gpu_test.cpp
+    editor_gpu_test.cpp
     renderer_gpu_test.cpp
     texture_gpu_test.cpp
     world_scene_gpu_test.cpp
@@ -19,6 +20,10 @@ target_include_directories(lpe_gpu_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/
 # glad: the texture tests inspect OpenGL objects directly (handles, row order,
 # sampling state). The renderer loads the function pointers.
 target_link_libraries(lpe_gpu_tests PRIVATE engine glad Catch2::Catch2WithMain)
+# The editor shell on Raven (M5.2): the editor's code, Raven's API, and the
+# engine's OpenGL state comparison (engine/src/render/opengl/GlRavenBackend.hpp).
+target_link_libraries(lpe_gpu_tests PRIVATE editor raven)
+target_include_directories(lpe_gpu_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 lpe_set_project_warnings(lpe_gpu_tests)
 catch_discover_tests(lpe_gpu_tests
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
@@ -185,3 +190,18 @@ lpe_add_gpu_test(island_preview_missing_model
     island-preview --test-scene --frames 5 --model "${fixtures}/broken-model/does-not-exist.obj")
 set_tests_properties(island_preview_missing_model PROPERTIES
     PASS_REGULAR_EXPRESSION "cannot open file '[^']*does-not-exist\\.obj'")
+
+# lpe-editor (M5.2, ADR 0027): the editor shell on Raven runs its frames and
+# exits with 0 (no OpenGL error, no OpenGL state left changed, no Raven error,
+# no Raven memory after shutdown; the exit code says which failed), without an
+# error or a warning in the log.
+lpe_add_gpu_test(lpe_editor_smoke lpe-editor --frames 60)
+set_tests_properties(lpe_editor_smoke PROPERTIES
+    FAIL_REGULAR_EXPRESSION "\\[error\\]|\\[warning\\]")
+
+# --screenshot saves the frame made by the editor itself, at the --size given.
+lpe_add_gpu_test(lpe_editor_screenshot
+    lpe-editor --frames 10 --size 1024x640 --screenshot "${gpu_output}/lpe-editor.png")
+set_tests_properties(lpe_editor_screenshot PROPERTIES
+    PASS_REGULAR_EXPRESSION "saved screenshot '[^']*lpe-editor\\.png' \\(1024x640\\)"
+    FAIL_REGULAR_EXPRESSION "\\[error\\]|\\[warning\\]")

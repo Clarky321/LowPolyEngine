@@ -7,6 +7,7 @@
 #include "engine/platform/Input.hpp"
 #include "engine/platform/Window.hpp"
 #include "engine/render/Renderer.hpp"
+#include "engine/ui/Ui.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -28,6 +29,13 @@ struct ApplicationDesc {
     // returns it, a UI frame starts before every update() and the UI is drawn
     // after every render().
     bool debugUi = false;
+    // Run Raven, the editor's UI (ADR 0019, ADR 0027), with this main window:
+    // AppContext::ui() then returns it. Raven takes the window's keyboard,
+    // mouse and close events (InputState sees none of them), draws its frame
+    // after every render(), and the loop ends when Raven closes the window.
+    // Raven's frame covers the whole window; 3D content goes into a Raven
+    // viewport. Cannot be combined with debugUi.
+    std::optional<ui::UiDesc> ui{};
 };
 
 // Engine services an Application uses while it runs. Valid only inside the
@@ -45,6 +53,8 @@ public:
     [[nodiscard]] virtual const core::FrameStatsSnapshot& frameStats() const noexcept = 0;
     // The debug UI if ApplicationDesc::debugUi was set, otherwise null.
     [[nodiscard]] virtual debug::DebugUi* debugUi() noexcept = 0;
+    // The Raven UI if ApplicationDesc::ui was set, otherwise null.
+    [[nodiscard]] virtual ui::Ui* ui() noexcept = 0;
 
     // Ends the loop after the current frame's update; no further frame is rendered.
     virtual void requestQuit() noexcept = 0;
@@ -74,8 +84,8 @@ public:
     virtual void update(AppContext& context, const core::FrameTime& time) = 0;
 
     // Once per frame between Renderer::beginFrame and Renderer::endFrame,
-    // before the debug UI is drawn over it. Skipped while the window is
-    // minimized.
+    // before the debug UI or the Raven UI is drawn over it. Skipped while the
+    // window is minimized.
     virtual void render(AppContext& context) = 0;
 
     // Once after the last frame if start() succeeded, while the renderer still
@@ -90,8 +100,11 @@ protected:
 
 struct RunSummary {
     std::uint64_t renderedFrames = 0;
+    // The renderer's and the Raven UI's OpenGL errors.
     std::uint32_t openGlErrors = 0;
     std::uint32_t failedScreenshots = 0;
+    // The Raven UI's run, counted after Raven shut down (enabled = false without one).
+    ui::UiRunStats ui;
 };
 
 // Creates the platform, window, OpenGL context and renderer, runs the frame

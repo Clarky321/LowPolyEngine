@@ -30,6 +30,9 @@ Initial high-value test groups:
   - auto-loading off, so a declaration in the base path is not taken;
   - the HTTP(S) download compiled out: no `winhttp.dll` on Windows, no `curl` process on Linux.
 
+  M5.2: the editor shell's layout laid out at 100 %, 150 % and 200 % (also a small window at 150 %), and changed from 100 % to 150 % and back while open; every area has a size, lies inside the window, and the panels do not overlap (`tests/unit/ui/shell_layout_test.cpp`).
+- Editor (M5.2): lpe-editor's options — defaults, `--frames`, `--screenshot`, `--size`, and every unknown argument, missing value, invalid count and invalid size with its message (`tests/unit/editor/editor_options_test.cpp`).
+
 ### Integration tests — headless where possible
 
 - Load an engine/project configuration.
@@ -38,7 +41,16 @@ Initial high-value test groups:
 - Scene data model (implemented, M4.3–M4.7, `tests/integration/`): a project folder moved with its manifest (`asset_project_test.cpp`); scenes saved, destroyed and loaded with the project's registry, failed saves and broken files (`scene_document_test.cpp`); scripts of a saved scene run and saved again (`script_scene_test.cpp`); a prefab registered and instantiated into a loaded scene (`prefab_project_test.cpp`); and the M4 exit criterion end to end (`scene_data_model_test.cpp`): a scene with every component type and asset references through the registry, a prefab made from three of its entities, saved, destroyed and loaded with every ID, value and reference intact, its Lua scripts run with a failing one contained, the prefab instantiated twice, saved and loaded again, with a golden fingerprint of the final document that CI checks on Linux. These tests draw every ID from seeded generators.
 - Import a small fixture asset and verify metadata/geometry.
 - Generate a world from a fixed seed and verify a stable logical summary/hash.
-- Platform layer (implemented, `tests/integration/`): SDL init/shutdown, window creation and error paths, event polling, keyboard/mouse/focus events pushed into SDL's queue and translated into `InputState`, application startup failure without a GL-capable driver — all with `SDL_VIDEO_DRIVER=dummy` set by CTest, no display or GPU. Label `integration`; part of the default test presets and CI.
+- Platform layer (implemented, `tests/integration/`): SDL init/shutdown, window creation and error paths, event polling, keyboard/mouse/focus events pushed into SDL's queue and translated into `InputState`, application startup failure without a GL-capable driver, `run()` refusing the Raven UI together with the debug UI — all with `SDL_VIDEO_DRIVER=dummy` set by CTest, no display or GPU. Label `integration`; part of the default test presets and CI.
+- Raven UI (implemented, M5.2, `tests/integration/raven_ui_test.cpp`): the engine's Raven UI (ADR 0027) on a window of SDL's dummy driver with Raven's null backend, SDL events pushed into SDL's queue and read by `Platform::pollEvents`:
+  - keys mapped by meaning and by position (AZERTY, a Cyrillic layout), modifiers, buttons; UTF-8 text to code points with U+FFFD for invalid bytes;
+  - with the UI, clicks, text and keys change Raven's widgets and never reach `InputState`; without it, the same events do;
+  - focus loss releases held keys and buttons once each, modifiers last, also when SDL released some keys itself; nothing stays held in Raven, the host or `InputState`;
+  - a close request followed by a quit reaches Raven once: accepted, the window closes, its handles are not used again and later events go to `InputState`; refused, the window stays and the quit after it is not a second request; a quit on its own is a close request;
+  - the window's pixel size and display scale reach Raven, also after a resize and a scale event;
+  - the IME area follows Raven's caret in window points, SDL text input is on only while a text field has the keyboard;
+  - the lifetime: live reload and auto-loading off before the first document, one UI at a time, a layout Raven cannot build (named in the error) or whose root is not a window leaves nothing running, start and stop repeated, no Raven allocation after each shutdown.
+- lpe-editor's command line (M5.2, `tests/CMakeLists.txt`): an unknown argument, a bad size, a bad frame count and a missing value end with the usage line before any window exists.
 
 ### Rendering tests — separate optional tier
 
@@ -47,7 +59,15 @@ Implemented in `tests/rendering/` with CTest label `gpu`. The default test prese
 - `lpe_gpu_tests` (Catch2): the application loop (callback order, quit, startup errors, screenshot files) and the renderer checked by reading back pixels with a small tolerance — clear color, vertex colors, back-face culling, depth order, model/view/projection order, alpha blending, mesh updates, stale handles, invalid mesh data, overlay pixel orientation, optional normals and UVs (test-only shaders in `tests/rendering/fixtures/` show them as color; meshes without them read the defaults; updates add and remove them), textures (`texture_gpu_test.cpp` inspects the OpenGL objects: handles, release on destruction, row order, sampling state and mip levels), materials (base color tint, default material, alpha, invalid handles), texture sampling (exact texels with nearest filtering, a linear ramp within tolerance, repeat versus clamp, texture × vertex color × base color, texture alpha, textured materials on meshes without UVs, destroyed textures), lighting (ambient plus Lambert diffuse, per-channel light colors, unlit materials, the per-frame light reset, normals under rotation and non-uniform scale, lit materials on meshes without normals, invalid lights).
 - `island-preview` smoke runs: 30 frames of the generated archipelago (the default scene), of `--seed 42` and of `--test-scene`, each without OpenGL errors and without any logged error (every test-scene asset loads); the archipelago log line names the seed, 12 of 12 islands, the triangles, the lakes, streams and waterfalls, the 20 cloud clusters and the generation time; `--island 0` shows one island close up with its translucent water, and an island the world does not have is named; `--settings assets/worlds/default.json` gives the default world without warnings, `--save-settings` writes a file, a settings file with a wrong type or an unknown field is reported with the field path, a missing one is named; `--panel` runs with the WorldGen panel open without errors; options of one scene given to the other print the usage; a broken model file (`fixtures/broken-model/`) is logged with its line and the scene still runs, a missing one is named; `--screenshot` writes a PNG; broken-shader fixtures must produce compile, link, missing-file, missing-uniform, missing-base-color, missing-base-color-texture, missing-lighting and wrong-attribute-location messages that name the shader file or variable.
 
-Screenshots for documentation use the same capture path (`island-preview --screenshot FILE.png`, ADR 0006) and are stored per milestone in `docs/screenshots/`, with the command and commit recorded next to them.
+- Editor and Raven UI (M5.2, `editor_gpu_test.cpp`): the editor shell drawn by Raven through the engine's OpenGL backend, checked by its pixels (no pixel of the renderer's clear colour left, the viewport black, the four panels in the theme's panel colour, a titled tab above each docked area, every area inside the frame), with 0 OpenGL errors, 0 state mismatches, 0 Raven errors and 0 Raven allocations after shutdown; three runs in a row; an application without the UI never starts Raven; the OpenGL state comparison itself (it sees a changed clear colour, and state outside the restored group only in the full comparison); Dear ImGui's renderer leaving the full OpenGL state unchanged.
+- `lpe-editor` runs: 60 frames without an error or a warning and with exit code 0 (the exit code also covers OpenGL errors, state mismatches, Raven errors and Raven memory after shutdown); `--size 1024x640 --screenshot FILE` writes a 1024x640 PNG.
+
+**Where the GPU tier runs, kept apart in every report:**
+- **Windows, hardware OpenGL:** locally on the developer machine (`scripts\windows	est.bat <config> gpu`; currently an NVIDIA GeForce RTX 4060). The Windows CI runners have no GPU and do not run this tier.
+- **Linux, software OpenGL (from M5.2):** in CI, GitHub Actions `ubuntu-24.04`, Debug and Release, under Xvfb with Mesa's llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`; the job checks that `glxinfo` names llvmpipe and says so in a notice). It also runs `lpe-editor` at 100 % and at 150 % (`Xft.dpi: 144`, which SDL reads as the display scale) and keeps the logs and screenshots as an artifact. This is software rendering on the CPU: it proves the code paths and the OpenGL 4.5 Core API use, not a hardware driver, and never stands in for a hardware test.
+- **Linux, hardware OpenGL:** not available in M5 (plan decision 2); recorded as not verified.
+
+Screenshots for documentation use the same capture path (`island-preview --screenshot FILE.png`, `lpe-editor --screenshot FILE.png`, ADR 0006) and are stored per milestone in `docs/screenshots/`, with the command and commit recorded next to them.
 
 - Create a graphics context in a known runner/environment.
 - Compile/link all required shaders.
@@ -106,7 +126,7 @@ Implemented in `.github/workflows/ci.yml` (M0.3). Runner labels are explicit rat
 | Runner | Compiler | Purpose |
 |---|---|---|
 | `windows-2025-vs2026` | MSVC 19.5x (VS 2026) | Main developer platform; Debug + Release, headless tests, format check. |
-| `ubuntu-24.04` | GCC 13 | Portability and Linux build/test path; Debug + Release. |
+| `ubuntu-24.04` | GCC 13 | Portability and Linux build/test path; Debug + Release; from M5.2 also the GPU tier and lpe-editor on software OpenGL (Xvfb + Mesa llvmpipe), never counted as a hardware test. |
 | Optional Linux sanitizer job | Clang/GCC | ASan/UBSan and later TSAN where supported. |
 | Optional self-hosted GPU runner | Known GPU/driver | OpenGL shader/context/render smoke tests. |
 
@@ -163,5 +183,5 @@ Every sub-milestone task (`docs/DEVELOPMENT_WORKFLOW.md`) runs these checks befo
 Notes:
 
 - The presets read `LPE_WARNINGS_AS_ERRORS` from the environment at configure time, and `build.bat` configures on every run, so setting it in the same shell is enough. CI sets it for all jobs.
-- CI runs neither the GPU tier nor screenshots (no GPU runner). Their results come only from the local run and must be in the report, including the GPU and driver used.
+- CI has no GPU. From M5.2 the Linux jobs run the GPU tier on software OpenGL (Xvfb + Mesa llvmpipe); the hardware results (GPU tier, screenshots) come only from the local run and must be in the report, including the GPU and driver used, apart from the software-OpenGL results.
 - A check that does not apply is reported as "not required" with the reason; a check that applies but could not run is reported as "not run", never as passed.

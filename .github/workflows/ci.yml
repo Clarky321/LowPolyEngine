@@ -1,6 +1,8 @@
 # Headless build + unit tests + format check (docs/TESTING_AND_CI.md).
 # Uses the same commands as local development: scripts/windows/*.bat on Windows,
-# the README command sequence on Linux. GPU/rendering tests do not run here.
+# the README command sequence on Linux. From M5.2 the Linux jobs also run the
+# GPU tier on software OpenGL (Xvfb + Mesa llvmpipe); the Windows runners have
+# no GPU and do not run it.
 name: CI
 
 on:
@@ -66,7 +68,8 @@ jobs:
   linux-gcc:
     name: Linux GCC (${{ matrix.config }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # The GPU tier on software OpenGL adds to the build and the headless tests.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -115,3 +118,55 @@ jobs:
 
       - name: Test
         run: ctest --preset "$PRESET"
+
+      # The GPU tier on Linux (M5.2; decision 3 of docs/milestones/m5-minimal-editor.md)
+      # runs on SOFTWARE OpenGL: Xvfb (an X server without a display) and Mesa's
+      # llvmpipe, which implements OpenGL 4.5 Core on the CPU. The runner has no
+      # GPU, so these runs are never a test on graphics hardware
+      # (docs/TESTING_AND_CI.md, "Linux software OpenGL").
+      - name: Install the X server and Mesa (software OpenGL)
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11-utils x11-xserver-utils mesa-utils libgl1-mesa-dri
+
+      - name: Start Xvfb with Mesa llvmpipe (software OpenGL)
+        shell: bash
+        run: |
+          mkdir -p gpu-logs
+          # -noreset: the root window's resources (Xft.dpi below) stay set
+          # between clients.
+          Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -noreset &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
+          for i in $(seq 50); do xdpyinfo -display :99 >/dev/null 2>&1 && break; sleep 0.1; done
+          DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 glxinfo -B | tee gpu-logs/glxinfo.txt
+          grep -q "llvmpipe" gpu-logs/glxinfo.txt
+          echo "::notice title=Linux GPU tier (${{ matrix.config }})::software OpenGL: Mesa llvmpipe under Xvfb, not graphics hardware"
+
+      - name: GPU tier (software OpenGL, Xvfb + Mesa llvmpipe)
+        shell: bash
+        run: ctest --preset "$PRESET-gpu" 2>&1 | tee gpu-logs/gpu-tier.log
+
+      # lpe-editor's shell at 100 % and at 150 %, the latter set the way Linux
+      # desktops tell programs their scale on X11 (Xft.dpi); SDL reads it.
+      - name: Editor shell at 100 % and 150 % (software OpenGL)
+        shell: bash
+        run: |
+          exe="build/$PRESET/bin/lpe-editor"
+          "$exe" --frames 60 --screenshot gpu-logs/editor-100.png 2>&1 | tee gpu-logs/editor-100.log
+          grep -q "llvmpipe" gpu-logs/editor-100.log
+          grep -q "scale 1.00" gpu-logs/editor-100.log
+          echo "Xft.dpi: 144" > gpu-logs/xresources
+          xrdb -nocpp -merge gpu-logs/xresources
+          "$exe" --frames 60 --screenshot gpu-logs/editor-150.png 2>&1 | tee gpu-logs/editor-150.log
+          grep -q "scale 1.50" gpu-logs/editor-150.log
+          xrdb -nocpp -remove
+
+      - name: Keep the GPU tier's logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-software-opengl-${{ matrix.config }}
+          path: gpu-logs/
+          if-no-files-found: warn

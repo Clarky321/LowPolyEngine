@@ -27,6 +27,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
+include(EmbedFiles)
 
 # Before any add_subdirectory(): CMake then (re)writes the CTest files of every
 # directory, so tests removed from a folder do not linger in existing build trees.
@@ -42,6 +43,8 @@ add_subdirectory(third_party/stb_image_write)
 include(RavenDependency)
 add_subdirectory(engine)
 add_subdirectory(sandbox/island-preview)
+# The editor (M5): lpe-editor on Raven (ADR 0019, ADR 0027).
+add_subdirectory(editor)
 
 if(LPE_BUILD_TESTS)
     add_subdirectory(tests)

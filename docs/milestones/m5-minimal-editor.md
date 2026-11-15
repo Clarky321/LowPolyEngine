@@ -102,7 +102,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | ID | Title | Status |
 |---|---|---|
 | M5.1 | Raven as a pinned dependency | done |
-| M5.2 | Raven in the engine loop and the editor shell | planned |
+| M5.2 | Raven in the engine loop and the editor shell | in progress |
 | M5.3 | The generated world in the viewport | planned |
 | M5.4 | Project folder and project document | planned |
 | M5.5 | Editor document, selection and undoable commands | planned |
@@ -125,7 +125,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - Every panel gets headless Raven tests (null backend, input through the host platform).
   - Every step that draws gets a GPU-tier check.
 - **Visible steps get a screenshot** in `docs/screenshots/m5/` with its command in the README there (`docs/DEVELOPMENT_WORKFLOW.md` §6), taken by the editor itself (`--screenshot`). No UI is added just for screenshots.
-- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. The next free number is 0026.
+- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging); the next free number is 0027.
 - **Out of scope stays out:** gizmos, play mode, the asset browser and import, materials and prefab authoring (M6) stay out, even where Raven makes them easy.
 - **The checks of `docs/TESTING_AND_CI.md` §8 for the kind of change.** The GPU tier runs from M5.2 on, since every later step touches the window, the loop or drawing.
 - **Two kinds of OpenGL runs, never mixed up** (decisions 2 and 3).
@@ -241,6 +241,38 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Start and stop repeated: the engine's resources and Raven's memory stay level.
 
 **Visual check:** `docs/screenshots/m5/001-editor-shell.png`.
+
+**Decisions made in M5.2** (ADR 0027):
+- **The public UI API.**
+  - `ApplicationDesc::ui` (a `ui::UiDesc` with the main window's XML layout as text) turns Raven on.
+  - `AppContext::ui()` gives `mainWindow()` as `ui::RavenId` (a `std::uint32_t` equal to Raven's `Rid`) and `scale()`.
+  - `RunSummary::ui` reports the UI frames, OpenGL errors, state mismatches, Raven's errors and Raven's allocations after `Rshutdown`.
+  - `engine/include/engine/ui/Ui.hpp` names no Raven, SDL or OpenGL type. The editor includes Raven's headers and calls its C API itself.
+- **Ownership.**
+  - One engine object (`engine/src/ui/RavenUi`) owns Raven's state. It is created after the renderer and destroyed before it.
+  - It registers the host platform and the OpenGL backend, calls `Rinit_ex` (custom backend, render thread disabled), turns live reload and auto-loading off at once, and builds the main window from the layout with continuous redraw.
+  - `Rshutdown` comes after `Application::stop`. A failed step undoes the earlier ones, and a second UI is refused.
+  - The engine owns the main Raven window; the loop ends when Raven closes it.
+- **Event order** in `Platform::pollEvents`:
+  1. Dear ImGui sees every event.
+  2. The Raven host takes keyboard, text, mouse and wheel events and close requests (one per close and quit). It sees focus, size and scale events and passes them on.
+  3. `InputState` and the quit request get the rest. Focus loss always resets `InputState`.
+
+  With Raven on, `InputState` sees no keyboard or mouse input: in the editor, input for the 3D view comes through the viewport widget (M5.3).
+- **Frame order.** `beginFrame`, `Application::render`, Raven's frame (inside an OpenGL state comparison), `endFrame`, screenshot, swap. Raven's frame covers the window, and its window is redrawn every frame.
+- **Without Raven.** `debugUi` and `ui` together are refused (one UI stack per application). island-preview and the debug UI are unchanged and never start Raven.
+- **The backend and the host** come from the prototype with the validation's four fixes.
+  - The shaders are embedded from `third_party/raven` at build time (`cmake/EmbedFiles.cmake`).
+  - The host passes Raven's caret to `SDL_SetTextInputArea`, and turns SDL text input on only while a Raven text field has the keyboard.
+- **The editor.**
+  - `editor/` has the library `editor` and the program `lpe-editor`, with options `--frames`, `--screenshot` and `--size`.
+  - The empty shell is `editor/layouts/shell.xml` (toolbar; viewport, hierarchy, inspector and console in a DockArea with fractional sizes), embedded at build time.
+  - Exit codes: 2 for usage, 3 for OpenGL errors, 4 for a failed screenshot, 5 for UI problems.
+- **Linux GPU tier.** It is part of the existing Linux CI jobs: Xvfb + Mesa llvmpipe with `LIBGL_ALWAYS_SOFTWARE=1`, checked to be llvmpipe and reported as software OpenGL. It also runs `lpe-editor` at 100 % and at 150 % (`Xft.dpi: 144`) and keeps the logs and screenshots.
+- **Not verified in M5.2.**
+  - Linux on real graphics hardware (decision 2).
+  - A real 150 % display or a live scale change on Windows. The validation checked them before M5; here they are covered by the headless layout tests, the scale events and the Linux run at `Xft.dpi` 144.
+  - IME composition with a real IME.
 
 ### M5.3 — The generated world in the viewport
 

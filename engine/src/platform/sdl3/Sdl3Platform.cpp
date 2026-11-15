@@ -1,5 +1,6 @@
 #include "Sdl3ImGui.hpp"
 #include "Sdl3Input.hpp"
+#include "Sdl3RavenHost.hpp"
 
 #include "engine/platform/Platform.hpp"
 
@@ -68,9 +69,18 @@ PlatformEvents Platform::pollEvents(InputState& input)
     PlatformEvents events;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        // The debug UI sees every event; the application asks it whether it
-        // uses the mouse or keyboard (DebugUi::wantsMouse, wantsKeyboard).
+        // The order of ADR 0027:
+        // 1. The debug UI sees every event; the application asks it whether it
+        //    uses the mouse or keyboard (DebugUi::wantsMouse, wantsKeyboard).
         forwardEventToDebugUi(event);
+        // 2. With a Raven UI (ApplicationDesc::ui), the window's input is the
+        //    UI's: it takes every keyboard, text, mouse and wheel event, and
+        //    the close requests (Raven decides; the loop ends when its window
+        //    is gone). Focus, size and scale events are seen and passed on.
+        if (forwardEventToUi(event)) {
+            continue;
+        }
+        // 3. The application's input state and the quit request.
         switch (event.type) {
         case SDL_EVENT_QUIT:
         // With a single window, closing it ends the application.

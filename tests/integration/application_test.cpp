@@ -58,3 +58,16 @@ TEST_CASE("run() rejects an invalid window description", "[app][integration]")
     CHECK(result.error().message.find("width") != std::string::npos);
     CHECK(app.starts == 0);
 }
+
+TEST_CASE("run() refuses the Raven UI together with the debug UI", "[app][ui][integration]")
+{
+    // One UI stack per application (ADR 0027): refused before any window exists.
+    CountingApp app;
+    engine::app::ApplicationDesc desc;
+    desc.debugUi = true;
+    desc.ui = engine::ui::UiDesc{.layoutXml = "<Window/>", .layoutName = "shell.xml"};
+    const auto result = engine::app::run(app, desc);
+    REQUIRE_FALSE(result.hasValue());
+    CHECK(result.error().message.find("cannot be combined") != std::string::npos);
+    CHECK(app.starts == 0);
+}

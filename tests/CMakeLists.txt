@@ -24,6 +24,7 @@ add_executable(lpe_unit_tests
     unit/core/utf8_test.cpp
     unit/core/uuid_test.cpp
     unit/debug/text_mesh_test.cpp
+    unit/editor/editor_options_test.cpp
     unit/geometry/face_normal_test.cpp
     unit/geometry/mesh_data_test.cpp
     unit/geometry/obj_import_test.cpp
@@ -51,6 +52,7 @@ add_executable(lpe_unit_tests
     ${PROJECT_SOURCE_DIR}/sandbox/island-preview/WorldGenPanel.cpp
     unit/ui/raven_configuration_test.cpp
     unit/ui/raven_null_backend_test.cpp
+    unit/ui/shell_layout_test.cpp
     unit/worldgen/archipelago_test.cpp
     unit/worldgen/clouds_test.cpp
     unit/worldgen/island_layout_test.cpp
@@ -84,6 +86,8 @@ target_compile_definitions(lpe_unit_tests PRIVATE
 # host platform, no window system, GPU or SDL. The tests check the pin of
 # cmake/RavenDependency.cmake against Raven and against the vendored README.
 target_link_libraries(lpe_unit_tests PRIVATE raven)
+# The editor's code (M5.2): its options and the shell's layout, headless.
+target_link_libraries(lpe_unit_tests PRIVATE editor)
 target_compile_definitions(lpe_unit_tests PRIVATE
     LPE_RAVEN_VERSION="${LPE_RAVEN_VERSION}"
     LPE_RAVEN_COMMIT="${LPE_RAVEN_COMMIT}"
@@ -98,6 +102,7 @@ add_executable(lpe_integration_tests
     integration/input_events_test.cpp
     integration/platform_test.cpp
     integration/prefab_project_test.cpp
+    integration/raven_ui_test.cpp
     integration/scene_data_model_test.cpp
     integration/scene_document_test.cpp
     integration/script_scene_test.cpp
@@ -105,6 +110,10 @@ add_executable(lpe_integration_tests
 # SDL directly: input tests push synthetic events into SDL's queue.
 find_package(SDL3 REQUIRED CONFIG)
 target_link_libraries(lpe_integration_tests PRIVATE engine SDL3::SDL3 Catch2::Catch2WithMain)
+# The Raven UI (M5.2, ADR 0027) is tested through its internals: the SDL3 host
+# bridge and the UI's owner (engine/src/), with Raven's null backend.
+target_link_libraries(lpe_integration_tests PRIVATE raven)
+target_include_directories(lpe_integration_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 # The asset project (M4.3) and scene document (M4.4) tests copy committed
 # assets into temporary projects.
 target_compile_definitions(lpe_integration_tests PRIVATE
@@ -116,5 +125,18 @@ catch_discover_tests(lpe_integration_tests
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy"
         LABELS "integration"
 )
+
+# lpe-editor's command line (M5.2): every mistake ends with the usage line
+# before any window exists, so these run in the headless tier.
+function(lpe_add_editor_usage_test name)
+    add_test(NAME ${name} COMMAND lpe-editor ${ARGN})
+    set_tests_properties(${name} PROPERTIES
+        LABELS "integration"
+        PASS_REGULAR_EXPRESSION "usage: lpe-editor")
+endfunction()
+lpe_add_editor_usage_test(lpe_editor_unknown_argument --bogus)
+lpe_add_editor_usage_test(lpe_editor_bad_size --size 0x10)
+lpe_add_editor_usage_test(lpe_editor_bad_frames --frames 0)
+lpe_add_editor_usage_test(lpe_editor_missing_value --size)
 
 add_subdirectory(rendering)

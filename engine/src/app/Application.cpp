@@ -1,11 +1,14 @@
 #include "engine/app/Application.hpp"
 
+#include "../ui/RavenUi.hpp"
+
 #include "engine/core/FileSystem.hpp"
 #include "engine/core/Image.hpp"
 #include "engine/core/Log.hpp"
 #include "engine/platform/Platform.hpp"
 
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
 #include <thread>
@@ -23,8 +26,8 @@ constexpr std::chrono::milliseconds kMinimizedPause{16};
 class LoopContext final : public AppContext {
 public:
     LoopContext(platform::Window& window, render::Renderer& renderer,
-                const platform::InputState& input, debug::DebugUi* debugUi)
-        : window_(window), renderer_(renderer), input_(input), debugUi_(debugUi)
+                const platform::InputState& input, debug::DebugUi* debugUi, ui::Ui* ui)
+        : window_(window), renderer_(renderer), input_(input), debugUi_(debugUi), ui_(ui)
     {
     }
 
@@ -34,6 +37,7 @@ public:
     platform::PixelSize framebufferSize() const noexcept override { return framebufferSize_; }
     const core::FrameStatsSnapshot& frameStats() const noexcept override { return frameStats_; }
     debug::DebugUi* debugUi() noexcept override { return debugUi_; }
+    ui::Ui* ui() noexcept override { return ui_; }
 
     void requestQuit() noexcept override { quitRequested_ = true; }
     void requestScreenshot(std::filesystem::path path) override
@@ -54,6 +58,7 @@ private:
     render::Renderer& renderer_;
     const platform::InputState& input_;
     debug::DebugUi* debugUi_ = nullptr;
+    ui::Ui* ui_ = nullptr;
     platform::PixelSize framebufferSize_;
     core::FrameStatsSnapshot frameStats_;
     std::optional<std::filesystem::path> screenshotPath_;
@@ -86,6 +91,12 @@ core::Error startupError(const char* step, const core::Error& error)
 
 core::Result<RunSummary> run(Application& application, const ApplicationDesc& desc)
 {
+    // One UI stack per application (ADR 0019 decision 6, ADR 0027).
+    if (desc.ui && desc.debugUi) {
+        return core::Error{
+            "application: the Raven UI (ui) and the debug UI (debugUi) cannot be combined"};
+    }
+
     // Declaration order is the required lifetime order: each object is destroyed
     // before the one it depends on (platform > window > context > renderer).
     auto platform = platform::Platform::initialize();
@@ -130,8 +141,20 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
         debugUi.emplace(std::move(ui).value());
     }
 
+    // After the renderer as well: Raven draws with it and ends (Rshutdown,
+    // its OpenGL objects released) before it.
+    std::unique_ptr<ui::RavenUi> ravenUi;
+    if (desc.ui) {
+        auto ui = ui::RavenUi::create(window.value(), *desc.ui);
+        if (!ui) {
+            return ui.error();
+        }
+        ravenUi = std::move(ui).value();
+    }
+
     platform::InputState input;
-    LoopContext loop(window.value(), renderer.value(), input, debugUi ? &*debugUi : nullptr);
+    LoopContext loop(window.value(), renderer.value(), input, debugUi ? &*debugUi : nullptr,
+                     ravenUi.get());
     loop.setFramebufferSize(window.value().pixelSize());
     if (auto error = application.start(loop)) {
         return startupError("application start", *error);
@@ -144,6 +167,11 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
 
     while (!desc.maxFrames || summary.renderedFrames < *desc.maxFrames) {
         if (platform.value().pollEvents(input).quitRequested) {
+            break;
+        }
+        // Raven closes its window inside an accepted close request (during the
+        // events); its handles are invalid from then on.
+        if (ravenUi && !ravenUi->isOpen()) {
             break;
         }
 
@@ -177,6 +205,11 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
 
         renderer.value().beginFrame(size.width, size.height, desc.clearColor);
         application.render(loop);
+        if (ravenUi) {
+            // Raven's frame covers the window (its viewports call back into
+            // the renderer); on the main thread, which owns the context.
+            ravenUi->frame();
+        }
         if (debugUi) {
             debugUi->render();
         }
@@ -194,7 +227,12 @@ core::Result<RunSummary> run(Application& application, const ApplicationDesc& de
     }
 
     application.stop(loop);
-    summary.openGlErrors = renderer.value().errorCount();
+    if (ravenUi) {
+        // While the renderer and the context still exist.
+        summary.ui = ravenUi->shutdown();
+        ravenUi.reset();
+    }
+    summary.openGlErrors = renderer.value().errorCount() + summary.ui.glErrors;
     return summary;
 }
 

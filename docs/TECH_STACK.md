@@ -58,7 +58,7 @@ Official/reference links:
 | EnTT | ECS | Adopted in M4.2 (`entt/4.0.0`, ADR 0021) as the private storage of `engine::scene::Scene`, included only in `engine/src/scene/Scene.cpp`. Persistent `EntityId`s (ADR 0020) stay separate from the transient EnTT entity handles, which never leave the scene implementation. |
 | nlohmann_json | JSON documents | Adopted in M3.11 (`nlohmann_json/3.12.0`, ADR 0004), private: included only through the internal `engine/src/core/JsonSupport.hpp` (M4.4), which the world settings file, the asset manifest (ADR 0022), scene documents (ADR 0023) and prefab documents (ADR 0025) share; no public header names it. |
 | Dear ImGui | Debug UI | Adopted in M3.12 (`imgui/1.92.9b`, ADR 0018) for the engine's debug UI and island-preview's WorldGen panel, with its SDL3 and OpenGL 3 backends. Not in the editor, which uses Raven (ADR 0019); stays the fallback. |
-| Raven | Editor UI | Adopted for the M5 editor (ADR 0019). Added in M5.1 as pruned vendored source (ADR 0026): 0.2.3 at commit `7ab270df`, in `third_party/raven/`, built by its own CMake as the static C library `raven` (`cmake/RavenDependency.cmake`): null and host platforms only, no Vulkan, no web pages, examples, tests or tools, the HTTP(S) image download compiled out, Raven's own warning level. Not from Conan (not in Conan Center); nothing downloaded. |
+| Raven | Editor UI | Adopted for the M5 editor (ADR 0019). Added in M5.1 as pruned vendored source (ADR 0026): 0.2.3 at commit `7ab270df`, in `third_party/raven/`, built by its own CMake as the static C library `raven` (`cmake/RavenDependency.cmake`): null and host platforms only, no Vulkan, no web pages, examples, tests or tools, the HTTP(S) image download compiled out, Raven's own warning level. Not from Conan (not in Conan Center); nothing downloaded. Hosted by the engine from M5.2 (ADR 0027): `ApplicationDesc::ui`, its OpenGL backend in `engine/src/render/opengl/`, its SDL3 host bridge in `engine/src/platform/sdl3/`, one owner in `engine/src/ui/`; used by `lpe-editor`. |
 | Catch2 v3 | Unit/integration testing | Adopt with CTest. Use one main test framework. |
 | Lua 5.5 | Embedded scripts | Adopted in M4.5 (`lua/5.5.0`, ADR 0024): static, compiled as C++ so Lua errors unwind C++ frames, private to `engine/src/scripting/lua/`, sandboxed, with an instruction budget and a memory limit. Upstream 5.5.1 (3 Aug 2026) is not in Conan Center yet. |
 | LuaBridge3 | C++ ↔ Lua bindings | Not taken (M4.5, ADR 0024): not in Conan Center and only a pre-release; the engine API is a handful of functions bound by a small project-owned layer over the Lua C API. |
@@ -112,6 +112,18 @@ Recommended proof-of-concept before adopting Raven:
 - Live reload and auto-loading from search paths are run-time switches. Every Raven session in the project turns both off right after `Rinit`.
 - Headless tests with the null backend and the host platform in `tests/unit/ui/`.
 - An update is a reviewed change of its own.
+
+**In the engine (M5.2, ADR 0027):**
+- An application turns Raven on with `ApplicationDesc::ui` (its main window's XML layout as text). It reaches Raven's C API through `AppContext::ui()->mainWindow()`; the public header names no Raven, SDL or OpenGL type.
+- One engine object owns Raven's state:
+  - `Rinit` with the engine's OpenGL 4.5 backend (`R_BACKEND_CUSTOM`) and the render thread disabled;
+  - live reload and auto-loading off right away;
+  - the main window redrawn every frame;
+  - `Rshutdown` before the renderer goes away.
+- Raven's frame is drawn between `Renderer::beginFrame` and `endFrame` inside an OpenGL state comparison.
+- The SDL3 host bridge takes the window's input before `InputState` and keeps the validation's fixes (focus loss, one close request, no handle after close). It positions the IME at Raven's caret.
+- Dear ImGui and Raven are not combined in one application.
+- The editor (`lpe-editor`) uses Raven only.
 
 Raven repository: <https://github.com/oscar-soirey/Raven>
 

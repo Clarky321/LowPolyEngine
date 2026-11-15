@@ -1,6 +1,7 @@
 // EnTT, nlohmann_json and Lua are private dependencies of the engine (ADR
-// 0021, ADR 0004, ADR 0024): no public header may include them, so their types cannot leak
-// into public signatures. Every header under engine/include is checked.
+// 0021, ADR 0004, ADR 0024), and so are Raven, SDL3 and GLAD (ADR 0027, ADR
+// 0002, ADR 0005): no public header may include them, so their types cannot
+// leak into public signatures. Every header under engine/include is checked.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -41,7 +42,8 @@ bool isPrivateDependency(std::string_view path)
 {
     return path.starts_with("entt/") || path == "entt.hpp" || path.starts_with("nlohmann/") ||
            path == "lua.h" || path == "lauxlib.h" || path == "lualib.h" || path == "luaconf.h" ||
-           path == "lua.hpp";
+           path == "lua.hpp" || path == "Raven.h" || path.starts_with("raven/") ||
+           path.starts_with("SDL3/") || path.starts_with("glad/");
 }
 
 } // namespace
@@ -58,9 +60,15 @@ TEST_CASE("The include check recognizes include lines", "[scene][headers]")
     CHECK(isPrivateDependency("lua.h"));
     CHECK(isPrivateDependency("lauxlib.h"));
     CHECK_FALSE(isPrivateDependency("glm/vec3.hpp"));
+    CHECK(isPrivateDependency("Raven.h"));
+    CHECK(isPrivateDependency("raven/raven_core.h"));
+    CHECK(isPrivateDependency("SDL3/SDL.h"));
+    CHECK(isPrivateDependency("glad/gl.h"));
+    CHECK_FALSE(isPrivateDependency("engine/ui/Ui.hpp"));
 }
 
-TEST_CASE("No public engine header includes EnTT, nlohmann_json or Lua", "[scene][headers]")
+TEST_CASE("No public engine header includes EnTT, nlohmann_json, Lua, Raven, SDL or GLAD",
+          "[scene][headers]")
 {
     const std::filesystem::path root{LPE_ENGINE_INCLUDE_DIRECTORY};
     REQUIRE(std::filesystem::is_directory(root / "engine" / "scene"));

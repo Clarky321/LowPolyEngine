@@ -28,6 +28,16 @@ set_source_files_properties(${worldgen_sources} PROPERTIES
     COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>"
 )
 
+# Raven's reference UI shaders, embedded from the vendored copy for the
+# engine's Raven backend (src/render/opengl/RavenShaderSources.hpp, ADR 0027):
+# the program reads no shader of Raven's at run time.
+set(raven_shaders "${PROJECT_SOURCE_DIR}/third_party/raven/src/render/vulkan/shaders")
+set(raven_shader_sources "${CMAKE_CURRENT_BINARY_DIR}/generated/RavenShaderSources.cpp")
+lpe_embed_files("${raven_shader_sources}" engine::render::opengl::raven_shaders
+    uiVert "${raven_shaders}/ui.vert"
+    uiFrag "${raven_shaders}/ui.frag"
+)
+
 add_library(engine STATIC
     src/app/Application.cpp
     src/assets/AssetManifest.cpp
@@ -56,12 +66,14 @@ add_library(engine STATIC
     src/platform/sdl3/Sdl3ImGui.cpp
     src/platform/sdl3/Sdl3Input.cpp
     src/platform/sdl3/Sdl3Platform.cpp
+    src/platform/sdl3/Sdl3RavenHost.cpp
     src/platform/sdl3/Sdl3Window.cpp
     src/render/Lighting.cpp
     src/render/Material.cpp
     src/render/opengl/GlDiagnostics.cpp
     src/render/opengl/GlImGui.cpp
     src/render/opengl/GlMesh.cpp
+    src/render/opengl/GlRavenBackend.cpp
     src/render/opengl/GlRenderer.cpp
     src/render/opengl/GlShaderProgram.cpp
     src/render/opengl/GlTexture.cpp
@@ -75,6 +87,8 @@ add_library(engine STATIC
     src/scene/SceneDocument.cpp
     src/scripting/lua/LuaVm.cpp
     src/scripting/lua/ScriptRuntime.cpp
+    src/ui/RavenUi.cpp
+    ${raven_shader_sources}
     ${worldgen_sources}
 )
 
@@ -90,8 +104,10 @@ target_compile_features(engine PUBLIC cxx_std_20)
 # include it (src/worldgen/SettingsFile.cpp, src/assets/AssetManifest.cpp,
 # src/scene/ComponentJson.cpp, SceneDocument.cpp and PrefabDocument.cpp), the Dear ImGui backends only in
 # src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp, EnTT only
-# in src/scene/, Lua only in src/scripting/lua/ (ADR 0002, 0004, 0005, 0006,
-# 0008, 0018, 0021, 0022, 0023, 0024).
+# in src/scene/, Lua only in src/scripting/lua/, Raven only in src/ui/ (its
+# owner), src/platform/sdl3/Sdl3RavenHost.cpp (the host bridge) and
+# src/render/opengl/GlRavenBackend.cpp (the backend) (ADR 0002, 0004, 0005,
+# 0006, 0008, 0018, 0021, 0022, 0023, 0024, 0027).
 # Public headers include none of them; consumers only get them as link
 # dependencies.
 target_link_libraries(engine PRIVATE
@@ -101,6 +117,7 @@ target_link_libraries(engine PRIVATE
     imgui_backends
     lua::lua
     nlohmann_json::nlohmann_json
+    raven
     stb_image
     stb_image_write
 )

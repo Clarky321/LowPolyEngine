@@ -20,10 +20,9 @@ lowpoly-engine/
 │   └── linux-gcc
 ├── requirements-dev.txt      # pinned developer tools (Conan, clang-format, Ninja)
 ├── cmake/
-│   ├── CompilerWarnings.cmake
-│   ├── RavenDependency.cmake # Raven's build options and pin; adds third_party/raven/ (M5.1, ADR 0026)
-│   ├── ProjectOptions.cmake
-│   └── Dependencies.cmake
+│   ├── CompilerWarnings.cmake # warning policy of first-party targets (lpe_set_project_warnings)
+│   ├── EmbedFiles.cmake      # files embedded into generated C++ (Raven's shaders, the editor's layouts; M5.2)
+│   └── RavenDependency.cmake # Raven's build options and pin; adds third_party/raven/ (M5.1, ADR 0026)
 ├── engine/
 │   ├── CMakeLists.txt
 │   ├── include/engine/
@@ -37,16 +36,17 @@ lowpoly-engine/
 │   │   ├── worldgen/         # Generator settings and pure generation API; deterministic randomness, noise, world settings, island placement, shapes, meshes, palettes, local water, clouds, whole archipelagos and settings files (M3.1–M3.12, ADR 0003, ADR 0004, ADR 0013–0017); settingsFields lists the settings for editors
 │   │   ├── scripting/        # Script runtime facade; ScriptRuntime (M4.5, ADR 0024), no Lua types
 │   │   ├── camera/           # Camera and camera-controller types
-│   │   └── debug/            # On-screen diagnostics (pixel-font text, M1) and the Dear ImGui debug UI (DebugUi, M3.12, ADR 0018)
+│   │   ├── debug/            # On-screen diagnostics (pixel-font text, M1) and the Dear ImGui debug UI (DebugUi, M3.12, ADR 0018)
+│   │   └── ui/               # Ui.hpp: the Raven UI an application turns on (ApplicationDesc::ui), no Raven/SDL/OpenGL type (M5.2, ADR 0027)
 │   └── src/
 │       ├── app/
 │       ├── core/
-│       ├── platform/sdl3/
+│       ├── platform/sdl3/    # also Sdl3RavenHost: Raven's host platform on the SDL3 window (M5.2, ADR 0027)
 │       ├── geometry/
 │       ├── debug/
 │       ├── render/
-│       │   ├── rhi/
-│       │   └── opengl/
+│       │   ├── rhi/          # planned
+│       │   └── opengl/       # also GlRavenBackend: Raven's OpenGL 4.5 backend (M5.2, ADR 0027)
 │       ├── scene/
 │       ├── assets/
 │       ├── worldgen/
@@ -56,22 +56,18 @@ lowpoly-engine/
 │       │   ├── water/
 │       │   └── clouds/
 │       ├── scripting/lua/
+│       ├── ui/               # RavenUi: the one owner of Raven's state (Rinit/Rshutdown, frame, checks), RavenHost interface (M5.2, ADR 0027)
 │       └── camera/
-├── editor/
-│   ├── CMakeLists.txt
-│   ├── include/editor/
-│   │   ├── application/
-│   │   ├── document/
-│   │   ├── commands/         # Editing commands and undo/redo
-│   │   ├── selection/
-│   │   └── panels/
+├── editor/                   # lpe-editor on Raven (M5; ADR 0019, ADR 0027); "planned" folders come with later steps
+│   ├── CMakeLists.txt        # library `editor` (the editor's code, also linked by tests) and program `lpe-editor`
+│   ├── layouts/              # Raven XML, embedded at build time: shell.xml, the empty shell (M5.2)
+│   ├── include/editor/       # planned: document/, commands/, selection/ (M5.5), panels/ (M5.7–M5.11)
 │   └── src/
-│       ├── application/
-│       ├── ui/raven/          # Raven panels and XML layouts (ADR 0019; M5 plan)
-│       ├── viewport/
-│       ├── panels/
-│       ├── gizmos/
-│       └── project/
+│       ├── main.cpp          # lpe-editor's entry point: --frames, --screenshot, --size (M5.2)
+│       ├── application/      # EditorShell (the shell application), EditorOptions, ShellLayout (M5.2)
+│       ├── viewport/         # planned (M5.3)
+│       ├── panels/           # planned (M5.7–M5.10)
+│       └── project/          # planned (M5.11)
 ├── sandbox/
 │   └── island-preview/       # First end-to-end executable/sample: the archipelago (WorldScene) with the WorldGen panel (WorldGenPanel, WorldGenPanelUi) or the M1/M2 test scene
 ├── assets/
@@ -89,8 +85,9 @@ lowpoly-engine/
 │   │   ├── scene/
 │   │   ├── assets/
 │   │   ├── scripting/
-│   │   └── ui/               # headless Raven: null backend, host platform, injected input (M5.1)
-│   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp)
+│   │   ├── editor/           # lpe-editor's options (M5.2)
+│   │   └── ui/               # headless Raven: null backend, host platform, injected input (M5.1); the shell layout at several scales (M5.2)
+│   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp), the Raven host bridge and UI lifetime on SDL's dummy driver (raven_ui_test.cpp, M5.2)
 │   └── rendering/            # Optional GPU-dependent tier
 ├── scripts/
 │   ├── python/
@@ -103,10 +100,13 @@ lowpoly-engine/
 │       ├── format-check.bat
 │       └── clean.bat
 ├── tools/                    # Offline asset/shader utilities, if needed
-├── third_party/
-│   ├── raven/                # Raven 0.2.3, pruned vendored source with its licences; its README.md lists
-│   │                         # the kept and removed paths and the update procedure (M5.1, ADR 0026)
-│   └── licenses/
+├── third_party/              # vendored or locally built third-party code; each keeps its licence next to it
+│   ├── glad/                 # generated OpenGL loader (ADR 0005)
+│   ├── imgui_backends/       # Dear ImGui's SDL3 and OpenGL 3 backends from the Conan package (ADR 0018)
+│   ├── stb_image/            # stb's PNG decoder implementation (ADR 0008)
+│   ├── stb_image_write/      # stb's PNG encoder implementation (ADR 0006)
+│   └── raven/                # Raven 0.2.3, pruned vendored source with its licences; its README.md lists
+│                             # the kept and removed paths and the update procedure (M5.1, ADR 0026)
 ├── docs/
 │   ├── ENGINE_PLAN.md
 │   ├── TECH_STACK.md

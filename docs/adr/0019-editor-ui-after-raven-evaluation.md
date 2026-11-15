@@ -1,7 +1,7 @@
 # ADR 0019: Editor UI after the Raven evaluation
 
 - **Status:** Accepted (2026-11-15), option 2: Raven is the interface of the M5 editor; Dear ImGui stays the debug UI and the fallback. Proposed on 2026-11-14 and accepted preliminarily the same day; the user accepted it after the final validation (see *Acceptance*). The engine itself does not change before M5.
-- **Related:** ADR 0018 (Dear ImGui as the debug UI), ADR 0026 (Raven packaging, M5.1: conditions 2 and 5 for the build), `docs/TECH_STACK.md` §5, `docs/ENGINE_PLAN.md` §9 and M5, `docs/experiments/raven-ui-evaluation.md`, `docs/experiments/raven-final-validation.md`, AGENTS.md §3 and §7
+- **Related:** ADR 0018 (Dear ImGui as the debug UI), ADR 0026 (Raven packaging, M5.1: conditions 2 and 5 for the build), ADR 0027 (Raven in the engine, M5.2: the integration and the validated fixes), `docs/TECH_STACK.md` §5, `docs/ENGINE_PLAN.md` §9 and M5, `docs/experiments/raven-ui-evaluation.md`, `docs/experiments/raven-final-validation.md`, AGENTS.md §3 and §7
 
 ## Context
 
