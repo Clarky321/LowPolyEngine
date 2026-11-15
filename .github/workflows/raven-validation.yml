@@ -126,7 +126,9 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           exe="$BUILD/bin/raven-evaluation"
-          echo "Xft.dpi: 144" | xrdb -merge
+          # -nocpp: the resources need no C preprocessor.
+          echo "Xft.dpi: 144" > "$LOGS/xresources"
+          xrdb -nocpp -merge "$LOGS/xresources"; echo "xrdb exit: $?"
           { echo "xrdb -query:"; xrdb -query; echo "root RESOURCE_MANAGER:"; xprop -root RESOURCE_MANAGER; } \
             | tee "$LOGS/xrdb.txt"
           "$exe" --frames 3 2>&1 | tee "$LOGS/xft-dpi-only.log"
