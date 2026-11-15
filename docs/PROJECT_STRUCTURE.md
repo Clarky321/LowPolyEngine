@@ -66,7 +66,7 @@ lowpoly-engine/
 │   │   └── panels/
 │   └── src/
 │       ├── application/
-│       ├── ui/imgui/
+│       ├── ui/raven/          # Raven panels and XML layouts (ADR 0019; M5 plan)
 │       ├── viewport/
 │       ├── panels/
 │       ├── gizmos/
