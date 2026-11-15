@@ -91,7 +91,9 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           mkdir -p "$LOGS"
-          Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
+          # -noreset: otherwise the server resets when its last client leaves,
+          # and the root window's resources (Xft.dpi, xrdb) are lost.
+          Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -noreset &
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
           for i in $(seq 50); do xdpyinfo -display :99 >/dev/null 2>&1 && break; sleep 0.1; done
           DISPLAY=:99 glxinfo -B | tee glxinfo.txt
