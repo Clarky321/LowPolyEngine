@@ -1,7 +1,7 @@
 # ADR 0019: Editor UI after the Raven evaluation
 
-- **Status:** Proposed (2026-11-14). The user accepted option 2 preliminarily on 2026-11-14 (see *Preliminary acceptance*); it becomes Accepted only after the checks listed there. Nothing in the engine changes until then.
-- **Related:** ADR 0018 (Dear ImGui as the debug UI), `docs/TECH_STACK.md` §5, `docs/ENGINE_PLAN.md` §9 and M5, `docs/experiments/raven-ui-evaluation.md`, AGENTS.md §3 and §7
+- **Status:** Accepted (2026-11-15), option 2: Raven is the interface of the M5 editor; Dear ImGui stays the debug UI and the fallback. Proposed on 2026-11-14 and accepted preliminarily the same day; the user accepted it after the final validation (see *Acceptance*). The engine itself does not change before M5.
+- **Related:** ADR 0018 (Dear ImGui as the debug UI), `docs/TECH_STACK.md` §5, `docs/ENGINE_PLAN.md` §9 and M5, `docs/experiments/raven-ui-evaluation.md`, `docs/experiments/raven-final-validation.md`, AGENTS.md §3 and §7
 
 ## Context
 
@@ -57,6 +57,44 @@ Before M5, in addition to the conditions above:
 6. Confirm that the project can safely maintain its own OpenGL backend and SDL3 bridge.
 
 If the Linux or High-DPI check finds a critical problem, the choice of UI is reopened and Dear ImGui is considered again.
+
+## Acceptance (2026-11-15)
+
+The final validation (`docs/experiments/raven-final-validation.md`, branch `experiment/raven-final-validation`) did the six checks above and ended with **APPROVED**. The user accepted this ADR on 2026-11-15. What it found:
+
+1. **Linux:**
+   - The prototype builds with GCC 13 (warnings as errors) in Debug and Release.
+   - It runs on X11 (Xvfb, Mesa's OpenGL 4.5, software rendering) with the self-test, the stress test and real input passing.
+   - Real graphics hardware and a desktop session were not available.
+2. **Displays above 100 %:**
+   - Windows set to 150 %, and changed between 100 and 150 % while the program ran.
+   - Linux at 150 % through `Xft.dpi`.
+   - Layout, text and clicks follow the scale, to the pixel.
+3. **Clipboard and text:**
+   - Typing with key presses and keyboard layouts, Cyrillic included.
+   - The editing keys.
+   - Ctrl+A, C, X and V with the system clipboard, in both directions.
+4. **Focus loss:**
+   - Keys and buttons held across a real focus loss are released.
+   - The focused widget gets its keyboard back.
+5. **Host platform limits:** as recorded in condition 4. Raven also offers the caret rectangle (`Rwindow_get_text_input_rect`) that IME positioning needs.
+6. **Maintenance:** four problems were found, all in the project's own integration code, none in Raven. Each fix was small and local, which supports condition 1.
+
+**What carries into M5.** The first M5 step that brings Raven into the engine does the following:
+
+1. **Linux on real graphics hardware and a desktop session** (X11 with a window manager, Wayland). A critical problem there reopens this decision.
+2. **The validation's fixes**, taken over by the integration in `engine/src/platform/sdl3/` and `engine/src/render/opengl/`:
+   - held input released on focus loss;
+   - one close request for SDL's close request and quit;
+   - no use of a window's handles after an accepted close;
+   - the clear colour restored;
+   - the wider OpenGL state comparison.
+3. **IME positioning:** the host gives `Rwindow_get_text_input_rect` to `SDL_SetTextInputArea`. The "no IME positioning until Raven offers it" of condition 4 no longer applies.
+4. **Conditions 1–5 stand:**
+   - Raven is taken as pinned source with its notices.
+   - The unstable 0.x API stays behind the editor's own panel code.
+   - Panels float inside the window only.
+   - Live reload, search-path loading and the HTTP image loader are reviewed before the editor ships.
 
 ## Consequences
 

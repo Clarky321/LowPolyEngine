@@ -79,7 +79,16 @@ Limitations: the project must build its own higher-level editor architecture (do
 
 Raven describes itself as a lightweight multithreaded C GUI library for editors/tools, offers language bindings, a visual designer and viewport integration options. The public README shows viewport callbacks/native child window handles and has build options for tests/examples/tools. However, the README explicitly says it is under active development and its public API may change. Repository documentation also reports platform/testing caveats.
 
-**Evaluated 2026-11-14** (`docs/experiments/raven-ui-evaluation.md`): Raven 0.2.3 at commit `7ab270df` in an isolated prototype on the engine's SDL3 window, OpenGL 4.5 context and renderer, Windows with MSVC — **conditional pass**. Raven has no desktop OpenGL backend, so the prototype brings its own; with it, the interface, a viewport drawn by the engine's renderer through Raven's draw callback, SDL3 input through Raven's host platform, single-thread operation and repeated start/stop work. Open conditions (backend ownership, host-platform gaps, engine event hook, packaging, API instability, Linux not run) are listed in ADR 0019, which is **proposed**, not accepted.
+**Evaluated 2026-11-14** (`docs/experiments/raven-ui-evaluation.md`): Raven 0.2.3 at commit `7ab270df` in an isolated prototype on the engine's SDL3 window, OpenGL 4.5 context and renderer, Windows with MSVC — **conditional pass**. Raven has no desktop OpenGL backend, so the prototype brings its own; with it, the interface, a viewport drawn by the engine's renderer through Raven's draw callback, SDL3 input through Raven's host platform, single-thread operation and repeated start/stop work. Open conditions (backend ownership, host-platform gaps, engine event hook, packaging, API instability, Linux not run) are listed in ADR 0019.
+
+**Final validation 2026-11-15** (`docs/experiments/raven-final-validation.md`): **APPROVED**.
+- Linux: built with GCC, run on X11 with Mesa's OpenGL; not on GPU hardware.
+- A display at 150 % on Windows, also changed while running, and on Linux through `Xft.dpi`.
+- Real OS input: text, Cyrillic, the clipboard, focus loss, resizing, closing.
+- Dear ImGui alongside.
+- Four fixes, all in the project's own integration code.
+
+ADR 0019 was accepted on 2026-11-15.
 
 Recommended proof-of-concept before adopting Raven:
 1. Build the smallest Raven sample with the same Windows compiler and CMake version as the engine.
@@ -88,7 +97,12 @@ Recommended proof-of-concept before adopting Raven:
 4. Test on at least Windows and one Linux desktop environment if both are targets.
 5. Verify API stability, licensing, integration model and how undo/redo/data binding would work.
 
-**Decision:** Dear ImGui for initial editor; Raven may replace it only after a documented prototype proves a meaningful advantage. Do not maintain two editor UI stacks in the production app. Raven is the preliminarily preferred UI of the M5 editor (ADR 0019, option 2, accepted only after the checks listed there, Linux and High-DPI among them); until then this decision stands and Dear ImGui stays.
+**Decision (ADR 0019, accepted 2026-11-15):**
+- Raven is the interface of the M5 editor.
+- Dear ImGui stays the engine's debug UI (ADR 0018) and the fallback. It is not removed.
+- The editor application itself uses one UI stack; do not maintain two editor UI stacks in the production app.
+- Until the M5 step that brings Raven into the engine, the engine is unchanged and the WorldGen panel stays on Dear ImGui.
+- That step also runs Linux on real graphics hardware; a critical problem there reopens the choice.
 
 Raven repository: <https://github.com/oscar-soirey/Raven>
 
