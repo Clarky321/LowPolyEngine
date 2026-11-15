@@ -98,6 +98,10 @@ private:
     // The last mouse position given to Raven, in pixels.
     int mouseX_ = 0;
     int mouseY_ = 0;
+    int lastPressX_ = -1;
+    int lastPressY_ = -1;
+    // The previous event was a window close request (SDL_EVENT_QUIT follows).
+    bool lastWasCloseRequest_ = false;
     HostStats stats_;
 };
 

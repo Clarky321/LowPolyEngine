@@ -328,6 +328,8 @@ bool SdlRavenHost::handleEvent(const SDL_Event& event)
     if (ravenWindow_ == R_INVALID_ID) {
         return false;
     }
+    const bool afterCloseRequest = lastWasCloseRequest_;
+    lastWasCloseRequest_ = event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED;
     const float toPixels = pixelsPerPoint();
     const auto pixel = [toPixels](float points) {
         return static_cast<int>(std::lround(points * toPixels));
@@ -415,6 +417,14 @@ bool SdlRavenHost::handleEvent(const SDL_Event& event)
         return true;
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
     case SDL_EVENT_QUIT:
+        // A close request of the last window is followed at once by
+        // SDL_EVENT_QUIT; that is the same request, and Raven may have closed
+        // the window by then. A quit on its own (a signal, the session
+        // ending) is a close request.
+        if ((event.type == SDL_EVENT_QUIT && afterCloseRequest) ||
+            Rwindow_is_valid(ravenWindow_) == 0) {
+            return false;
+        }
         Rhost_inject_close(ravenWindow_);
         ++stats_.closeRequests;
         return true;

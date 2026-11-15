@@ -1412,13 +1412,22 @@ private:
                               return screenshots_ == before_.screenshots + 1 &&
                                      std::filesystem::exists(*options_.screenshot);
                           }});
-        steps_.push_back({"close request goes through Raven's close callback", 1000,
-                          [this] { pushWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED); },
-                          [this](std::string& detail) {
-                              detail = std::format("{} close callbacks, loop running {}",
-                                                   closeCallbacks_, running_);
-                              return closeCallbacks_ == 1 && !running_;
-                          }});
+        steps_.push_back(
+            {"close request (and SDL's quit after it) goes through Raven's close callback once",
+             1000,
+             [this] {
+                 // As SDL does for the last window: the request,
+                 // then SDL_EVENT_QUIT.
+                 pushWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED);
+                 SDL_Event quit{};
+                 quit.type = SDL_EVENT_QUIT;
+                 push(quit);
+             },
+             [this](std::string& detail) {
+                 detail = std::format("{} close callbacks, loop running {}, {} Raven errors",
+                                      closeCallbacks_, running_, ravenErrors().errors);
+                 return closeCallbacks_ == 1 && !running_ && ravenErrors().errors == 0;
+             }});
     }
 
     void advanceSelfTest()
