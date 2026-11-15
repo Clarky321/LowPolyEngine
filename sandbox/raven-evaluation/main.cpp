@@ -109,6 +109,9 @@ struct Options {
     bool inputCheck = false;
     // Dear ImGui's debug UI next to Raven, on the same window and context.
     bool withImGui = false;
+    // With --input-check: a phase that waits for the display scale to change
+    // while the program runs (someone changes it in the system settings).
+    bool scaleChange = false;
     bool textureMode = false;
     bool vsync = true;
     // Raven's look: dark (default), light, glass (needs backdrop copies), windows.
@@ -143,6 +146,8 @@ std::optional<Options> parseOptions(int argc, char** argv)
             options.inputCheck = true;
         } else if (arg == "--with-imgui") {
             options.withImGui = true;
+        } else if (arg == "--scale-change") {
+            options.scaleChange = true;
         } else if (arg == "--stress" && hasValue &&
                    parseNumber(argv[i + 1], options.stressCycles)) {
             ++i;
@@ -1556,6 +1561,25 @@ private:
                 });
             clickRegenerate("raven-click-with-imgui");
         }
+        if (options_.scaleChange) {
+            addPhase(
+                "scale-change",
+                [this] {
+                    before_.scale = host_->scale();
+                    return std::format("scale={:.3f}", host_->scale());
+                },
+                [this] {
+                    const float display = SDL_GetWindowDisplayScale(window_);
+                    expect("scale-change.changed", host_->scale() != before_.scale,
+                           std::format("scale {:.3f} -> {:.3f}", before_.scale, host_->scale()));
+                    expect("scale-change.raven-follows", std::abs(host_->scale() - display) < 1e-3F,
+                           std::format("Raven's scale {:.3f}, SDL's display scale {:.3f}, window "
+                                       "{}x{} px",
+                                       host_->scale(), display, host_->pixelWidth(),
+                                       host_->pixelHeight()));
+                });
+            clickRegenerate("click-after-scale-change");
+        }
     }
 
     void startInputCheck()
@@ -1608,8 +1632,11 @@ private:
             return;
         }
         if (!driverDone_) {
-            if (millisecondsSince(phaseStart_) > 60000.0) {
-                expect(phase.name + ".driver", false, "no F9 from the driver within 60 s");
+            // A person changes the display scale; the driver acts within seconds.
+            const double limit = phase.name == "scale-change" ? 330000.0 : 60000.0;
+            if (millisecondsSince(phaseStart_) > limit) {
+                expect(phase.name + ".driver", false,
+                       std::format("no F9 from the driver within {:.0f} s", limit / 1000.0));
                 running_ = false;
             }
             return;
@@ -1628,6 +1655,12 @@ private:
     void noteInput(const SDL_Event& event)
     {
         switch (event.type) {
+        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+            if (options_.inputCheck) {
+                emit(std::format("@@INFO scale-changed display={:.3f}",
+                                 SDL_GetWindowDisplayScale(window_)));
+            }
+            break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             ++windowFocusLosses_;
             // Where the camera is once the releases have been handled.
@@ -2442,6 +2475,7 @@ private:
         std::uint64_t clipboardReads = 0;
         std::uint64_t focusChanges = 0;
         std::uint32_t ravenErrors = 0;
+        float scale = 1.0F;
         std::uint64_t dockChanges = 0;
         std::uint64_t regenerations = 0;
         std::uint64_t resizes = 0;
@@ -2469,7 +2503,7 @@ int main(int argc, char** argv)
                      "usage: raven-evaluation [--frames N] [--screenshot FILE.png] [--self-test] "
                      "[--stress N] [--benchmark] [--texture-mode] [--no-vsync] [--seed N] "
                      "[--size WxH] [--look dark|light|glass|windows] [--ui-scale F] "
-                     "[--input-check] [--with-imgui]\n");
+                     "[--input-check] [--with-imgui] [--scale-change]\n");
         return 2;
     }
     try {

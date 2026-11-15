@@ -2,7 +2,13 @@
 
 Usage:
   python sandbox/raven-evaluation/input_driver.py EXE [--with-imgui]
-      [--screenshot FILE.png] [--log FILE] [--size WxH]
+      [--screenshot FILE.png] [--log FILE] [--size WxH] [--expect-scale F]
+      [--scale-change]
+
+--expect-scale F checks that SDL reports the display scale F. With
+--scale-change the last phases wait (up to five minutes) for the display
+scale to be changed in the system settings while the program runs, then
+click again.
 
 Starts EXE (raven-evaluation) with --input-check and drives it with real
 input through the operating system, phase by phase, as the program asks on
@@ -576,6 +582,23 @@ class Driver:
                 payload = dict(item.split("=", 1) for item in parts[2:] if "=" in item)
                 return parts[1], payload
 
+    def wait_info(self, prefix: str, timeout: float) -> str:
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Failure("no '%s' within %.0f s" % (prefix, timeout))
+            try:
+                line = self.lines.get(timeout=remaining)
+            except queue.Empty:
+                continue
+            if line == "@@EOF":
+                raise Failure("the program ended while waiting for " + prefix)
+            if line.startswith("@@INFO "):
+                self.infos.append(line[len("@@INFO "):])
+                if line.startswith("@@INFO " + prefix):
+                    return line
+
     def wait_done(self, phase: str) -> None:
         while True:
             line = self.lines.get(timeout=60)
@@ -599,7 +622,7 @@ class Driver:
         if phase == "focus":
             s.focus_app()
         elif phase in ("click-input", "click-button", "click-after-resize",
-                       "raven-click-with-imgui"):
+                       "raven-click-with-imgui", "click-after-scale-change"):
             s.focus_app()
             s.click(*centre(payload))
         elif phase == "type-ascii":
@@ -691,6 +714,13 @@ class Driver:
             s.click(*centre(payload))
             time.sleep(0.25)
             s.type_keys("imgui")
+        elif phase == "scale-change":
+            print("WAITING: change the display scale now (the program shows scale %s)"
+                  % payload.get("scale"), flush=True)
+            line = self.wait_info("scale-changed", 300.0)
+            print("seen:", line, flush=True)
+            # Settings may still be in front; give the system a moment.
+            time.sleep(3.0)
         else:
             raise Failure("unknown phase " + phase)
 
@@ -717,6 +747,8 @@ def main() -> int:
     parser.add_argument("--screenshot")
     parser.add_argument("--size")
     parser.add_argument("--log", default="raven-input-check.log")
+    parser.add_argument("--expect-scale", type=float)
+    parser.add_argument("--scale-change", action="store_true")
     args = parser.parse_args()
 
     system = WindowsInput() if sys.platform == "win32" else X11Input()
@@ -727,6 +759,8 @@ def main() -> int:
         command += ["--screenshot", args.screenshot]
     if args.size:
         command += ["--size", args.size]
+    if args.scale_change:
+        command.append("--scale-change")
     print("driver:", system.describe())
     print("command:", " ".join(command))
     print("Do not use the mouse or the keyboard until the check has finished.")
@@ -757,6 +791,11 @@ def main() -> int:
                     name, verdict, detail = (line[len("@@CHECK "):].split(" ", 2) + ["", ""])[:3]
                     driver.checks.append((name, verdict == "PASS", detail))
             system.finish()
+    if args.expect_scale is not None:
+        match = re.search(r"display=([0-9.]+)", driver.scale)
+        got = float(match.group(1)) if match else None
+        driver.expect("scale.expected", got is not None and abs(got - args.expect_scale) < 0.01,
+                      "SDL display scale %s, expected %.3f" % (got, args.expect_scale))
     if error is None:
         driver.expect("close.exit-code", code == 0, "the program exited with %d" % code)
     else:
