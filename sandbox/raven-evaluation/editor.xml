@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Raven UI evaluation: the shape of the future LowPolyEngine editor (M5) in
+  Raven's XML. Top toolbar, the main viewport with the generated archipelago,
+  hierarchy, inspector and console panels in a DockArea.
+  docs/experiments/raven-ui-evaluation.md
+-->
+<Window Title="LowPolyEngine - Raven UI evaluation" Width="1280" Height="760">
+	<Shortcut Keys="Ctrl+R" Action="world.regenerate"/>
+	<Shortcut Keys="F12" Action="app.screenshot"/>
+
+	<VBox>
+		<!-- top toolbar -->
+		<HBox Spacing="4" Slot.Padding="6,4">
+			<Button Name="toolbar.regenerate" Text="Regenerate" Style="Primary" OnClicked="world.regenerate" Tooltip="Generate a new world (Ctrl+R)"/>
+			<Button Name="toolbar.mode" Text="Viewport: draw callback" Style="Flat" OnClicked="viewport.mode" Tooltip="Draw the scene directly, or through a CPU read-back texture"/>
+			<Button Name="toolbar.screenshot" Text="Screenshot" Style="Flat" OnClicked="app.screenshot" Tooltip="Save the frame (F12)"/>
+			<Spacer Slot.Fill="1"/>
+			<Label Name="toolbar.stats" Slot.VAlign="Center" Opacity="0.7"/>
+		</HBox>
+		<Separator/>
+
+		<DockArea Name="dock" Slot.Fill="1">
+			<Viewport Name="viewport" Slot.Title="Scene" Realtime="true" Slot.Closable="false"
+				Tooltip="Hold the right mouse button to look around, WASD to fly, the wheel to change speed"/>
+
+			<VBox Name="hierarchy.panel" Slot.Title="Hierarchy" Slot.Dock="Left" Slot.DockSize="0.2" Slot.Closable="false" Spacing="6" Slot.Padding="8">
+				<TreeView Name="hierarchy" Slot.Fill="1"/>
+			</VBox>
+
+			<ScrollBox Name="inspector.panel" Slot.Title="Inspector" Slot.Dock="Right" Slot.DockSize="0.22" Slot.Closable="false">
+				<VBox Spacing="10" Slot.Padding="10">
+					<Grid Columns="auto,1" Spacing="8">
+						<Label Slot.Column="0" Slot.Row="0" Slot.VAlign="Center">Name</Label>
+						<TextInput Name="inspector.name" Slot.Column="1" Slot.Row="0"/>
+						<Label Slot.Column="0" Slot.Row="1" Slot.VAlign="Center">Seed</Label>
+						<TextInput Name="inspector.seed" Slot.Column="1" Slot.Row="1"/>
+					</Grid>
+					<Label Name="inspector.details" Wrap="true" Opacity="0.8"/>
+					<Button Name="inspector.focus" Text="Fly to the island" OnClicked="island.focus"/>
+				</VBox>
+			</ScrollBox>
+
+			<TabView Name="console.tabs" Slot.Title="Console" Slot.Dock="Bottom" Slot.DockTo="viewport" Slot.DockSize="0.26" Slot.Closable="false">
+				<ListView Name="console" Slot.Title="Log"/>
+				<VBox Slot.Title="Frame" Slot.Padding="10">
+					<Label Name="console.frame" Wrap="true"/>
+				</VBox>
+			</TabView>
+		</DockArea>
+	</VBox>
+</Window>
