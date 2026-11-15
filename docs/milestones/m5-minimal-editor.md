@@ -4,7 +4,7 @@
 - **Roadmap entry:** `docs/ENGINE_PLAN.md` §10, M5; the editor plan in §9.
 - **UI decision:** ADR 0019 (accepted 2026-11-15): Raven is the editor's interface; Dear ImGui stays the engine's debug UI (ADR 0018) and the fallback. The evidence is in `docs/experiments/raven-ui-evaluation.md` and `docs/experiments/raven-final-validation.md`, both brought to this branch with the plan; the prototype's code stays on `experiment/raven-final-validation`.
 - **Workflow:** `docs/DEVELOPMENT_WORKFLOW.md`. One task implements exactly one sub-milestone below, then stops and reports.
-- **Status of this plan:** proposed. M5.1 starts only after the user approves the plan and answers the *Open questions*.
+- **Status of this plan:** approved by the user on 2026-11-15, with the answers to the open questions and two additions (*Decisions on the open questions*). M5.1 is a task of its own.
 
 ## Goal and exit criterion
 
@@ -26,9 +26,10 @@ Up to M4 the engine has a data model (entities, components, assets, scenes, pref
 - **A program of its own.**
   - The editor is the executable `lpe-editor` in `editor/` (`docs/PROJECT_STRUCTURE.md`).
   - A packaged game never needs editor code; the engine never includes editor headers.
-- **One UI stack in the editor: Raven** (ADR 0019).
+- **One UI stack in the editor: Raven** (ADR 0019, decision 6).
   - The editor builds its panels with Raven's C API and XML layouts.
-  - Dear ImGui is not used in the editor. It stays in the engine as the debug UI, and island-preview's WorldGen panel stays on it.
+  - `lpe-editor` uses Raven only: Raven and Dear ImGui are not combined in the editor's interface.
+  - Dear ImGui stays for the engine's debug UI, for island-preview's WorldGen panel, and as the fallback should the project ever have to leave Raven.
 - **Raven is hosted by the engine, as ADR 0019 describes:**
   - the OpenGL backend in `engine/src/render/opengl/` (the only place with OpenGL);
   - the SDL3 host bridge in `engine/src/platform/sdl3/`;
@@ -58,7 +59,7 @@ Up to M4 the engine has a data model (entities, components, assets, scenes, pref
 | C++20, CMake, Conan 2, Catch2/CTest, the lockfile | adopted | unchanged |
 | SDL3, OpenGL 4.5, GLAD, GLM, stb, nlohmann_json, EnTT, Lua | adopted | unchanged; no new use except where a step names it |
 | Dear ImGui `imgui/1.92.9b` | adopted (ADR 0018) | unchanged: the engine's debug UI and island-preview's WorldGen panel; not in the editor |
-| Raven 0.2.3 at `7ab270df3b618de3d11af6033912374b6cd621b7` | accepted for the editor (ADR 0019) | added in M5.1 as pinned source (packaging: *Open questions* 1), Apache 2.0 with `NOTICE`, compiled without the project's warning flags |
+| Raven 0.2.3 at `7ab270df3b618de3d11af6033912374b6cd621b7` | accepted for the editor (ADR 0019) | added in M5.1 as pruned vendored source in `third_party/raven/` (decision 1), Apache 2.0 with `NOTICE`, compiled without the project's warning flags |
 
 No other new dependency. Every dependency follows AGENTS.md §7 and gets a row in `docs/references/THIRD_PARTY_NOTICES.md`.
 
@@ -72,7 +73,8 @@ engine/include/engine/
   ui/        the engine's Raven host: lifetime, the main window, the loop hook (M5.2)
   world/     WorldScene and Sky moved from island-preview (M5.3); the scene's
              entities for the renderer (M5.6); the world settings panel model (M5.10)
-  project/   project folder and project document (M5.4)
+  project/   project folder and project document (M5.4); no editor, Raven, SDL3 or
+             OpenGL dependency; for a runtime application later as well (decision 5)
   core/      a log listener for the console (M5.7)
 engine/src/
   render/opengl/   the Raven backend (M5.2)
@@ -126,6 +128,10 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. The next free number is 0026.
 - **Out of scope stays out:** gizmos, play mode, the asset browser and import, materials and prefab authoring (M6) stay out, even where Raven makes them easy.
 - **The checks of `docs/TESTING_AND_CI.md` §8 for the kind of change.** The GPU tier runs from M5.2 on, since every later step touches the window, the loop or drawing.
+- **Two kinds of OpenGL runs, never mixed up** (decisions 2 and 3).
+  - From M5.2, CI runs the GPU tier on Linux: GitHub Actions, Ubuntu 24.04, Xvfb, Mesa llvmpipe. That is **software OpenGL**.
+  - Documents and reports name it so and keep it apart from runs on real graphics hardware: locally on Windows, and on Linux not available in M5. CI does not replace a hardware test.
+  - Linux on real graphics hardware is recorded as **not verified** in M5.
 
 ## Sub-milestones
 
@@ -134,10 +140,17 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 **Goal:** Raven builds as part of the project on Windows and Linux, from a pinned source, without downloads at configure time.
 
 **Scope:**
-- Raven 0.2.3 at the validated commit, packaged as decided (*Open questions* 1, recommended: pruned vendored source in `third_party/raven/`). The pruned tree keeps:
-  - `include/`, `src/`, `third_party/` (bundled stb, nanosvg, fonts with their licenses), `cmake/`;
-  - `CMakeLists.txt`, `LICENSE`, `NOTICE`, `THIRD_PARTY.md`;
-  - a `README.md` of the project's own giving the commit, what was left out and how to update it.
+- Raven as **pruned vendored source in `third_party/raven/`** (decision 1):
+  - **Pinned:** version 0.2.3 at commit `7ab270df3b618de3d11af6033912374b6cd621b7`, the validated one.
+  - **Kept:** `include/`, `src/`, `third_party/` (bundled stb, nanosvg and fonts with their licences), `cmake/`, `CMakeLists.txt`, `LICENSE`, `NOTICE`, `THIRD_PARTY.md`.
+  - **Licences:** `LICENSE`, `NOTICE` and the licence of every bundled third-party component are kept.
+  - **No downloads** during configure or build.
+  - **`third_party/raven/README.md`** (the project's own) documents in detail:
+    - the version and commit;
+    - every kept and every removed path, with the reason;
+    - any change made to Raven's files;
+    - the update procedure, step by step: fetch the new commit, prune, compare, build, run the checks, and update the notices and ADR.
+  - **Updates:** a Raven update is a separate, reviewable change, never part of another step.
 - A CMake target `raven`, a static C library:
   - Vulkan, web pages, examples, tests and tools off (as in the prototype); Wayland as decided in the step;
   - compiled without the project's warning flags; its headers as SYSTEM includes;
@@ -147,14 +160,15 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - the HTTP(S) image loader (`winhttp` on Windows): a build option, or a source change recorded in the vendored README.
 - `docs/references/THIRD_PARTY_NOTICES.md` (Raven and its bundled parts), `docs/TECH_STACK.md` §4/§5, `docs/PROJECT_STRUCTURE.md`.
 
-**Decisions to make (ADR "Raven packaging"):** vendored or recipe (*Open questions* 1), what is pruned, the build options, how an update is reviewed, the notices.
+**Decisions to make (ADR "Raven packaging"):** what exactly is pruned (vendored: decision 1), the build options, the update procedure and its review, the notices.
 
 **Out of scope:** the engine's integration (M5.2), any editor code.
 
 **Acceptance criteria:**
 - Clean builds on all four CI jobs, warnings as errors in project code.
 - No network access during configure or build.
-- The licence files are present and listed in the notices.
+- `LICENSE`, `NOTICE` and the licences of all bundled components are present and listed in the notices.
+- The vendored README lists every kept and removed path and the update procedure.
 
 **Unit tests (headless, `tests/unit/ui/`):**
 - Raven starts with `R_BACKEND_NULL` and its null or host platform, creates a window from XML text, injects a click and text through the host platform, and reads the result.
@@ -185,8 +199,8 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - an XML layout of the shell: toolbar, viewport, hierarchy, inspector and console areas, all empty;
   - the command-line options `--frames N`, `--screenshot FILE`, `--size WxH`.
 - **Linux:**
-  - The editor builds in CI. It runs on Xvfb with Mesa's OpenGL if *Open questions* 3 says so.
-  - It runs once on real graphics hardware if the user can provide it (*Open questions* 2). ADR 0019 asks for this in this step; a critical problem reopens the decision.
+  - **A Linux GPU-tier job in CI** (decision 3): GitHub Actions, Ubuntu 24.04, Xvfb, Mesa llvmpipe, Debug and Release. It runs the engine's GPU tier and the editor's runs. `docs/TESTING_AND_CI.md` describes it as software OpenGL, apart from hardware runs.
+  - **Real graphics hardware:** not available (decision 2). Linux on hardware is recorded as not verified, the user's decision under ADR 0019's *Acceptance*. A problem found there later can reopen ADR 0019.
 
 **Decisions to make (ADR "Raven in the engine"):** the public UI API; the event order between Raven, the debug UI and `InputState`; who owns the main Raven window; the frame order; what happens when Raven is off (island-preview, tests).
 
@@ -201,7 +215,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - The host bridge with the null backend: key mapping by meaning and by position, UTF-8 to code points, held input released on focus loss, one close request for close and quit, the scale passed on.
 - The loop's event order with Raven on and off.
 
-**GPU tier:**
+**GPU tier** (Windows locally on hardware; Linux in CI on llvmpipe):
 - `lpe-editor --frames 60` without errors.
 - The shell drawn: pixel checks of the toolbar and panel areas.
 - Start and stop repeated: the engine's resources and Raven's memory stay level.
@@ -242,23 +256,31 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - an empty scene with a new scene ID;
   - default world settings.
 - **Open:** the document, the manifest into a registry, the scene checked against the registry, the world settings. All or nothing; errors name the file.
-- **Save:** every part, each written atomically.
-- **Where the code lives:** `engine/project/` if the runtime will open the same projects (*Open questions* 5), otherwise `editor/`.
+- **Save:** every part, consistently as a whole (see below).
+- **Where the code lives:** `engine/project/` (decision 5).
+  - The project API and model depend on no editor, Raven, SDL3 or OpenGL code; a header check test enforces it.
+  - A runtime application can open the same format later.
+- **Saving several files consistently** (addition 2):
+  - Writing each file atomically (`core::writeFileAtomically`) is not the same as saving the project atomically. A failure after some files leaves a mix of old and new data.
+  - The ADR decides how a save of several files stays consistent, and what opening does with an interrupted save. For example:
+    - all new files written under temporary names first, then put in place in a fixed order, with a generation marker the open checks;
+    - or a project document written last that names the generation of its files.
 
-**Decisions to make (ADR "Project document"):** the format id and file name, required and optional fields, what happens with a missing world settings file, the folder names, whether the scene list holds more than the start scene.
+**Decisions to make (ADR "Project document"):** the format id and file name, required and optional fields, what happens with a missing world settings file, the folder names, whether the scene list holds more than the start scene, and the consistency of a save of several files (above).
 
 **Out of scope:** UI (M5.11), several open scenes, asset import.
 
 **Acceptance criteria:**
 - A project created, saved, moved to another folder and opened again is identical.
 - A broken part leaves nothing half-opened.
+- A save that fails at any point leaves a project that opens either as the previous save or as the new one, never as a mixture.
 
 **Unit tests:**
 - Exact layout; round trip.
 - Missing, unknown and wrongly typed fields; newer version.
 - Paths outside the project, or absolute.
 - Each part missing or broken.
-- Atomic saves leave the old files on failure.
+- **Write failures injected at every file and every stage of a save:** afterwards the project opens as entirely the old or entirely the new version, never a mix, and leftover temporary files are removed or ignored.
 - A moved folder.
 
 **Visual check:** none.
@@ -395,7 +417,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - **Picking:** a ray from the viewport camera through the clicked pixel, tested against the mesh entities first by bounds and then by triangles (CPU data kept by the scene view, M5.6). The nearest hit wins; a click on nothing clears the selection. The generated islands are not entities and are not picked.
 - **Highlight:** the selection is shown in the viewport (the way is decided here, with the existing renderer API) and kept in step with the hierarchy and the inspector.
 
-**Out of scope:** gizmos (*Open questions* 4), box selection, picking islands.
+**Out of scope:** gizmos (decision 4), box selection, picking islands.
 
 **Acceptance criteria:** the click picks what is drawn under the pointer, at 100 % and at a scaled display; the highlight follows selection changes from every panel.
 
@@ -433,7 +455,13 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 **Goal:** the editor's file workflow, without losing unsaved changes silently.
 
 **Scope:**
-- New project, open project (Raven's folder dialog), save (Ctrl+S), close.
+- New project, open project, save (Ctrl+S), close.
+- **Raven's folder dialog, checked on Windows and on Linux** (addition 1), because the Raven validation did not test it:
+  - opening the dialog;
+  - navigation;
+  - choosing a folder;
+  - cancel.
+  - If it fails on a platform, the step uses a fallback and records it. Candidates: SDL3's native folder dialog (`SDL_ShowOpenFolderDialog`), or a path field with the project's checks.
 - A prompt about unsaved changes before close, open or new.
 - The window title shows the project and the unsaved state.
 - `lpe-editor <project folder>` opens a project at start.
@@ -444,9 +472,11 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Save, close and reopen gives the same documents byte for byte.
 - No path loses unsaved changes without a prompt.
 
-**Unit tests:** the workflow's states (clean, unsaved, prompts, cancel, failed save) headless.
+**Unit tests:** the workflow's states (clean, unsaved, prompts, cancel, failed save) headless; the folder dialog's flow (navigate, choose, cancel) with the null backend.
 
-**GPU tier / integration:** open the committed test project, edit through injected input, save, close, reopen, compare.
+**GPU tier / integration:**
+- Open the committed test project, edit through injected input, save, close, reopen, compare.
+- The folder dialog opened, navigated, used to choose a folder and cancelled: on Windows by real input on hardware; on Linux under Xvfb in CI (software OpenGL).
 
 **Visual check:** `008-project-workflow.png`.
 
@@ -459,7 +489,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - **The full checks** in Debug and Release:
   - both tiers, every wrapper, a fresh clone;
   - CI green;
-  - Linux as decided in *Open questions* 2 and 3.
+  - Linux: the CI runs under Xvfb (software OpenGL) reported as such; Linux on real graphics hardware recorded as not verified (decisions 2 and 3).
 - **A manual check by the user:** fly, select, edit, undo, save and reopen.
 - **Documentation:** `docs/ENGINE_PLAN.md`, `README.md`, `docs/PROJECT_STRUCTURE.md`, `docs/TECH_STACK.md`, `docs/TESTING_AND_CI.md`, the ADRs, `docs/screenshots/m5/`.
 - **The pull request** `M5: Minimal editor` into `main`, merged with a merge commit after the user accepts M5.
@@ -472,9 +502,9 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 | Topic | Step | Notes |
 |---|---|---|
-| Raven packaging | M5.1 | vendored or recipe, pruning, options, notices, updates |
+| Raven packaging | M5.1 | pruned vendored source (decision 1): what is kept, options, notices, the update procedure |
 | Raven in the engine | M5.2 | public UI API, event order, frame order, ownership |
-| Project document | M5.4 | format, folder layout, paths, all-or-nothing open |
+| Project document | M5.4 | format, folder layout, paths, all-or-nothing open, a consistent save of several files |
 | Editor document and commands | M5.5 | command model, undo, merging, dirty state |
 | Amendments | as needed | ADR 0019 (integration details), ADR 0018 if the debug UI's hook changes |
 
@@ -482,7 +512,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 These stay out:
 
-- **Editing tools:** transform gizmos (*Open questions* 4), multi-selection editing, prefab authoring and overrides.
+- **Editing tools:** transform gizmos (decision 4: a later milestone, after the minimal editor; transforms are edited in the inspector), multi-selection editing, prefab authoring and overrides.
 - **Running the game:** play mode and running Lua scripts inside the editor.
 - **Content (M6):** the asset browser and asset import, material files and editing.
 - **Scene model:** transform inheritance; several scenes open at once; dock layout saved per project.
@@ -493,13 +523,13 @@ These stay out:
 
 1. Raven is a pinned dependency built on Windows and Linux.
 2. The engine hosts Raven with the validated fixes; island-preview and the debug UI are unchanged.
-3. `lpe-editor` opens, creates and saves projects.
+3. `lpe-editor` opens, creates and saves projects; a failed save never leaves a mixed project; the folder dialog works on Windows and Linux, or the recorded fallback does.
 4. The viewport shows the world and the scene's entities; clicks select entities.
 5. Hierarchy, inspector, WorldGen panel and console work through commands.
 6. Undo and redo cover every document change.
 7. Save, close and reopen restore the scene and the world exactly.
 8. All headless and GPU tests pass in Debug and Release; CI is green on Windows and Linux.
-9. Linux on real graphics hardware is checked or recorded as decided (*Open questions* 2).
+9. Linux runs in CI under Xvfb with software OpenGL, reported as such; Linux on real graphics hardware is recorded as not verified (decisions 2 and 3).
 10. The documentation and screenshots are updated.
 11. The pull request is accepted by the user and merged into `main`.
 
@@ -518,29 +548,40 @@ These stay out:
   - it has a null backend and a null platform for tests (`R_BACKEND_NULL`), which makes headless panel tests possible;
   - its pinned source is about 37 MB with tools, docs, examples and bindings, about 6.6 MB pruned to what the build needs.
 
-## Open questions (for the user, before M5.1)
+## Decisions on the open questions (approved 2026-11-15)
 
-1. **Raven packaging** (ADR 0019 condition 2).
-   - **Proposal:** pruned vendored source in `third_party/raven/` (about 6.6 MB; `include/`, `src/`, `third_party/`, `cmake/`, licence files), updated only by a reviewed commit. It builds offline and works like GLAD and stb.
-   - **Alternative:** a project Conan recipe that fetches the pinned commit during `conan install` (smaller repository, but a recipe to maintain and a network fetch from GitHub).
-2. **Linux on real graphics hardware** (ADR 0019, *Acceptance*). Is there a Linux machine with a GPU on which the user can run `lpe-editor` once in M5.2 and at the end of M5?
-   - **If yes:** the steps include it.
-   - **If not:** it is recorded as not run, with the Xvfb runs as the only Linux evidence, and the risk is accepted knowingly.
-3. **The GPU tier on Linux in CI.** The Raven validation showed that the engine and Raven run on GitHub's Ubuntu runner under Xvfb with Mesa's OpenGL 4.5 (software).
-   - **Proposal:** from M5.2, CI runs the GPU tier there for every push, which no CI job does today. It is not a hardware test.
-4. **Transform gizmos.**
-   - **Proposal:** not in M5. Transforms are edited in the inspector; `docs/ENGINE_PLAN.md` §9 lists gizmos after the first panels. They would be a later milestone or an M5 step added by a plan change.
-5. **Where the project document lives.**
-   - **Proposal:** `engine/project/`, because a packaged game will open the same project.
-   - **Alternative:** `editor/` only, until the runtime needs it.
-6. **Dear ImGui in the editor.**
-   - **Proposal:** none: one UI stack in the editor (ADR 0019). The engine's debug overlay stays in island-preview.
+The user approved the plan with the recommended answers, the requirements below, and two additions.
+
+1. **Raven packaging — pruned vendored source in `third_party/raven/`.**
+   - Fixed version 0.2.3 at commit `7ab270df3b618de3d11af6033912374b6cd621b7`.
+   - No downloads during configure or build.
+   - `LICENSE`, `NOTICE` and the licences of all bundled third-party components are kept.
+   - A Raven update is a separate, reviewable change.
+   - The pruned copy's contents and the update procedure are documented in detail (M5.1).
+2. **Linux on real graphics hardware — not available.** It stays recorded as not verified in M5.
+3. **The GPU tier on Linux in CI — yes, from M5.2.**
+   - GitHub Actions, Ubuntu 24.04, Xvfb, Mesa llvmpipe.
+   - Documents and reports keep software OpenGL in CI apart from checks on real graphics hardware; CI does not replace a hardware test.
+4. **Transform gizmos — out of scope for M5.** Transforms are edited in the inspector. Gizmos can come in a later milestone, after the minimal editor.
+5. **The project document — in `engine/project/`.**
+   - The project API and model stay independent of the editor, Raven, SDL3 and OpenGL.
+   - A runtime application will later open the same project format.
+6. **No Dear ImGui in the editor.**
+   - `lpe-editor` uses Raven only; Raven and Dear ImGui are not combined in the editor's interface.
+   - Dear ImGui stays for the engine's debug UI, island-preview's WorldGen panel, and as the fallback should the project ever have to leave Raven.
+
+**Additions:**
+
+1. **M5.11 checks Raven's folder dialog** on Windows and Linux: opening, navigation, choosing a folder, cancel. These were not tested in the Raven validation. If it has problems, the step uses an alternative way to choose a folder.
+2. **M5.4 decides in its ADR how a save of several project files stays consistent.** Writing each file atomically is not the same as saving the whole project atomically. Tests inject write failures, so that a failed save never leaves the project as a mixture of old and new data.
 
 ## Risks
 
 - **Raven 0.x API changes:** the pin and the vendored copy keep it stable; an update is a reviewed step of its own, with the backend's shader adaptation failing loudly when Raven changes.
 - **Raven's process-wide state:** one `Rinit` per process limits tests to one Raven instance at a time; the test layout keeps them in one executable run in sequence.
 - **Headless panel tests vs real drawing:** the null backend proves logic and layout, not pixels; the GPU tier and screenshots cover drawing.
-- **Linux on hardware is unverified** until *Open questions* 2 is answered.
+- **Linux on hardware stays unverified in M5** (decision 2). The CI runs on software OpenGL; a driver problem found on hardware later can reopen ADR 0019.
 - **Scope pressure:** gizmos, play mode, an asset browser and materials are tempting with Raven's widgets; they stay out unless the plan is changed first.
+- **Raven's folder dialog** was not covered by the Raven validation; M5.11 checks it on both platforms and has a fallback.
+- **Saving a project of several files** can leave a mixture after a failure; M5.4's ADR and failure tests prevent it.
 - **Euler angles:** converting stored quaternions to editable angles can surprise (gimbal lock, angle ranges); M5.8 decides and tests the convention.
