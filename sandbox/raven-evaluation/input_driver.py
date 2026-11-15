@@ -13,8 +13,10 @@ its standard output ("@@READY <phase> ...", see main.cpp):
   SetCursorPos, the Win32 clipboard, SetForegroundWindow for focus changes,
   a small Tk window of this script as the other window, WM_CLOSE.
 - X11 (Linux, also under Xvfb): xdotool (XTEST keys, text and mouse,
-  XSetInputFocus), xclip for the clipboard, xmessage as the other window,
-  SIGTERM to close.
+  XSetInputFocus), setxkbmap for the Russian layout (xdotool's own typing of
+  characters outside the layout remaps a key for each one, which races with
+  the program reading the keymap), xclip for the clipboard, xmessage as the
+  other window, SIGTERM to close.
 
 The program checks what reached Raven and prints "@@CHECK" lines; this
 script adds its own checks (the system clipboard, the keyboard layout, the
@@ -396,7 +398,8 @@ class X11Input:
         self.helper_process = None
 
     def _run(self, *arguments: str, data: bytes | None = None) -> str:
-        result = subprocess.run(list(arguments), input=data, capture_output=True, check=True)
+        result = subprocess.run(list(arguments), input=data, capture_output=True, check=True,
+                                timeout=20)
         return result.stdout.decode("utf-8", "replace")
 
     def attach(self, window: dict) -> None:
@@ -446,15 +449,24 @@ class X11Input:
         self.tap(name)
         self.key(modifier, True)
 
+    LAYOUTS = {"en": "us", "ru": "ru"}
+
     def type_keys(self, text: str, layout: str = "en") -> None:
-        # xdotool types each character by its keysym (no layout switch).
+        # With the layout active, xdotool finds every character on a key of
+        # the keymap and presses that key (with Shift where needed).
         self._run("xdotool", "type", "--delay", "25", text)
 
     def type_unicode(self, text: str) -> None:
-        self.type_keys(text)
+        # X11 has no Unicode packets like Windows' KEYEVENTF_UNICODE: type
+        # with the Russian layout.
+        self.set_layout("ru")
+        self.type_keys(text, "ru")
+        self.set_layout("en")
 
-    def set_layout(self, name: str) -> bool:
-        return False
+    def set_layout(self, name) -> bool:
+        self._run("setxkbmap", self.LAYOUTS[name])
+        time.sleep(0.2)
+        return True
 
     def move(self, x: float, y: float) -> None:
         self._run("xdotool", "mousemove", "--window", self.app, str(int(round(x))),
@@ -476,9 +488,11 @@ class X11Input:
         return result.stdout.decode("utf-8", "replace") if result.returncode == 0 else None
 
     def clipboard_set(self, text: str | None) -> None:
-        # xclip stays in the background to serve the selection.
+        # xclip stays in the background to serve the selection; it must not
+        # keep this script's output open (a pipe would never end).
         subprocess.run(["xclip", "-selection", "clipboard", "-i"],
-                       input=(text or "").encode("utf-8"), check=True, timeout=10)
+                       input=(text or "").encode("utf-8"), stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=True, timeout=10)
 
     def resize_by(self, dw: int, dh: int) -> None:
         geometry = self._run("xdotool", "getwindowgeometry", self.app)
@@ -493,9 +507,12 @@ class X11Input:
 
     def finish(self) -> None:
         self.stop_helper()
+        subprocess.run(["setxkbmap", "us"], check=False, timeout=20)
+        # The last xclip still serves the clipboard.
+        subprocess.run(["pkill", "-x", "xclip"], check=False, timeout=20)
 
     def describe(self) -> str:
-        return "X11: xdotool (XTEST), xclip, XSetInputFocus"
+        return "X11: xdotool (XTEST), setxkbmap, xclip, XSetInputFocus"
 
 
 # ---------------------------------------------------------------------------
@@ -596,10 +613,6 @@ class Driver:
                             "program's window")
                 s.type_keys("Привет, мир!", "ru")
                 s.set_layout("en")
-            elif isinstance(s, X11Input):
-                self.expect("type-layout.layout", True, "X11: typed by keysym (xdotool), no "
-                            "layout switch")
-                s.type_keys("Привет, мир!")
             else:
                 self.expect("type-layout.layout", False, "the Russian layout could not be "
                             "activated")

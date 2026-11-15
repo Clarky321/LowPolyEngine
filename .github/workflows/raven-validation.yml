@@ -4,7 +4,7 @@
 # (sandbox/raven-evaluation, LPE_BUILD_RAVEN_EVALUATION=ON) with GCC in Debug
 # and Release, then runs it on an X server without a GPU (Xvfb, Mesa's
 # software OpenGL, llvmpipe): the self-test, the stress test, and the real
-# input check (xdotool, xclip) at 100 % and at 150 % (Xft.dpi 144). This is
+# input check (xdotool, setxkbmap, xclip) at 100 % and at 150 % (Xft.dpi 144). This is
 # not a GPU test: Linux on real graphics hardware is not covered here.
 name: Raven validation
 
@@ -57,7 +57,7 @@ jobs:
       - name: Install the X server and input tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xdotool xclip x11-utils x11-xserver-utils mesa-utils libgl1-mesa-dri
+          sudo apt-get install -y xvfb xdotool xclip x11-utils x11-xserver-utils x11-xkb-utils xkb-data mesa-utils libgl1-mesa-dri
 
       - name: Cache Conan packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -106,12 +106,14 @@ jobs:
           grep -q "^\[stress\] PASS" "$LOGS/stress.log"
 
       - name: Real input at 100 %
+        timeout-minutes: 10
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           python sandbox/raven-evaluation/input_driver.py "$BUILD/bin/raven-evaluation" --with-imgui \
             --screenshot "$LOGS/x11-100.png" --log "$LOGS/input-100.log" | tee "$LOGS/input-100-summary.txt"
 
       - name: Real input at 150 % (Xft.dpi 144)
+        timeout-minutes: 10
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           echo "Xft.dpi: 144" | xrdb -merge
