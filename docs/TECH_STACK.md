@@ -57,7 +57,8 @@ Official/reference links:
 | GLAD 2 | OpenGL function loading | Adopt for OpenGL backend. Generate against the project's target API and pin generated source/metadata. |
 | EnTT | ECS | Adopted in M4.2 (`entt/4.0.0`, ADR 0021) as the private storage of `engine::scene::Scene`, included only in `engine/src/scene/Scene.cpp`. Persistent `EntityId`s (ADR 0020) stay separate from the transient EnTT entity handles, which never leave the scene implementation. |
 | nlohmann_json | JSON documents | Adopted in M3.11 (`nlohmann_json/3.12.0`, ADR 0004), private: included only through the internal `engine/src/core/JsonSupport.hpp` (M4.4), which the world settings file, the asset manifest (ADR 0022), scene documents (ADR 0023) and prefab documents (ADR 0025) share; no public header names it. |
-| Dear ImGui | Editor UI | Adopt for first editor prototype. Use official SDL3 + OpenGL/Vulkan backends where applicable. |
+| Dear ImGui | Debug UI | Adopted in M3.12 (`imgui/1.92.9b`, ADR 0018) for the engine's debug UI and island-preview's WorldGen panel, with its SDL3 and OpenGL 3 backends. Not in the editor, which uses Raven (ADR 0019); stays the fallback. |
+| Raven | Editor UI | Adopted for the M5 editor (ADR 0019). Added in M5.1 as pruned vendored source (ADR 0026): 0.2.3 at commit `7ab270df`, in `third_party/raven/`, built by its own CMake as the static C library `raven` (`cmake/RavenDependency.cmake`): null and host platforms only, no Vulkan, no web pages, examples, tests or tools, the HTTP(S) image download compiled out, Raven's own warning level. Not from Conan (not in Conan Center); nothing downloaded. |
 | Catch2 v3 | Unit/integration testing | Adopt with CTest. Use one main test framework. |
 | Lua 5.5 | Embedded scripts | Adopted in M4.5 (`lua/5.5.0`, ADR 0024): static, compiled as C++ so Lua errors unwind C++ frames, private to `engine/src/scripting/lua/`, sandboxed, with an instruction budget and a memory limit. Upstream 5.5.1 (3 Aug 2026) is not in Conan Center yet. |
 | LuaBridge3 | C++ ↔ Lua bindings | Not taken (M4.5, ADR 0024): not in Conan Center and only a pre-release; the engine API is a handful of functions bound by a small project-owned layer over the Lua C API. |
@@ -104,6 +105,14 @@ Recommended proof-of-concept before adopting Raven:
 - Until the M5 step that brings Raven into the engine, the engine is unchanged and the WorldGen panel stays on Dear ImGui.
 - That step also runs Linux on real graphics hardware; a critical problem there reopens the choice.
 
+**Packaging (M5.1, ADR 0026):**
+- Raven 0.2.3 at `7ab270df3b618de3d11af6033912374b6cd621b7`, pruned to its library paths in `third_party/raven/`: 249 of 816 files, 6.2 of 36 MB. `third_party/raven/README.md` lists every kept and removed path and the update procedure.
+- One local change, in `src/core/fs.c`: the HTTP(S) image download (WinHTTP, `curl`) is compiled out.
+- Built offline as the static C library `raven`, with only Raven's null and host platforms (SDL3 owns the windows), no Vulkan and no X11 or Wayland dependency.
+- Live reload and auto-loading from search paths are run-time switches. Every Raven session in the project turns both off right after `Rinit`.
+- Headless tests with the null backend and the host platform in `tests/unit/ui/`.
+- An update is a reviewed change of its own.
+
 Raven repository: <https://github.com/oscar-soirey/Raven>
 
 ## 6. Conan vs Git submodules
@@ -118,6 +127,8 @@ A Git submodule is appropriate when:
 If using a submodule, pin it to a commit/tag, document its license, and include it in the clean-checkout setup. Do not float `main` or silently update third-party code.
 
 GLAD is generated API loader code; generated source may be vendored under a clearly marked third-party folder, with generation metadata and license notices.
+
+Raven is vendored too (ADR 0026), as pruned upstream source with its notices. It is not in Conan Center, it needs one local source change, and the build must not download. A submodule would bring all 36 MB of its repository, and `FetchContent` would download at configure time.
 
 ## 7. Build, automation and repository tooling
 

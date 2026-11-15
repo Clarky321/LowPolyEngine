@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
-# C is only needed for the generated GLAD loader in third_party/glad.
+# C is needed for the generated GLAD loader (third_party/glad) and for Raven
+# (third_party/raven), both compiled as their own libraries.
 project(LowPolyEngine
     VERSION 0.1.0
     DESCRIPTION "Low-poly 3D engine and editor"
@@ -37,6 +38,8 @@ add_subdirectory(third_party/glad)
 add_subdirectory(third_party/imgui_backends)
 add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/stb_image_write)
+# Raven, the editor's UI library: target `raven` from the vendored source (ADR 0026).
+include(RavenDependency)
 add_subdirectory(engine)
 add_subdirectory(sandbox/island-preview)
 

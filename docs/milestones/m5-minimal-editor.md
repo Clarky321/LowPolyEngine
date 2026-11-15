@@ -101,7 +101,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 
 | ID | Title | Status |
 |---|---|---|
-| M5.1 | Raven as a pinned dependency | planned |
+| M5.1 | Raven as a pinned dependency | in progress |
 | M5.2 | Raven in the engine loop and the editor shell | planned |
 | M5.3 | The generated world in the viewport | planned |
 | M5.4 | Project folder and project document | planned |
@@ -178,6 +178,26 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 **Done when:** the target builds on all four jobs and the null-backend test passes there.
 
 **Visual check:** none.
+
+**Decisions made in M5.1** (ADR 0026; details in `third_party/raven/README.md`):
+- **The copy:**
+  - `git archive` of the pinned commit, restricted to the kept paths of the plan: 249 of 816 files, 6.2 of 36 MB.
+  - Removed whole: `bindings/`, `docs/`, `examples/`, `openspec/`, `tests/`, `tools/`, `web/`, `.github/`, the root scripts and presets, `ROADMAP.md`, the Git files and upstream's `README.md`.
+  - Nothing inside `include/`, `src/`, `third_party/` or `cmake/` is removed. The copy stays a plain subset of upstream, and the M5.2 backend adapts the GLSL sources in `src/render/vulkan/shaders/`.
+  - `.gitattributes` exempts the vendored bytes from `git diff --check`, since upstream's whitespace is kept as it is; the project's own `README.md` there is still checked.
+- **One local change.** `src/core/fs.c` compiles the HTTP(S) download out (WinHTTP on Windows, a `curl` process on Linux) under `LPE_RAVEN_NO_HTTP_DOWNLOAD`, because Raven has no build option for it. Such an image source fails like an unreadable file.
+- **The target.**
+  - `cmake/RavenDependency.cmake` sets the options and the pin (`LPE_RAVEN_VERSION`, `LPE_RAVEN_COMMIT`) and adds Raven's own `CMakeLists.txt` with `SYSTEM`. Raven's `CMakeLists.txt` is unchanged.
+  - The target is the static C11 library `raven`, built in every configuration, with Raven's own warning level and none of the project's. C was already enabled in `project()` for GLAD. Conan and the lockfile are unchanged.
+- **Wayland and X11: `RAVEN_PLATFORM=null`.**
+  - Only Raven's null and host platforms are built, so there is no X11, Wayland or Win32 window code and no X11 build dependency for Raven.
+  - SDL3 owns the windows, and Raven reaches them through the host platform, which Raven picks whenever one is registered. The validation ran on the host platform too.
+- **Live reload and auto-loading** are run-time switches (`Rxml_set_live_reload`, `Rxml_set_auto_load`). Every Raven session turns both off right after `Rinit`: the tests from now on, the engine from M5.2.
+  - What stays when they are off: OS file watches for windows and themes made from files (their events are dropped), `Rxml_check_files`, and the search for a relative reference that names no existing file.
+  - Predictable loading: documents are given to Raven as text, and every file they reference exists where they say.
+- **Tests** in `tests/unit/ui/`, part of `lpe_unit_tests`, the headless tier:
+  - `raven_null_backend_test.cpp`: the pin, the XML window with injected click and text, failed starts, broken XML, repeated starts, no leaks;
+  - `raven_configuration_test.cpp`: no native window system, live reload off, auto-loading off, HTTP compiled out.
 
 ### M5.2 — Raven in the engine loop and the editor shell
 

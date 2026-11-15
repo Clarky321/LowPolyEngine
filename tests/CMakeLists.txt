@@ -49,6 +49,8 @@ add_executable(lpe_unit_tests
     unit/sandbox/worldgen_panel_test.cpp
     ${PROJECT_SOURCE_DIR}/sandbox/island-preview/Sky.cpp
     ${PROJECT_SOURCE_DIR}/sandbox/island-preview/WorldGenPanel.cpp
+    unit/ui/raven_configuration_test.cpp
+    unit/ui/raven_null_backend_test.cpp
     unit/worldgen/archipelago_test.cpp
     unit/worldgen/clouds_test.cpp
     unit/worldgen/island_layout_test.cpp
@@ -77,6 +79,15 @@ target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT
 # The public header check (M4.2) reads the engine's headers.
 target_compile_definitions(lpe_unit_tests PRIVATE
     LPE_ENGINE_INCLUDE_DIRECTORY="${PROJECT_SOURCE_DIR}/engine/include"
+)
+# Raven (M5.1, ADR 0026) runs headless in tests/unit/ui/: its null backend and
+# host platform, no window system, GPU or SDL. The tests check the pin of
+# cmake/RavenDependency.cmake against Raven and against the vendored README.
+target_link_libraries(lpe_unit_tests PRIVATE raven)
+target_compile_definitions(lpe_unit_tests PRIVATE
+    LPE_RAVEN_VERSION="${LPE_RAVEN_VERSION}"
+    LPE_RAVEN_COMMIT="${LPE_RAVEN_COMMIT}"
+    LPE_RAVEN_SOURCE_DIRECTORY="${PROJECT_SOURCE_DIR}/third_party/raven"
 )
 lpe_set_project_warnings(lpe_unit_tests)
 catch_discover_tests(lpe_unit_tests)

@@ -7,6 +7,12 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# Vendored Raven keeps upstream's bytes exactly (third_party/raven/README.md),
+# whitespace included, so git diff --check does not report upstream's
+# whitespace there. The project's own README.md in that folder is checked.
+third_party/raven/** -whitespace
+third_party/raven/README.md !whitespace
+
 # Binary assets: never convert or diff as text.
 *.png  binary
 *.jpg  binary

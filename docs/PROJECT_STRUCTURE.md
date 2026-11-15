@@ -21,6 +21,7 @@ lowpoly-engine/
 ├── requirements-dev.txt      # pinned developer tools (Conan, clang-format, Ninja)
 ├── cmake/
 │   ├── CompilerWarnings.cmake
+│   ├── RavenDependency.cmake # Raven's build options and pin; adds third_party/raven/ (M5.1, ADR 0026)
 │   ├── ProjectOptions.cmake
 │   └── Dependencies.cmake
 ├── engine/
@@ -87,7 +88,8 @@ lowpoly-engine/
 │   │   ├── worldgen/
 │   │   ├── scene/
 │   │   ├── assets/
-│   │   └── scripting/
+│   │   ├── scripting/
+│   │   └── ui/               # headless Raven: null backend, host platform, injected input (M5.1)
 │   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp)
 │   └── rendering/            # Optional GPU-dependent tier
 ├── scripts/
@@ -102,6 +104,8 @@ lowpoly-engine/
 │       └── clean.bat
 ├── tools/                    # Offline asset/shader utilities, if needed
 ├── third_party/
+│   ├── raven/                # Raven 0.2.3, pruned vendored source with its licences; its README.md lists
+│   │                         # the kept and removed paths and the update procedure (M5.1, ADR 0026)
 │   └── licenses/
 ├── docs/
 │   ├── ENGINE_PLAN.md
