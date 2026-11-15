@@ -87,6 +87,7 @@ add_executable(lpe_integration_tests
     integration/input_events_test.cpp
     integration/platform_test.cpp
     integration/prefab_project_test.cpp
+    integration/scene_data_model_test.cpp
     integration/scene_document_test.cpp
     integration/script_scene_test.cpp
 )

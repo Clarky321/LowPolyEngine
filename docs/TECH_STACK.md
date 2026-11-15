@@ -56,6 +56,7 @@ Official/reference links:
 | spdlog | Logging | Candidate, not adopted. M1 routes all engine logs through `engine/core/Log.hpp` (levels, categories, `std::format`), which needs no dependency. Swap the implementation behind that header if sinks, files or async logging become necessary. |
 | GLAD 2 | OpenGL function loading | Adopt for OpenGL backend. Generate against the project's target API and pin generated source/metadata. |
 | EnTT | ECS | Adopted in M4.2 (`entt/4.0.0`, ADR 0021) as the private storage of `engine::scene::Scene`, included only in `engine/src/scene/Scene.cpp`. Persistent `EntityId`s (ADR 0020) stay separate from the transient EnTT entity handles, which never leave the scene implementation. |
+| nlohmann_json | JSON documents | Adopted in M3.11 (`nlohmann_json/3.12.0`, ADR 0004), private: included only through the internal `engine/src/core/JsonSupport.hpp` (M4.4), which the world settings file, the asset manifest (ADR 0022), scene documents (ADR 0023) and prefab documents (ADR 0025) share; no public header names it. |
 | Dear ImGui | Editor UI | Adopt for first editor prototype. Use official SDL3 + OpenGL/Vulkan backends where applicable. |
 | Catch2 v3 | Unit/integration testing | Adopt with CTest. Use one main test framework. |
 | Lua 5.5 | Embedded scripts | Adopted in M4.5 (`lua/5.5.0`, ADR 0024): static, compiled as C++ so Lua errors unwind C++ frames, private to `engine/src/scripting/lua/`, sandboxed, with an instruction budget and a memory limit. Upstream 5.5.1 (3 Aug 2026) is not in Conan Center yet. |

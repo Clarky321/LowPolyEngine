@@ -109,7 +109,7 @@ EntityId, SceneId and AssetId are distinct C++ types: one cannot be passed where
 | M4.4 | Scene documents as versioned JSON | done |
 | M4.5 | Lua runtime and script component | done |
 | M4.6 | Prefab model | done |
-| M4.7 | Integration, final verification and pull request | planned |
+| M4.7 | Integration, final verification and pull request | in progress |
 
 Status values: `planned`; `in progress` (set when work starts and committed with the change); `done` (set by a separate `docs(milestones): mark M4.x done (M4.x)` commit after the change is pushed and its CI is green, `docs/DEVELOPMENT_WORKFLOW.md` §4). `git log --grep "(M4.x)"` finds the commits.
 
@@ -402,7 +402,23 @@ Implemented tests: `tests/unit/scene/parent_component_test.cpp` (null parent, se
 - Screenshots: none, unless M4 ends with a visible demonstration; then in `docs/screenshots/m4/` with a README giving the exact commands. No UI is added for screenshots.
 - Pull request `M4: Scene document, ECS, asset registry and Lua scripting` from `milestone/m4-scene-data-model` to `main` with summary, architecture, sub-milestones, dependencies, tests, CI, screenshots if any, and known limitations; merged with a merge commit only after the user accepts M4.
 
+**Decisions taken while implementing:**
+- The end-to-end test is `tests/integration/scene_data_model_test.cpp`; it adds no engine code. Its project has a mesh (the committed lighthouse model), a material that is registered but has no file (material files are M6: "missing" is a state, not an error), two scripts and the prefab; the scene "Harbor — Nord" has nine entities, among them every component type, non-ASCII names, a rotation, a null material, a disabled script and a failing one.
+- The final document's bytes are compared with a golden FNV-1a fingerprint recorded on Windows, so CI checks on Linux that IDs, floats and text are written the same on both platforms. The rotation is a literal quaternion rather than one computed with `sin`/`cos`, whose results the C library does not fix.
+- Every integration test now draws its IDs from seeded generators (`UuidGenerator(seed)`) instead of `fromEntropy()`; only `tests/unit/core/uuid_test.cpp` uses entropy, to test it. A review found no other non-deterministic input: no test reads the clock for a result, no test checks an operating system's message text, tests run one at a time, and the Lua string hash seed is fixed.
+- `docs/TECH_STACK.md` had no row for nlohmann_json; it gained one. ADR 0004 Amendment 2 listed the document kinds of M4.4 only; a line now names prefab documents (M4.6). No screenshots: M4 ends without a visible demonstration.
+
+Implemented tests: `tests/integration/scene_data_model_test.cpp` (the steps of the scope in order: the project's assets registered and the manifest saved; the scene with every component type; the prefab made from three linked entities, saved and registered; a script component added afterwards; the scene saved and destroyed; the manifest and the scene loaded with the registry's checks, then every entity's ID, components, parent link and instance link compared with the saved ones, the document written again to the same bytes, every asset reference registered with its type, the mesh read by `geometry::readObj`, the material missing on disk; the scripts loaded through the registry: start prints the entity's name, four updates raise the lighthouse by 2 units, the failing script reports one error naming its file and `engine.setScale` and leaves its transform unchanged, the disabled one never loads; the prefab loaded through its asset ID, equal to the saved one, instantiated twice with distinct instance IDs and 15 distinct entity IDs; the scene saved and loaded again with every link and instance value, one instance moved and the other not; the golden fingerprint).
+
 **Acceptance criteria:** the scene, ECS, assets, serialization, Lua and prefab systems work within the scope of this plan, and every item of *Definition of done* below is checked.
+
+**Verification** (2026-11-15, Windows 11, MSVC 19.51 (VS 2026), NVIDIA GeForce RTX 4060, driver 610.88):
+- `clean.bat debug`, `clean.bat release` and `clean.bat all`, then `configure.bat` and `build.bat` for Debug and Release with `LPE_WARNINGS_AS_ERRORS=ON`: no warnings. Headless tier 466/466 (299 after M3) and GPU tier 76/76 in both configurations; `run.bat debug|release lpe_unit_tests` pass; island-preview runs 60 frames in Debug and Release without a warning or error; `format-check.bat`: 217 files clean; `git diff --check` clean. Every wrapper rejects a wrong configuration with its message and exit code 2, `test.bat` an unknown tier (2) and `run.bat` a target that was not built (1).
+- A fresh clone of the branch in a short folder next to the repository (`Z:\Desktop\vscode\lpe-fresh-m4`, with `.venv` from `requirements-dev.txt`, deleted afterwards), with this step's files copied in, builds in Debug with warnings as errors and passes both tiers (466/466, 76/76), so every file the build and the tests need is in the repository.
+- Exit criterion: `tests/integration/scene_data_model_test.cpp` saves, destroys and loads a scene with every component type, asset references and prefab instances without changing an ID or a value; a Lua script raises its entity, a failing script is reported and contained while the other runs on; the prefab is instantiated twice with new, unique IDs and its links inside each instance. The final document's golden fingerprint is the same in Debug and Release on Windows and is checked on Linux by CI.
+- Platform differences: IDs, floats and text in documents are checked byte for byte across platforms by the fingerprint and by the exact-layout tests of scenes, prefabs and the manifest; asset paths are ASCII with letter-case conflicts rejected on every platform; no test compares an operating system's message text; the Lua VM has a fixed hash seed and no locale-dependent output in documents.
+- Definition of done: items 1–19 are met (the steps M4.1–M4.6 and the checks above; ADRs 0020–0025 are accepted, ADRs 0001, 0004 and 0023 list their M4 amendments, ADR 0019 stays proposed as decided); item 20 waits for the user's acceptance and the merge of the pull request.
+- Not covered by checks: the GPU tier on Linux (no GPU runner in CI; M4 changed no rendering code); untrusted scripts and documents beyond the tested cases (no fuzzing).
 
 **Done when:** the checks above pass, the pull request is open and the user accepts M4.
 

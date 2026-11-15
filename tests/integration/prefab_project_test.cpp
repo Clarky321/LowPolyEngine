@@ -58,7 +58,7 @@ private:
 TEST_CASE("A registered prefab is instantiated twice into a loaded scene", "[integration][prefab]")
 {
     const TempProject project;
-    UuidGenerator generator = UuidGenerator::fromEntropy();
+    UuidGenerator generator(1);
     const AssetId lampId{generator.next()};
 
     // A lamp prefab made from a small scene: a post with a light on top.
@@ -100,7 +100,7 @@ TEST_CASE("A registered prefab is instantiated twice into a loaded scene", "[int
     REQUIRE(manifest);
     const AssetRegistry& registry = manifest.value().registry;
     const std::filesystem::path sceneFile = project.root() / "scenes" / "street.scene.json";
-    auto loadedScene = engine::scene::loadScene(sceneFile, UuidGenerator::fromEntropy(), &registry);
+    auto loadedScene = engine::scene::loadScene(sceneFile, UuidGenerator(2), &registry);
     REQUIRE(loadedScene);
     Scene street = std::move(loadedScene).value().scene;
 
@@ -120,7 +120,7 @@ TEST_CASE("A registered prefab is instantiated twice into a loaded scene", "[int
                       .has_value());
     REQUIRE_FALSE(engine::scene::saveScene(sceneFile, street).has_value());
 
-    auto reloaded = engine::scene::loadScene(sceneFile, UuidGenerator::fromEntropy(), &registry);
+    auto reloaded = engine::scene::loadScene(sceneFile, UuidGenerator(3), &registry);
     REQUIRE(reloaded);
     const Scene& result = reloaded.value().scene;
     CHECK(result.entityCount() == 5);

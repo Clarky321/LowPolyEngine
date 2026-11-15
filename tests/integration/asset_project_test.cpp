@@ -60,7 +60,7 @@ TEST_CASE("A moved project resolves the same asset IDs to the moved files", "[in
     std::filesystem::copy_file(source / "textures" / "lighthouse.png",
                                before / "textures" / "lighthouse.png");
 
-    engine::core::UuidGenerator generator = engine::core::UuidGenerator::fromEntropy();
+    engine::core::UuidGenerator generator(1);
     const AssetId mesh{generator.next()};
     const AssetId texture{generator.next()};
     const AssetId material{generator.next()};

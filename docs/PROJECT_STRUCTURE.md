@@ -86,8 +86,9 @@ lowpoly-engine/
 │   │   ├── core/
 │   │   ├── worldgen/
 │   │   ├── scene/
+│   │   ├── assets/
 │   │   └── scripting/
-│   ├── integration/
+│   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp)
 │   └── rendering/            # Optional GPU-dependent tier
 ├── scripts/
 │   ├── python/

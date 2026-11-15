@@ -95,7 +95,7 @@ TEST_CASE("Scripts of a saved scene run and their results are saved", "[integrat
     const TempProject project;
     project.write("scripts/mover.lua", kMover);
     project.write("scripts/grower.lua", kGrower);
-    UuidGenerator generator = UuidGenerator::fromEntropy();
+    UuidGenerator generator(1);
     const AssetId mover{generator.next()};
     const AssetId grower{generator.next()};
     {
@@ -137,7 +137,7 @@ TEST_CASE("Scripts of a saved scene run and their results are saved", "[integrat
         engine::assets::loadManifest(project.root() / "assets.json", project.root());
     REQUIRE(manifest);
     const AssetRegistry& registry = manifest.value().registry;
-    auto loaded = engine::scene::loadScene(file, UuidGenerator::fromEntropy(), &registry);
+    auto loaded = engine::scene::loadScene(file, UuidGenerator(2), &registry);
     REQUIRE(loaded);
     Scene scene = std::move(loaded).value().scene;
 
@@ -155,7 +155,7 @@ TEST_CASE("Scripts of a saved scene run and their results are saved", "[integrat
     CHECK(runtime.instance(cart)->status == ScriptStatus::Started);
 
     REQUIRE_FALSE(engine::scene::saveScene(file, scene).has_value());
-    auto reloaded = engine::scene::loadScene(file, UuidGenerator::fromEntropy(), &registry);
+    auto reloaded = engine::scene::loadScene(file, UuidGenerator(3), &registry);
     REQUIRE(reloaded);
     const Scene& result = reloaded.value().scene;
     CHECK(result.component<TransformComponent>(cart).value().position == Vec3{14.0F, 0.0F, -2.0F});

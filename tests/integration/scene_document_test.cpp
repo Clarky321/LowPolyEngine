@@ -93,7 +93,7 @@ TEST_CASE("A scene with asset references survives save, destruction and load",
     std::filesystem::copy_file(std::filesystem::path(LPE_ASSET_DIRECTORY) / "models" /
                                    "lighthouse.obj",
                                project.root() / "models" / "lighthouse.obj");
-    UuidGenerator generator = UuidGenerator::fromEntropy();
+    UuidGenerator generator(1);
     const AssetId mesh{generator.next()};
     const AssetId material{generator.next()};
     {
@@ -136,7 +136,7 @@ TEST_CASE("A scene with asset references survives save, destruction and load",
         engine::assets::loadManifest(project.root() / "assets.json", project.root());
     REQUIRE(manifest);
     const AssetRegistry& registry = manifest.value().registry;
-    auto loaded = engine::scene::loadScene(file, UuidGenerator::fromEntropy(), &registry);
+    auto loaded = engine::scene::loadScene(file, UuidGenerator(2), &registry);
     REQUIRE(loaded);
     const Scene& scene = loaded.value().scene;
     CHECK(scene.name() == "Island");
@@ -150,7 +150,7 @@ TEST_CASE("A scene with asset references survives save, destruction and load",
 
     // Another project's registry does not know the assets: loading fails.
     const AssetRegistry other(project.root());
-    const auto unknown = engine::scene::loadScene(file, UuidGenerator::fromEntropy(), &other);
+    const auto unknown = engine::scene::loadScene(file, UuidGenerator(3), &other);
     REQUIRE_FALSE(unknown);
     CHECK(unknown.error().message.find("not registered") != std::string::npos);
 }
