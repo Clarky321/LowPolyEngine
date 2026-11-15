@@ -1,8 +1,8 @@
 # Raven final validation (before M5)
 
-- **Status:** done (2026-11-15). **Decision: APPROVED** (see *Final decision*).
+- **Status:** done (2026-11-15). **Decision: APPROVED** (see *Final decision*), accepted by the user on 2026-11-15; ADR 0019 is accepted.
 - **Branch:** `experiment/raven-final-validation`, created from `main` at the M4 merge `1425c2c`, with the prototype of `experiment/raven-ui-evaluation` merged in (`7166a16`). Nothing here is merged into `main`; M5 has not started.
-- **Follows:** `docs/experiments/raven-ui-evaluation.md` (conditional pass on Windows, 2026-11-14) and ADR 0019 (proposed). ADR 0019 stays proposed: accepting it is the user's decision.
+- **Follows:** `docs/experiments/raven-ui-evaluation.md` (conditional pass on Windows, 2026-11-14) and ADR 0019 (proposed). The user accepted the result and ADR 0019 on 2026-11-15.
 - **Prototype and tools:** `sandbox/raven-evaluation/` (how to build: its `README.md`), `sandbox/raven-evaluation/input_driver.py` (real OS input), `.github/workflows/raven-validation.yml` (Linux). Screenshots: `docs/experiments/raven-final-validation/`.
 
 ## 1. Goal
@@ -219,4 +219,4 @@ The interface still costs about 0.1 ms per frame on top of the world. The Linux 
 2. **Keep the four fixes.** The engine's integration in `engine/src/platform/sdl3/` and `engine/src/render/opengl/` takes them over: held input released on focus loss, one close request for SDL's close and quit, no handle use after an accepted close, the clear colour restored. It also takes the wider state comparison, and the real-input driver as a check.
 3. **IME positioning:** `Rwindow_get_text_input_rect` → `SDL_SetTextInputArea`. ADR 0019 condition 4 changes accordingly.
 4. **The other conditions of ADR 0019 remain:** pinned vendored source with its notices (2), an unstable 0.x API behind the editor's own panel code (3), panels floating inside the window only (4), and live reload, search-path loading and the HTTP image loader reviewed (5).
-5. **ADR 0019 stays proposed.** Changing it to accepted is the user's decision; this validation does not change it.
+5. **ADR 0019 accepted.** It was proposed when this validation ended; the user accepted the result and the ADR on 2026-11-15 (ADR 0019, *Acceptance*).
