@@ -10,15 +10,15 @@ namespace editor {
 
 namespace {
 
+// The whole text as a number. A plain value and a flag rather than
+// std::optional: GCC 13 at -O3 reports a false "may be used uninitialized" for
+// an optional<int> here.
 template <typename T>
-std::optional<T> parseNumber(std::string_view text)
+bool parseNumber(std::string_view text, T& value)
 {
-    T value{};
+    value = T{};
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-    if (text.empty() || error != std::errc{} || end != text.data() + text.size()) {
-        return std::nullopt;
-    }
-    return value;
+    return !text.empty() && error == std::errc{} && end == text.data() + text.size();
 }
 
 engine::core::Error invalid(std::string_view option, std::string_view value,
@@ -45,8 +45,8 @@ engine::core::Result<EditorOptions> parseEditorOptions(std::span<const std::stri
         }
         const std::string_view value = arguments[++i];
         if (argument == "--frames") {
-            const auto frames = parseNumber<std::uint64_t>(value);
-            if (!frames || *frames == 0) {
+            std::uint64_t frames = 0;
+            if (!parseNumber(value, frames) || frames == 0) {
                 return invalid(argument, value, "a number of frames of at least 1");
             }
             options.maxFrames = frames;
@@ -57,19 +57,18 @@ engine::core::Result<EditorOptions> parseEditorOptions(std::span<const std::stri
             options.screenshotPath = std::filesystem::path(value);
         } else {
             const std::size_t separator = value.find('x');
-            const auto width = parseNumber<int>(value.substr(0, separator));
-            const auto height = separator == std::string_view::npos
-                                    ? std::optional<int>{}
-                                    : parseNumber<int>(value.substr(separator + 1));
-            const std::string range = "WIDTHxHEIGHT, each from 1 to " +
-                                      std::to_string(engine::platform::kMaxWindowExtent);
-            if (!width || !height || *width < 1 || *height < 1 ||
-                *width > engine::platform::kMaxWindowExtent ||
-                *height > engine::platform::kMaxWindowExtent) {
-                return invalid(argument, value, range);
+            int width = 0;
+            int height = 0;
+            const bool parsed = separator != std::string_view::npos &&
+                                parseNumber(value.substr(0, separator), width) &&
+                                parseNumber(value.substr(separator + 1), height);
+            constexpr int kMax = engine::platform::kMaxWindowExtent;
+            if (!parsed || width < 1 || height < 1 || width > kMax || height > kMax) {
+                return invalid(argument, value,
+                               "WIDTHxHEIGHT, each from 1 to " + std::to_string(kMax));
             }
-            options.width = *width;
-            options.height = *height;
+            options.width = width;
+            options.height = height;
         }
     }
     if (options.screenshotPath && !options.maxFrames) {

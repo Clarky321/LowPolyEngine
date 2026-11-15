@@ -79,9 +79,11 @@ set_tests_properties(island_preview_island_not_for_test_scene PROPERTIES
 # named; the options belong to the archipelago.
 lpe_add_gpu_test(island_preview_settings_file
     island-preview --settings assets/worlds/default.json --frames 5)
+# (Its warnings are those of the settings file, the layout and the clouds; a
+# warning about the platform, such as no vsync under Xvfb on Linux, is not.)
 set_tests_properties(island_preview_settings_file PROPERTIES
     PASS_REGULAR_EXPRESSION "archipelago: seed 1, 12 of 12 islands"
-    FAIL_REGULAR_EXPRESSION "\\[error\\]|\\[warning\\]")
+    FAIL_REGULAR_EXPRESSION "\\[error\\]|\\[warning\\] \\[app\\] (world settings|archipelago|clouds)")
 lpe_add_gpu_test(island_preview_save_settings
     island-preview --save-settings "${gpu_output}/saved-settings.json" --frames 1)
 set_tests_properties(island_preview_save_settings PROPERTIES
@@ -194,14 +196,16 @@ set_tests_properties(island_preview_missing_model PROPERTIES
 # lpe-editor (M5.2, ADR 0027): the editor shell on Raven runs its frames and
 # exits with 0 (no OpenGL error, no OpenGL state left changed, no Raven error,
 # no Raven memory after shutdown; the exit code says which failed), without an
-# error or a warning in the log.
+# error, and without a warning of Raven, the UI or the editor (a warning about
+# the platform, such as no vsync under Xvfb on Linux, is not the editor's).
+set(lpe_editor_problems "\\[error\\]|\\[warning\\] \\[(raven|ui|editor)\\]")
 lpe_add_gpu_test(lpe_editor_smoke lpe-editor --frames 60)
 set_tests_properties(lpe_editor_smoke PROPERTIES
-    FAIL_REGULAR_EXPRESSION "\\[error\\]|\\[warning\\]")
+    FAIL_REGULAR_EXPRESSION "${lpe_editor_problems}")
 
 # --screenshot saves the frame made by the editor itself, at the --size given.
 lpe_add_gpu_test(lpe_editor_screenshot
     lpe-editor --frames 10 --size 1024x640 --screenshot "${gpu_output}/lpe-editor.png")
 set_tests_properties(lpe_editor_screenshot PROPERTIES
     PASS_REGULAR_EXPRESSION "saved screenshot '[^']*lpe-editor\\.png' \\(1024x640\\)"
-    FAIL_REGULAR_EXPRESSION "\\[error\\]|\\[warning\\]")
+    FAIL_REGULAR_EXPRESSION "${lpe_editor_problems}")
