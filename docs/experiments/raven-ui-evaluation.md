@@ -1,6 +1,7 @@
 # Raven UI evaluation
 
 - **Status:** done on Windows (2026-11-14). **Conclusion: CONDITIONAL PASS** (see *Conclusion*). Linux was not run.
+- **Followed by:** the final validation before M5 (2026-11-15, `docs/experiments/raven-final-validation.md`): Linux, a display scaled to 150 %, real OS input, the clipboard, focus loss, Dear ImGui alongside, and four fixes to the prototype.
 - **Purpose:** decide whether Raven can be the UI framework of the M5 editor instead of Dear ImGui (`docs/TECH_STACK.md` §5, `docs/ENGINE_PLAN.md` §9). Dear ImGui stays the working debug UI (ADR 0018) whatever the result, until a separate, accepted migration.
 - **Not part of M4:** no M4 step depends on it, it is not an M4 exit criterion, and it changed no Scene, ECS, Assets or Scripting code (`docs/milestones/m4-scene-data-model.md`). The decision it prepares is ADR 0019 (proposed).
 - **Prototype:** `sandbox/raven-evaluation/` on the branch `experiment/raven-ui-evaluation` (created from `milestone/m4-scene-data-model` at the M4 plan commit `12ba63e`); how to build and run it: its `README.md`. Screenshots: `docs/experiments/raven-ui-evaluation/`.
