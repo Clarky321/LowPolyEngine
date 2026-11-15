@@ -1,5 +1,6 @@
 #include "SdlRavenHost.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -333,18 +334,29 @@ bool SdlRavenHost::handleEvent(const SDL_Event& event)
     };
     switch (event.type) {
     case SDL_EVENT_MOUSE_MOTION:
-        Rhost_inject_mouse_move(ravenWindow_, pixel(event.motion.x), pixel(event.motion.y),
+        mouseX_ = pixel(event.motion.x);
+        mouseY_ = pixel(event.motion.y);
+        Rhost_inject_mouse_move(ravenWindow_, mouseX_, mouseY_,
                                 toRavenModifiers(SDL_GetModState()));
         ++stats_.mouseMoves;
         return true;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-        Rhost_inject_mouse_button(ravenWindow_, pixel(event.button.x), pixel(event.button.y),
-                                  toRavenButton(event.button.button),
-                                  event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? R_TRUE : R_FALSE,
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
+        const RMouseButton button = toRavenButton(event.button.button);
+        const bool down = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+        mouseX_ = pixel(event.button.x);
+        mouseY_ = pixel(event.button.y);
+        const auto held = std::find(heldButtons_.begin(), heldButtons_.end(), button);
+        if (down && held == heldButtons_.end()) {
+            heldButtons_.push_back(button);
+        } else if (!down && held != heldButtons_.end()) {
+            heldButtons_.erase(held);
+        }
+        Rhost_inject_mouse_button(ravenWindow_, mouseX_, mouseY_, button, down ? R_TRUE : R_FALSE,
                                   toRavenModifiers(SDL_GetModState()));
         ++stats_.mouseButtons;
         return true;
+    }
     case SDL_EVENT_MOUSE_WHEEL: {
         // SDL: +y away from the user, +x to the right; Raven: positive = up / left.
         const float flip = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
@@ -359,7 +371,14 @@ bool SdlRavenHost::handleEvent(const SDL_Event& event)
         if (key == R_KEY_UNKNOWN) {
             return false;
         }
-        Rhost_inject_key(ravenWindow_, key, event.type == SDL_EVENT_KEY_DOWN ? R_TRUE : R_FALSE,
+        const bool down = event.type == SDL_EVENT_KEY_DOWN;
+        const auto held = std::find(heldKeys_.begin(), heldKeys_.end(), key);
+        if (down && held == heldKeys_.end()) {
+            heldKeys_.push_back(key);
+        } else if (!down && held != heldKeys_.end()) {
+            heldKeys_.erase(held);
+        }
+        Rhost_inject_key(ravenWindow_, key, down ? R_TRUE : R_FALSE,
                          toRavenModifiers(event.key.mod), event.key.repeat ? R_TRUE : R_FALSE);
         ++stats_.keys;
         return true;
@@ -374,9 +393,16 @@ bool SdlRavenHost::handleEvent(const SDL_Event& event)
         }
         return true;
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        Rhost_inject_focus(ravenWindow_, R_TRUE);
+        ++stats_.focusChanges;
+        return true;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
-        Rhost_inject_focus(ravenWindow_,
-                           event.type == SDL_EVENT_WINDOW_FOCUS_GAINED ? R_TRUE : R_FALSE);
+        // The releases of keys and buttons held now go to whichever window
+        // has the focus, so Raven (and the widget that has its keyboard)
+        // would keep them down; release them here, while the widget still
+        // has the focus, then tell Raven the window lost it.
+        releaseHeldInput();
+        Rhost_inject_focus(ravenWindow_, R_FALSE);
         ++stats_.focusChanges;
         return true;
     case SDL_EVENT_WINDOW_MOUSE_LEAVE:
@@ -395,6 +421,28 @@ bool SdlRavenHost::handleEvent(const SDL_Event& event)
     default:
         return false;
     }
+}
+
+void SdlRavenHost::releaseHeldInput()
+{
+    // Modifiers are released last, so the other keys' releases carry none.
+    const auto isModifier = [](RKey key) {
+        return key == R_KEY_LEFT_SHIFT || key == R_KEY_RIGHT_SHIFT || key == R_KEY_LEFT_CTRL ||
+               key == R_KEY_RIGHT_CTRL || key == R_KEY_LEFT_ALT || key == R_KEY_RIGHT_ALT ||
+               key == R_KEY_LEFT_SUPER || key == R_KEY_RIGHT_SUPER;
+    };
+    std::stable_partition(heldKeys_.begin(), heldKeys_.end(),
+                          [&isModifier](RKey key) { return !isModifier(key); });
+    for (const RKey key : heldKeys_) {
+        Rhost_inject_key(ravenWindow_, key, R_FALSE, 0, R_FALSE);
+        ++stats_.releasedKeys;
+    }
+    heldKeys_.clear();
+    for (const RMouseButton button : heldButtons_) {
+        Rhost_inject_mouse_button(ravenWindow_, mouseX_, mouseY_, button, R_FALSE, 0);
+        ++stats_.releasedButtons;
+    }
+    heldButtons_.clear();
 }
 
 HostStats SdlRavenHost::stats() const noexcept

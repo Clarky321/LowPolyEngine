@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 #include <raven/raven_host.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -38,6 +39,12 @@ struct HostStats {
     std::uint64_t clipboardWrites = 0;
     std::uint64_t clipboardReads = 0;
     std::uint64_t wakeUps = 0;
+    // Key-ups and button-ups the host sent itself when the window lost the
+    // keyboard focus with keys or buttons still held (Raven does not release
+    // them on Rhost_inject_focus(false), and the OS sends their releases to
+    // the window that has the focus then).
+    std::uint64_t releasedKeys = 0;
+    std::uint64_t releasedButtons = 0;
 };
 
 class SdlRavenHost {
@@ -65,7 +72,13 @@ public:
 
     [[nodiscard]] HostStats stats() const noexcept;
 
+    // Keys and mouse buttons Raven was told are down and not yet up.
+    [[nodiscard]] std::size_t heldKeys() const noexcept { return heldKeys_.size(); }
+    [[nodiscard]] std::size_t heldButtons() const noexcept { return heldButtons_.size(); }
+
 private:
+    // Sends Raven the releases of everything still held (before focus loss).
+    void releaseHeldInput();
     static void setCursor(Rid window, RCursor cursor, void* user);
     static void setClipboard(const char* text, void* user);
     static const char* clipboard(void* user);
@@ -80,6 +93,11 @@ private:
     float scale_ = 1.0F;
     std::vector<SDL_Cursor*> cursors_;
     std::string clipboard_;
+    std::vector<RKey> heldKeys_;
+    std::vector<RMouseButton> heldButtons_;
+    // The last mouse position given to Raven, in pixels.
+    int mouseX_ = 0;
+    int mouseY_ = 0;
     HostStats stats_;
 };
 

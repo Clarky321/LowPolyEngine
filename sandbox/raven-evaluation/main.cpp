@@ -648,14 +648,9 @@ private:
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
-                // Raven drops captures but sends the focused widget no key-up
-                // or focus event when the window loses the keyboard, so keys
-                // held for the camera are released here.
-                keys_ = Keys{};
-                looking_ = false;
-                ++windowFocusResets_;
-            }
+            // Keys and buttons held when the window loses the focus are
+            // released by the host (SdlRavenHost), which gives Raven their
+            // key-ups; the camera then hears them through the viewport.
             (void)host_->handleEvent(event);
         }
         updateCamera(static_cast<float>(delta));
@@ -1254,19 +1249,25 @@ private:
                               detail = std::format("moved {:.2f} m", moved);
                               return moved > 0.5F;
                           }});
-        steps_.push_back({"losing window focus: what Raven tells the focused viewport", 3,
+        steps_.push_back({"losing window focus: the host releases the held W", 3,
                           [this] {
                               before_.focusLosses = viewportFocusLosses_;
+                              before_.releasedKeys = host_->stats().releasedKeys;
+                              // Only the focus loss, without the key-up SDL
+                              // sends on a real one: the host must release W.
                               pushWindowEvent(SDL_EVENT_WINDOW_FOCUS_LOST);
                           },
                           [this](std::string& detail) {
                               before_.position = camera_.position;
-                              detail = std::format("R_EVENT_FOCUS_LOST reached the viewport's "
-                                                   "event callback {} times; the host cleared "
-                                                   "the held keys {} times",
+                              const auto released =
+                                  host_->stats().releasedKeys - before_.releasedKeys;
+                              detail = std::format("the host released {} held keys, the "
+                                                   "viewport's W is {}, R_EVENT_FOCUS_LOST "
+                                                   "reached it {} times, {} keys still held",
+                                                   released, keys_.w ? "down" : "up",
                                                    viewportFocusLosses_ - before_.focusLosses,
-                                                   windowFocusResets_);
-                              return windowFocusResets_ > 0;
+                                                   host_->heldKeys());
+                              return released == 1 && !keys_.w && host_->heldKeys() == 0;
                           }});
         steps_.push_back({"... and the camera then stays still", 6, [] {},
                           [this](std::string& detail) {
@@ -1676,7 +1677,6 @@ private:
     std::uint64_t viewportEvents_ = 0;
     std::uint64_t viewportResizes_ = 0;
     std::uint64_t viewportFocusLosses_ = 0;
-    std::uint64_t windowFocusResets_ = 0;
     std::uint64_t treeSelections_ = 0;
     std::uint64_t dockChanges_ = 0;
     std::string dockLayoutBefore_;
@@ -1688,6 +1688,7 @@ private:
         std::uint64_t seed = 0;
         std::uint64_t selections = 0;
         std::uint64_t focusLosses = 0;
+        std::uint64_t releasedKeys = 0;
         std::uint64_t dockChanges = 0;
         std::uint64_t regenerations = 0;
         std::uint64_t resizes = 0;
