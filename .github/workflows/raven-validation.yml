@@ -41,6 +41,10 @@ jobs:
       PRESET: linux-gcc-${{ matrix.config }}
       BUILD: build/raven-eval-${{ matrix.config }}
       LOGS: raven-logs
+    # "shell: bash" runs with -o pipefail: a failure before "| tee" counts.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -110,16 +114,32 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           python sandbox/raven-evaluation/input_driver.py "$BUILD/bin/raven-evaluation" --with-imgui \
-            --screenshot "$LOGS/x11-100.png" --log "$LOGS/input-100.log" | tee "$LOGS/input-100-summary.txt"
+            --expect-scale 1.0 --screenshot "$LOGS/x11-100.png" --log "$LOGS/input-100.log" \
+            | tee "$LOGS/input-100-summary.txt"
 
-      - name: Real input at 150 % (Xft.dpi 144)
+      # How a Linux desktop tells programs its scale: Xft.dpi in the X
+      # resources (GNOME, KDE, xrdb). Whether SDL takes it is recorded; if it
+      # does not, SDL's own setting forces 150 % so that the rest of the
+      # chain (SDL -> host -> Raven -> pixels) is still checked at 150 %.
+      - name: Real input at 150 %
         timeout-minutes: 10
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
+          exe="$BUILD/bin/raven-evaluation"
           echo "Xft.dpi: 144" | xrdb -merge
-          "$BUILD/bin/raven-evaluation" --self-test 2>&1 | tee "$LOGS/self-test-150.log"
+          { echo "xrdb -query:"; xrdb -query; echo "root RESOURCE_MANAGER:"; xprop -root RESOURCE_MANAGER; } \
+            | tee "$LOGS/xrdb.txt"
+          "$exe" --frames 3 2>&1 | tee "$LOGS/xft-dpi-only.log"
+          if grep -q "scale 1.50" "$LOGS/xft-dpi-only.log"; then
+            echo "SDL takes the display scale from Xft.dpi" | tee "$LOGS/scale-source.txt"
+          else
+            echo "SDL did not take Xft.dpi here; SDL_VIDEO_X11_SCALING_FACTOR=1.5 forces 150 %" \
+              | tee "$LOGS/scale-source.txt"
+            export SDL_VIDEO_X11_SCALING_FACTOR=1.5
+          fi
+          "$exe" --self-test 2>&1 | tee "$LOGS/self-test-150.log"
           grep -q "^\[summary\] PASS" "$LOGS/self-test-150.log"
-          python sandbox/raven-evaluation/input_driver.py "$BUILD/bin/raven-evaluation" --with-imgui \
+          python sandbox/raven-evaluation/input_driver.py "$exe" --with-imgui --expect-scale 1.5 \
             --screenshot "$LOGS/x11-150.png" --log "$LOGS/input-150.log" | tee "$LOGS/input-150-summary.txt"
 
       - name: Keep the logs
