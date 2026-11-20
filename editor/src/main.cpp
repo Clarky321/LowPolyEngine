@@ -1,10 +1,15 @@
 // lpe-editor (M5): the LowPolyEngine editor on Raven (ADR 0019, ADR 0027).
-// M5.2: the empty shell (toolbar, viewport, hierarchy, inspector, console).
+// M5.2: the shell (toolbar, viewport, hierarchy, inspector, console); M5.3:
+// the generated world in the viewport with a free-fly camera.
 //
 //   lpe-editor [--frames N] [--screenshot FILE.png] [--size WIDTHxHEIGHT]
 //
 // Run it from the repository root: the renderer reads its shaders from
 // assets/shaders. Without --frames the window stays open until it is closed.
+//
+// In the viewport (click it to give it the keyboard; it has it at the start):
+// hold the right mouse button to look around, W/A/S/D to fly, E up, Q down,
+// Shift faster, the mouse wheel changes the speed.
 
 #include "application/EditorOptions.hpp"
 #include "application/EditorShell.hpp"

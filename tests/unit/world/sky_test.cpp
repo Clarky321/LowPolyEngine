@@ -1,5 +1,6 @@
-// The sky of island-preview: gradient data and the dome mesh (M3.8).
-#include "Sky.hpp"
+// The sky of the floating world: gradient data and the dome mesh (M3.8; moved
+// with the sky from island-preview to engine/world in M5.3).
+#include "engine/world/Sky.hpp"
 
 #include <glm/geometric.hpp>
 
@@ -9,10 +10,10 @@
 #include <cstddef>
 
 using engine::math::Vec3;
-using island_preview::buildSkyDome;
-using island_preview::floatingWorldSky;
-using island_preview::skyColor;
-using island_preview::SkyGradient;
+using engine::world::buildSkyDome;
+using engine::world::floatingWorldSky;
+using engine::world::skyColor;
+using engine::world::SkyGradient;
 
 namespace {
 
@@ -23,7 +24,7 @@ bool near(const Vec3& a, const Vec3& b)
 
 } // namespace
 
-TEST_CASE("Sky colours follow the gradient stops", "[sandbox][sky]")
+TEST_CASE("Sky colours follow the gradient stops", "[world][sky]")
 {
     const SkyGradient sky = floatingWorldSky();
     REQUIRE(sky.stops.size() >= 2U);
@@ -46,7 +47,7 @@ TEST_CASE("Sky colours follow the gradient stops", "[sandbox][sky]")
     CHECK(near(skyColor(SkyGradient{}, 0.3F), Vec3{0.0F}));
 }
 
-TEST_CASE("The sky dome surrounds the camera and faces inward", "[sandbox][sky]")
+TEST_CASE("The sky dome surrounds the camera and faces inward", "[world][sky]")
 {
     const SkyGradient sky = floatingWorldSky();
     constexpr int bands = 16;

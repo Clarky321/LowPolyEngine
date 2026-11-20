@@ -1,9 +1,11 @@
 #pragma once
 
-// island-preview's generated world on the GPU (M3.12): one mesh per island,
+// The generated world on the GPU (M3.12; moved from island-preview in M5.3,
+// where island-preview and the editor's viewport use it): one mesh per island,
 // per island's water and per cloud cluster, and the two materials they are
 // drawn with. Uploading a new world first releases everything the previous one
-// held, so regenerating keeps the renderer's resource counts level.
+// held, so regenerating keeps the renderer's resource counts level. The world
+// is drawn with the renderer's API only; it never stores the renderer.
 
 #include "engine/core/Math.hpp"
 #include "engine/core/Result.hpp"
@@ -16,7 +18,7 @@
 #include <optional>
 #include <vector>
 
-namespace island_preview {
+namespace engine::world {
 
 class WorldScene {
 public:
@@ -77,4 +79,4 @@ private:
     std::vector<std::size_t> waterOrder_;
 };
 
-} // namespace island_preview
+} // namespace engine::world

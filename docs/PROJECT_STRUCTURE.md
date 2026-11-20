@@ -37,7 +37,8 @@ lowpoly-engine/
 │   │   ├── scripting/        # Script runtime facade; ScriptRuntime (M4.5, ADR 0024), no Lua types
 │   │   ├── camera/           # Camera and camera-controller types
 │   │   ├── debug/            # On-screen diagnostics (pixel-font text, M1) and the Dear ImGui debug UI (DebugUi, M3.12, ADR 0018)
-│   │   └── ui/               # Ui.hpp: the Raven UI an application turns on (ApplicationDesc::ui), no Raven/SDL/OpenGL type (M5.2, ADR 0027)
+│   │   ├── ui/               # Ui.hpp: the Raven UI an application turns on (ApplicationDesc::ui), no Raven/SDL/OpenGL type (M5.2, ADR 0027)
+│   │   └── world/            # The generated world on the GPU (WorldScene), the sky dome (Sky), its sunlight and overview camera (WorldView), moved from island-preview for it and the editor (M5.3)
 │   └── src/
 │       ├── app/
 │       ├── core/
@@ -57,19 +58,20 @@ lowpoly-engine/
 │       │   └── clouds/
 │       ├── scripting/lua/
 │       ├── ui/               # RavenUi: the one owner of Raven's state (Rinit/Rshutdown, frame, checks), RavenHost interface (M5.2, ADR 0027)
+│       ├── world/            # WorldScene, Sky, WorldView (M5.3)
 │       └── camera/
 ├── editor/                   # lpe-editor on Raven (M5; ADR 0019, ADR 0027); "planned" folders come with later steps
 │   ├── CMakeLists.txt        # library `editor` (the editor's code, also linked by tests) and program `lpe-editor`
-│   ├── layouts/              # Raven XML, embedded at build time: shell.xml, the empty shell (M5.2)
+│   ├── layouts/              # Raven XML, embedded at build time: shell.xml, the shell (M5.2)
 │   ├── include/editor/       # planned: document/, commands/, selection/ (M5.5), panels/ (M5.7–M5.11)
 │   └── src/
 │       ├── main.cpp          # lpe-editor's entry point: --frames, --screenshot, --size (M5.2)
 │       ├── application/      # EditorShell (the shell application), EditorOptions, ShellLayout (M5.2)
-│       ├── viewport/         # planned (M5.3)
+│       ├── viewport/         # WorldViewport: the generated world drawn from the viewport's draw callback; ViewportInput: the editor camera's input (M5.3)
 │       ├── panels/           # planned (M5.7–M5.10)
 │       └── project/          # planned (M5.11)
 ├── sandbox/
-│   └── island-preview/       # First end-to-end executable/sample: the archipelago (WorldScene) with the WorldGen panel (WorldGenPanel, WorldGenPanelUi) or the M1/M2 test scene
+│   └── island-preview/       # First end-to-end executable/sample: the archipelago (engine/world's WorldScene and sky) with the WorldGen panel (WorldGenPanel, WorldGenPanelUi) or the M1/M2 test scene
 ├── assets/
 │   ├── shaders/
 │   ├── materials/
@@ -85,8 +87,9 @@ lowpoly-engine/
 │   │   ├── scene/
 │   │   ├── assets/
 │   │   ├── scripting/
-│   │   ├── editor/           # lpe-editor's options (M5.2)
-│   │   └── ui/               # headless Raven: null backend, host platform, injected input (M5.1); the shell layout at several scales (M5.2)
+│   │   ├── editor/           # lpe-editor's options (M5.2); the viewport camera's input with Raven's null backend (M5.3)
+│   │   ├── ui/               # headless Raven: null backend, host platform, injected input (M5.1); the shell layout at several scales (M5.2)
+│   │   └── world/            # the sky and how the world is looked at (M5.3; the sky's tests moved from unit/sandbox/)
 │   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp), the Raven host bridge and UI lifetime on SDL's dummy driver (raven_ui_test.cpp, M5.2)
 │   └── rendering/            # Optional GPU-dependent tier
 ├── scripts/

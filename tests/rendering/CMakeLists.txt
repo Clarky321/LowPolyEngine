@@ -7,22 +7,23 @@ set(fixtures "${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
 
 # Engine-level GPU tests (Catch2): application loop, renderer, frame capture,
-# and island-preview's world on the GPU with the debug UI (M3.12).
+# and the generated world on the GPU (engine/world, M3.12, M5.3) with the debug UI.
 add_executable(lpe_gpu_tests
     application_gpu_test.cpp
     editor_gpu_test.cpp
+    editor_viewport_gpu_test.cpp
     renderer_gpu_test.cpp
     texture_gpu_test.cpp
     world_scene_gpu_test.cpp
-    ${PROJECT_SOURCE_DIR}/sandbox/island-preview/WorldScene.cpp
 )
-target_include_directories(lpe_gpu_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
 # glad: the texture tests inspect OpenGL objects directly (handles, row order,
 # sampling state). The renderer loads the function pointers.
 target_link_libraries(lpe_gpu_tests PRIVATE engine glad Catch2::Catch2WithMain)
-# The editor shell on Raven (M5.2): the editor's code, Raven's API, and the
-# engine's OpenGL state comparison (engine/src/render/opengl/GlRavenBackend.hpp).
-target_link_libraries(lpe_gpu_tests PRIVATE editor raven)
+# The editor on Raven (M5.2, M5.3): the editor's code, Raven's API, the
+# engine's OpenGL state comparison (engine/src/render/opengl/GlRavenBackend.hpp)
+# and the native window, which the viewport test resizes.
+find_package(SDL3 REQUIRED CONFIG)
+target_link_libraries(lpe_gpu_tests PRIVATE editor raven SDL3::SDL3)
 target_include_directories(lpe_gpu_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 lpe_set_project_warnings(lpe_gpu_tests)
 catch_discover_tests(lpe_gpu_tests
@@ -201,6 +202,12 @@ set_tests_properties(island_preview_missing_model PROPERTIES
 set(lpe_editor_problems "\\[error\\]|\\[warning\\] \\[(raven|ui|editor)\\]")
 lpe_add_gpu_test(lpe_editor_smoke lpe-editor --frames 60)
 set_tests_properties(lpe_editor_smoke PROPERTIES
+    FAIL_REGULAR_EXPRESSION "${lpe_editor_problems}")
+
+# The viewport shows the archipelago of the default world settings (M5.3).
+lpe_add_gpu_test(lpe_editor_world_log lpe-editor --frames 5)
+set_tests_properties(lpe_editor_world_log PROPERTIES
+    PASS_REGULAR_EXPRESSION "viewport: archipelago of seed 1, 12 of 12 islands"
     FAIL_REGULAR_EXPRESSION "${lpe_editor_problems}")
 
 # --screenshot saves the frame made by the editor itself, at the --size given.

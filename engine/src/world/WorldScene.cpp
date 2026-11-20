@@ -1,4 +1,4 @@
-#include "WorldScene.hpp"
+#include "engine/world/WorldScene.hpp"
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace island_preview {
+namespace engine::world {
 
 namespace {
 
@@ -150,4 +150,4 @@ void WorldScene::drawWater(engine::render::Renderer& renderer, const engine::mat
     }
 }
 
-} // namespace island_preview
+} // namespace engine::world

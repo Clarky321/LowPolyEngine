@@ -1,9 +1,12 @@
 // GPU tier (M5.2, ADR 0027): Raven hosted by the engine on a real window and
 // OpenGL context: the editor shell drawn and checked by its pixels, repeated
 // runs, the OpenGL state comparison itself, Dear ImGui's renderer against the
-// same comparison, and an application without the UI.
+// same comparison, and an application without the UI. The world in the
+// viewport (M5.3) has its own tests in editor_viewport_gpu_test.cpp.
 // Runs from the repository root (tests/rendering/CMakeLists.txt): the renderer
 // reads assets/shaders.
+
+#include "EditorPixels.hpp"
 
 #include "application/EditorShell.hpp"
 #include "application/ShellLayout.hpp"
@@ -26,7 +29,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -35,6 +37,11 @@
 
 using engine::render::opengl::GlStateGroups;
 using engine::render::opengl::sameGlStateAround;
+using lpe_gpu_test::centerOf;
+using lpe_gpu_test::luminance;
+using lpe_gpu_test::near;
+using lpe_gpu_test::pixelAt;
+using lpe_gpu_test::Rgb;
 
 namespace {
 
@@ -42,44 +49,9 @@ namespace {
 // means Raven did not cover the window.
 constexpr engine::render::Color kMagenta{1.0F, 0.0F, 1.0F, 1.0F};
 
-struct Rgb {
-    int r = 0;
-    int g = 0;
-    int b = 0;
-};
-
-Rgb pixelAt(const engine::core::Image& image, int x, int y)
-{
-    const int channels = engine::core::channelCount(image.format);
-    const std::size_t at = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
-                            static_cast<std::size_t>(x)) *
-                           static_cast<std::size_t>(channels);
-    return {image.pixels[at], image.pixels[at + 1], image.pixels[at + 2]};
-}
-
-bool near(const Rgb& a, const Rgb& b, int tolerance)
-{
-    return std::abs(a.r - b.r) <= tolerance && std::abs(a.g - b.g) <= tolerance &&
-           std::abs(a.b - b.b) <= tolerance;
-}
-
-int luminance(const Rgb& c)
-{
-    return (c.r * 3 + c.g * 6 + c.b) / 10;
-}
-
 const editor::ShellArea& area(const editor::EditorShell& shell, std::string_view name)
 {
-    const auto& areas = shell.areas();
-    const auto found = std::find_if(areas.begin(), areas.end(),
-                                    [name](const editor::ShellArea& a) { return a.name == name; });
-    REQUIRE(found != areas.end());
-    return *found;
-}
-
-Rgb centerOf(const engine::core::Image& image, const editor::ShellArea& a)
-{
-    return pixelAt(image, a.x + a.width / 2, a.y + a.height / 2);
+    return lpe_gpu_test::area(shell.areas(), name);
 }
 
 // The brightest pixel of the strip just above a docked area: its tab, whose
@@ -210,14 +182,15 @@ TEST_CASE("The editor shell is drawn by Raven over the whole window", "[editor][
     }
     CHECK(magenta == 0);
 
-    // The empty viewport is black; the empty panels share the theme's panel
-    // colour, which is not black; the toolbar is drawn too.
+    // The viewport shows the world (M5.3), not its empty black; the empty
+    // panels share the theme's panel colour, which is not black; the toolbar
+    // is drawn too.
     const Rgb viewport = centerOf(frame, area(shell, "viewport"));
     const Rgb hierarchy = centerOf(frame, area(shell, "hierarchy"));
     const Rgb inspector = centerOf(frame, area(shell, "inspector"));
     const Rgb console = centerOf(frame, area(shell, "console"));
     const Rgb toolbar = centerOf(frame, area(shell, "toolbar"));
-    CHECK(luminance(viewport) < 10);
+    CHECK(luminance(viewport) > 25);
     CHECK(luminance(hierarchy) > 20);
     CHECK(near(hierarchy, inspector, 3));
     CHECK(near(hierarchy, console, 3));

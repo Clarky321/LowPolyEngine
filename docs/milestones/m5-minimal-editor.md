@@ -103,7 +103,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 |---|---|---|
 | M5.1 | Raven as a pinned dependency | done |
 | M5.2 | Raven in the engine loop and the editor shell | done |
-| M5.3 | The generated world in the viewport | planned |
+| M5.3 | The generated world in the viewport | in progress |
 | M5.4 | Project folder and project document | planned |
 | M5.5 | Editor document, selection and undoable commands | planned |
 | M5.6 | Scene entities in the viewport | planned |
@@ -294,6 +294,31 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 **GPU tier:** sky and island pixels inside the viewport's rectangle and not outside it; island-preview's smoke runs unchanged.
 
 **Visual check:** `002-world-viewport.png`.
+
+**Decisions made in M5.3** (ADR 0027, Amendment 1):
+- **The world module** `engine/world/` (namespace `engine::world`):
+  - `WorldScene` and `Sky` moved from `sandbox/island-preview/` with only their namespace and comments changed (Git follows the files). `skyView()` is island-preview's `rotationOnly`: the camera's rotation without its position.
+  - `WorldView.hpp`: `archipelagoSunlight()`, `cameraLookingAt()` and `overviewCamera()` moved from island-preview's `main.cpp` as well, because the editor shows the same world in the same light from the same overview. island-preview's close view of one island and its test scene stay in the sandbox.
+  - It uses render, worldgen, camera and geometry; no Raven, SDL, OpenGL or Dear ImGui (the public header check covers it).
+  - **island-preview unchanged:** five runs (default, `--island 0`, `--test-scene`, `--panel`, `--seed 42`) before and after the move differ in their screenshots only as much as two runs of the same build do, since the clouds drift and the test scene's objects spin with measured time and the overlay shows frame times. The archipelago log lines are equal. Its smoke runs pass unchanged.
+- **The viewport** (`editor/src/viewport/WorldViewport`):
+  - At start it generates the archipelago of the default `WorldGenSettings`, uploads it and the sky dome, and puts the camera on the overview. It is the last step of `EditorShell::start`, so nothing can fail after it; it is released in `Application::stop`, before Raven shuts down.
+  - It draws from the viewport's draw callback as island-preview draws: the sky without depth, the islands and clouds lit by the archipelago's sun, the water blended back to front. The projection uses the widget's aspect in every frame, so the world follows the widget's size.
+- **The editor camera** (`editor/src/viewport/ViewportInput`), on the viewport widget's events:
+  - W/A/S/D, E up, Q down, Shift faster, the wheel over the viewport for the speed: the engine's free-fly controller at 30 m/s, as in island-preview. The arrow keys, Space and Ctrl are not used: Ctrl stays free for the editor's shortcuts.
+  - Keys reach the camera only while the viewport has Raven's keyboard focus. A press of any mouse button in the viewport gives it the focus, and it has the focus at start, so the camera flies at once. When it loses the focus, held keys are forgotten and looking ends.
+  - Hold the right button to look around. The press is passed on to the viewport, which keeps the pointer while it is held, also over other areas and outside the window. The movement comes from Raven's event deltas, in pixels; there is no relative mouse mode, so looking stops at the edge of the screen.
+- **The `editor` library links `raven` publicly**, since its headers name Raven's types (widget IDs, events).
+- **The editor logs its camera when it stops** (position, yaw, pitch, speed), for checks with real input.
+- **Checked on Windows with real input** (SendInput through the operating system, the Debug and the Release build, one run per case, closed with `WM_CLOSE`; the driver script is not committed, like M5.2's close check):
+  - W held 1 s: the camera moves 30 m along its view, its direction unchanged;
+  - a right-button drag of 200 pixels: yaw changes by 0.52 rad, the position does not;
+  - two wheel notches: the speed goes from 30 to 46.9 m/s;
+  - a click in the hierarchy, then W: the camera stays; a click back in the viewport, then W: it moves;
+  - W held, then another window in front and W released there: the camera stops when the editor loses the focus.
+  - Every run: exit code 0, 0 OpenGL errors, 0 state mismatches, 0 Raven errors, 0 Raven blocks after shutdown.
+  - A driver that clicks right after moving the pointer with `SetCursorPos` gets the click at the old position from SDL; the driver waits for the move, as a real mouse gives one.
+- **Not verified in M5.3:** Linux on real graphics hardware (decision 2); a real 150 % display on Windows (Linux CI runs the editor at 150 % on software OpenGL); real input on Linux.
 
 ### M5.4 — Project folder and project document
 

@@ -124,6 +124,7 @@ Recommended proof-of-concept before adopting Raven:
 - The SDL3 host bridge takes the window's input before `InputState` and keeps the validation's fixes (focus loss, one close request, no handle after close). It positions the IME at Raven's caret.
 - Dear ImGui and Raven are not combined in one application.
 - The editor (`lpe-editor`) uses Raven only.
+- 3D content goes into a Raven viewport through its draw callback (M5.3): the engine's renderer draws the generated world inside Raven's frame, with OpenGL's viewport and scissor set to the widget. The editor's camera gets its input from the viewport widget's events; no render target is added.
 
 Raven repository: <https://github.com/oscar-soirey/Raven>
 

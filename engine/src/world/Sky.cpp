@@ -1,4 +1,4 @@
-#include "Sky.hpp"
+#include "engine/world/Sky.hpp"
 
 #include <glm/geometric.hpp>
 
@@ -9,10 +9,10 @@
 #include <numbers>
 #include <utility>
 
-namespace island_preview {
+namespace engine::world {
 
-using engine::math::Vec3;
-using engine::math::Vec4;
+using math::Vec3;
+using math::Vec4;
 
 SkyGradient floatingWorldSky()
 {
@@ -46,11 +46,11 @@ Vec3 skyColor(const SkyGradient& gradient, float elevation)
     return stops.back().color;
 }
 
-engine::geometry::MeshData buildSkyDome(const SkyGradient& gradient, int bands, int segments)
+geometry::MeshData buildSkyDome(const SkyGradient& gradient, int bands, int segments)
 {
     bands = std::max(2, bands + bands % 2);
     segments = std::max(3, segments);
-    engine::geometry::MeshData mesh;
+    geometry::MeshData mesh;
 
     // Rows of vertices from the bottom pole to the top pole; the poles are
     // single vertices.
@@ -103,4 +103,11 @@ engine::geometry::MeshData buildSkyDome(const SkyGradient& gradient, int bands, 
     return mesh;
 }
 
-} // namespace island_preview
+math::Mat4 skyView(const math::Mat4& view)
+{
+    math::Mat4 rotation = view;
+    rotation[3] = Vec4{0.0F, 0.0F, 0.0F, 1.0F};
+    return rotation;
+}
+
+} // namespace engine::world

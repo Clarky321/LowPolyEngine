@@ -12,11 +12,9 @@
 // Escape quits.
 
 #include "DebugOverlay.hpp"
-#include "Sky.hpp"
 #include "TestScene.hpp"
 #include "WorldGenPanel.hpp"
 #include "WorldGenPanelUi.hpp"
-#include "WorldScene.hpp"
 
 #include "engine/app/Application.hpp"
 #include "engine/camera/Camera.hpp"
@@ -27,6 +25,9 @@
 #include "engine/core/Version.hpp"
 #include "engine/debug/DebugUi.hpp"
 #include "engine/geometry/ObjImport.hpp"
+#include "engine/world/Sky.hpp"
+#include "engine/world/WorldScene.hpp"
+#include "engine/world/WorldView.hpp"
 #include "engine/worldgen/Archipelago.hpp"
 #include "engine/worldgen/Clouds.hpp"
 #include "engine/worldgen/SettingsFile.hpp"
@@ -38,7 +39,6 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -179,39 +179,6 @@ engine::camera::Camera testSceneCamera()
     return camera;
 }
 
-// A camera at `position` looking at `target`.
-engine::camera::Camera cameraLookingAt(const engine::math::Vec3& position,
-                                       const engine::math::Vec3& target)
-{
-    const engine::math::Vec3 direction = glm::normalize(target - position);
-    engine::camera::Camera camera;
-    camera.position = position;
-    // forwardDirection() is (-sin(yaw) cos(pitch), sin(pitch), -cos(yaw) cos(pitch)).
-    camera.yawRadians = std::atan2(-direction.x, -direction.z);
-    camera.pitchRadians = std::asin(std::clamp(direction.y, -1.0F, 1.0F));
-    return camera;
-}
-
-// Overview of the archipelago: from above and to the side of the islands'
-// centre, far enough to see all of them, looking at the centre.
-engine::camera::Camera archipelagoCamera(const engine::worldgen::Archipelago& archipelago)
-{
-    engine::math::Vec3 centre{0.0F};
-    for (const auto& island : archipelago.islands) {
-        centre += island.shape.island.anchor;
-    }
-    centre /= static_cast<float>(std::max<std::size_t>(archipelago.islands.size(), 1U));
-    float reach = 0.0F;
-    for (const auto& island : archipelago.islands) {
-        const engine::math::Vec3 offset = island.shape.island.anchor - centre;
-        reach = std::max(reach, std::sqrt(offset.x * offset.x + offset.z * offset.z) +
-                                    island.shape.island.radius);
-    }
-    const engine::math::Vec3 direction = glm::normalize(engine::math::Vec3{0.55F, 0.45F, 0.72F});
-    const engine::math::Vec3 target = centre - engine::math::Vec3{0.0F, 0.25F * reach, 0.0F};
-    return cameraLookingAt(centre + direction * (1.3F * reach + 60.0F), target);
-}
-
 // Close view of one island from above and to the side, at a distance that fits
 // it, looking a little below its rim so the underside shows too. An island
 // with a waterfall is seen from 65 degrees beside the fall, which then hangs
@@ -230,25 +197,8 @@ engine::camera::Camera islandCamera(const engine::worldgen::GeneratedIsland& isl
         glm::normalize(glm::normalize(around) * 0.85F + engine::math::Vec3{0.0F, 0.38F, 0.0F});
     const engine::math::Vec3 target =
         placed.anchor - engine::math::Vec3{0.0F, 0.45F * placed.undersideDepth, 0.0F};
-    return cameraLookingAt(placed.anchor + direction * (2.1F * placed.radius), target);
-}
-
-// Test scene: sunlight chosen in M2.8 to match the earlier baked brightness.
-// Archipelago: a warm sun from above and to the side, and a cool ambient, so
-// tops are bright, cliffs shaded and undersides cool and darker (ADR 0011).
-engine::render::LightDesc archipelagoSunlight()
-{
-    return engine::render::LightDesc{.direction = {-0.45F, -0.78F, -0.43F},
-                                     .color = engine::math::Vec3{0.5F, 0.465F, 0.41F},
-                                     .ambient = engine::math::Vec3{0.5F, 0.53F, 0.62F}};
-}
-
-// Camera at the origin, only its rotation: the sky stays at infinity.
-engine::math::Mat4 rotationOnly(const engine::math::Mat4& view)
-{
-    engine::math::Mat4 rotation = view;
-    rotation[3] = engine::math::Vec4{0.0F, 0.0F, 0.0F, 1.0F};
-    return rotation;
+    return engine::world::cameraLookingAt(placed.anchor + direction * (2.1F * placed.radius),
+                                          target);
 }
 
 class IslandPreview final : public engine::app::Application {
@@ -365,7 +315,7 @@ public:
         // The sky first, behind everything: no depth test, no depth writes.
         if (!sky_.isNull()) {
             renderer.setView({
-                .view = rotationOnly(view),
+                .view = engine::world::skyView(view),
                 .projection = projection,
                 .depth = engine::render::DepthMode::Off,
             });
@@ -424,13 +374,13 @@ private:
             return error;
         }
         auto sky =
-            renderer.createMesh(island_preview::buildSkyDome(island_preview::floatingWorldSky()));
+            renderer.createMesh(engine::world::buildSkyDome(engine::world::floatingWorldSky()));
         if (!sky) {
             return sky.error();
         }
         sky_ = sky.value();
 
-        light_ = archipelagoSunlight();
+        light_ = engine::world::archipelagoSunlight();
         controller_ = engine::camera::FreeFlyController{{.moveSpeed = 30.0F}};
         subtitle_ = "M3  FLOATING ARCHIPELAGO";
         panel_ = std::make_unique<island_preview::WorldGenPanel>(settings);
@@ -476,7 +426,7 @@ private:
                 }
                 camera_ = islandCamera(archipelago.islands[*options_.island]);
             } else {
-                camera_ = archipelagoCamera(archipelago);
+                camera_ = engine::world::overviewCamera(archipelago);
             }
         }
         const engine::worldgen::WaterCounts water = archipelago.waterCounts();
@@ -661,7 +611,7 @@ private:
     std::vector<SceneObject> objects_;
     // The generated world and the panel that edits its settings (archipelago
     // only).
-    island_preview::WorldScene world_;
+    engine::world::WorldScene world_;
     std::unique_ptr<island_preview::WorldGenPanel> panel_;
     bool panelVisible_ = false;
     double lastGenerationMilliseconds_ = 0.0;

@@ -1,15 +1,15 @@
-// GPU tier: island-preview's generated world on the GPU and the Dear ImGui
-// debug UI (M3.12). Regenerating the world keeps the renderer's resource
-// counts level; the debug UI starts, draws and stops without OpenGL errors.
+// GPU tier: the generated world on the GPU (engine/world: island-preview's
+// WorldScene of M3.12, moved in M5.3) and the Dear ImGui debug UI. Regenerating
+// the world keeps the renderer's resource counts level; the debug UI starts,
+// draws and stops without OpenGL errors.
 // Runs from the repository root (tests/rendering/CMakeLists.txt).
-
-#include "WorldScene.hpp"
 
 #include "engine/debug/DebugUi.hpp"
 #include "engine/platform/GlContext.hpp"
 #include "engine/platform/Platform.hpp"
 #include "engine/platform/Window.hpp"
 #include "engine/render/Renderer.hpp"
+#include "engine/world/WorldScene.hpp"
 #include "engine/worldgen/Archipelago.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -84,7 +84,7 @@ std::size_t meshesOf(const engine::worldgen::Archipelago& archipelago)
 }
 
 // Draws the world once from above, as island-preview does.
-void drawFrame(Gpu& gpu, island_preview::WorldScene& world, double seconds)
+void drawFrame(Gpu& gpu, engine::world::WorldScene& world, double seconds)
 {
     Renderer& renderer = *gpu.renderer;
     renderer.beginFrame(256, 256, {0.5F, 0.6F, 0.8F, 1.0F});
@@ -107,7 +107,7 @@ TEST_CASE("Regenerating the world keeps the renderer's resource counts level", "
     Renderer& renderer = *gpu.renderer;
     const ResourceCounts empty = renderer.resourceCounts();
 
-    island_preview::WorldScene world;
+    engine::world::WorldScene world;
     const auto first = worldOf(1U);
     REQUIRE_FALSE(world.upload(renderer, first, WorldGenSettings{}).has_value());
     const ResourceCounts loaded = renderer.resourceCounts();

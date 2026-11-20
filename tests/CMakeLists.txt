@@ -25,6 +25,7 @@ add_executable(lpe_unit_tests
     unit/core/uuid_test.cpp
     unit/debug/text_mesh_test.cpp
     unit/editor/editor_options_test.cpp
+    unit/editor/viewport_input_test.cpp
     unit/geometry/face_normal_test.cpp
     unit/geometry/mesh_data_test.cpp
     unit/geometry/obj_import_test.cpp
@@ -46,13 +47,13 @@ add_executable(lpe_unit_tests
     unit/scene/scene_test.cpp
     unit/scripting/lua_vm_test.cpp
     unit/scripting/script_runtime_test.cpp
-    unit/sandbox/sky_test.cpp
     unit/sandbox/worldgen_panel_test.cpp
-    ${PROJECT_SOURCE_DIR}/sandbox/island-preview/Sky.cpp
     ${PROJECT_SOURCE_DIR}/sandbox/island-preview/WorldGenPanel.cpp
     unit/ui/raven_configuration_test.cpp
     unit/ui/raven_null_backend_test.cpp
     unit/ui/shell_layout_test.cpp
+    unit/world/sky_test.cpp
+    unit/world/world_view_test.cpp
     unit/worldgen/archipelago_test.cpp
     unit/worldgen/clouds_test.cpp
     unit/worldgen/island_layout_test.cpp
@@ -73,8 +74,7 @@ find_package(lua REQUIRED CONFIG)
 target_link_libraries(lpe_unit_tests PRIVATE engine lua::lua Catch2::Catch2WithMain)
 # GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
-# The sky (M3.8) and the WorldGen panel's state (M3.12) of island-preview are
-# tested headless.
+# The WorldGen panel's state (M3.12) of island-preview is tested headless.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
 # The committed assets island-preview loads are checked headless too.
 target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets")
@@ -86,7 +86,8 @@ target_compile_definitions(lpe_unit_tests PRIVATE
 # host platform, no window system, GPU or SDL. The tests check the pin of
 # cmake/RavenDependency.cmake against Raven and against the vendored README.
 target_link_libraries(lpe_unit_tests PRIVATE raven)
-# The editor's code (M5.2): its options and the shell's layout, headless.
+# The editor's code (M5.2, M5.3): its options, the shell's layout and the
+# viewport camera's input, headless.
 target_link_libraries(lpe_unit_tests PRIVATE editor)
 target_compile_definitions(lpe_unit_tests PRIVATE
     LPE_RAVEN_VERSION="${LPE_RAVEN_VERSION}"

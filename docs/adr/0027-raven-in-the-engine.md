@@ -1,6 +1,6 @@
 # ADR 0027: Raven in the engine
 
-- **Status:** Accepted (2026-11-15, M5.2). The plan asked M5.2 to decide this ADR (`docs/milestones/m5-minimal-editor.md`, M5.2, "Decisions to make"); the decisions follow ADR 0019's integration architecture and were taken under `docs/DEVELOPMENT_WORKFLOW.md` §4.
+- **Status:** Accepted (2026-11-15, M5.2). The plan asked M5.2 to decide this ADR (`docs/milestones/m5-minimal-editor.md`, M5.2, "Decisions to make"); the decisions follow ADR 0019's integration architecture and were taken under `docs/DEVELOPMENT_WORKFLOW.md` §4. Amendment 1 (2026-11-20, M5.3): the viewport's drawing and input, as used by the editor.
 - **Related:**
   - ADR 0019 (Raven for the editor: its integration architecture, conditions and validated fixes);
   - ADR 0026 (Raven packaging: the vendored copy, live reload and auto-loading off);
@@ -98,3 +98,17 @@ M5.1 made Raven a pinned static library (ADR 0026). M5.2 has to host it in the e
   - Linux on real graphics hardware is not verified in M5 (plan decision 2). CI runs Linux on software OpenGL (Mesa llvmpipe under Xvfb), which is not a hardware test.
   - Torn-off panels in OS windows are not possible (ADR 0019 condition 4).
   - IME composition with a real IME was not tested.
+
+## Amendment 1 (2026-11-20, M5.3): the viewport
+
+M5.3 puts the generated world into the editor's viewport. It uses points 5 and 6 as decided; this records what the first use settled.
+
+1. **Drawing.** The editor gives the viewport widget a draw callback (`Rviewport_set_draw_callback`) and draws with the engine's renderer inside it (`engine/world/`: the sky, the islands and clouds, the water).
+   - Before the callback the backend restores the engine's state as it was before Raven's frame and sets OpenGL's viewport and scissor to the widget; the projection uses the widget's aspect, so the world follows the widget's size without a resize callback.
+   - The depth buffer is the one `Renderer::beginFrame` cleared for the whole window. Raven draws without depth, so the world's depth test works inside the widget.
+   - What the callback changes stays out of the state the backend restores; the comparison around Raven's whole frame still finds no difference. The GPU tier checks that the world changes no pixel outside the widget.
+2. **Input.** The editor receives the viewport's events (`Rwidget_set_event_callback`), the way point 6 sends input for the 3D view.
+   - Keys reach it only while the viewport has Raven's keyboard focus, so a key typed into a text field never moves the camera.
+   - A right-button press is passed on to the widget, which then keeps the pointer while the button is held.
+   - Looking uses the pointer movement in Raven's events (logical units times the scale), not SDL's relative mouse mode: the host bridge passes Raven positions (`Rhost_inject_mouse_move`), so looking stops at the edge of the screen. A relative pointer path in the bridge would lift that; the minimal editor does not need it.
+3. **The editor's headers name Raven's types** (widget IDs, events): the `editor` library links `raven` publicly. The engine's public headers still name none (the header check of `tests/unit/scene/public_headers_test.cpp`).

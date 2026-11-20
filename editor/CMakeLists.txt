@@ -3,7 +3,8 @@
 # game never needs this folder; the engine never includes editor headers.
 #
 #   editor       the editor's code as a library, so tests link the same code
-#                as the program (M5.2: the shell application and its options)
+#                as the program (M5.2: the shell application and its options;
+#                M5.3: the world in the viewport and the camera's input)
 #   lpe-editor   the program (src/main.cpp)
 
 # The shell's layout, embedded: the editor reads no layout file at run time.
@@ -15,12 +16,15 @@ lpe_embed_files("${editor_layouts}" editor::layouts
 add_library(editor STATIC
     src/application/EditorOptions.cpp
     src/application/EditorShell.cpp
+    src/viewport/ViewportInput.cpp
+    src/viewport/WorldViewport.cpp
     ${editor_layouts}
 )
 target_include_directories(editor PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-# Raven's C API is used directly by the editor's interface code (ADR 0027);
-# the engine's headers name no Raven type.
-target_link_libraries(editor PUBLIC engine PRIVATE raven)
+# Raven's C API is used directly by the editor's interface code (ADR 0027),
+# and the editor's own headers name Raven's types (widget IDs, events): PUBLIC.
+# The engine's headers name no Raven type.
+target_link_libraries(editor PUBLIC engine raven)
 lpe_set_project_warnings(editor)
 
 add_executable(lpe-editor

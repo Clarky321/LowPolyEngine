@@ -1,17 +1,22 @@
 #pragma once
 
-// lpe-editor's application (M5.2): the empty editor shell on Raven. The engine
-// runs Raven with the shell's layout (ApplicationDesc::ui, ADR 0027); the shell
-// checks that the layout has its five areas, saves a requested screenshot on
-// the last frame, and records where the areas are for the checks. The areas
-// are empty until later steps fill them.
+// lpe-editor's application: the editor shell on Raven (M5.2) with the
+// generated world in its viewport (M5.3). The engine runs Raven with the
+// shell's layout (ApplicationDesc::ui, ADR 0027); the shell checks that the
+// layout has its five areas, shows the archipelago of the default world
+// settings in the viewport, saves a requested screenshot on the last frame,
+// and records where the areas are for the checks. The other areas are empty
+// until later steps fill them.
 
 #include "EditorOptions.hpp"
+#include "viewport/WorldViewport.hpp"
 
 #include "engine/app/Application.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -21,6 +26,9 @@ namespace editor {
 // The named areas of the shell, in the layout's order.
 inline constexpr std::array<std::string_view, 5> kShellAreas{"toolbar", "viewport", "hierarchy",
                                                              "inspector", "console"};
+// The viewport's index in kShellAreas.
+inline constexpr std::size_t kViewportArea = 1;
+static_assert(kShellAreas[kViewportArea] == "viewport");
 
 // Where an area was in the last frame, in the window's pixels (origin top left).
 struct ShellArea {
@@ -44,12 +52,16 @@ public:
     // first layout).
     [[nodiscard]] const std::vector<ShellArea>& areas() const noexcept { return areas_; }
 
+    // The world in the viewport, from start() to stop(); null otherwise.
+    [[nodiscard]] const WorldViewport* world() const noexcept { return world_.get(); }
+
 private:
     void recordAreas(engine::app::AppContext& context);
 
     EditorOptions options_;
     std::array<std::uint32_t, kShellAreas.size()> widgets_{};
     std::vector<ShellArea> areas_;
+    std::unique_ptr<WorldViewport> world_;
 };
 
 } // namespace editor
