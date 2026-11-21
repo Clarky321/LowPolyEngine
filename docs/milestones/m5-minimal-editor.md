@@ -104,7 +104,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.1 | Raven as a pinned dependency | done |
 | M5.2 | Raven in the engine loop and the editor shell | done |
 | M5.3 | The generated world in the viewport | done |
-| M5.4 | Project folder and project document | planned |
+| M5.4 | Project folder and project document | in progress |
 | M5.5 | Editor document, selection and undoable commands | planned |
 | M5.6 | Scene entities in the viewport | planned |
 | M5.7 | Hierarchy and console panels | planned |
@@ -125,7 +125,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - Every panel gets headless Raven tests (null backend, input through the host platform).
   - Every step that draws gets a GPU-tier check.
 - **Visible steps get a screenshot** in `docs/screenshots/m5/` with its command in the README there (`docs/DEVELOPMENT_WORKFLOW.md` §6), taken by the editor itself (`--screenshot`). No UI is added just for screenshots.
-- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging); the next free number is 0027.
+- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging), M5.2 0027 (Raven in the engine), M5.4 0028 (project document); the next free number is 0029.
 - **Out of scope stays out:** gizmos, play mode, the asset browser and import, materials and prefab authoring (M6) stay out, even where Raven makes them easy.
 - **The checks of `docs/TESTING_AND_CI.md` §8 for the kind of change.** The GPU tier runs from M5.2 on, since every later step touches the window, the loop or drawing.
 - **Two kinds of OpenGL runs, never mixed up** (decisions 2 and 3).
@@ -362,6 +362,36 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Visual check:** none.
 
+**Decisions made in M5.4** (ADR 0028; ADR 0004 Amendment 3):
+- **The folder and the document.**
+  - A project is opened by its folder. The project document has the fixed name `project.json` (format `lpe.project`, version 1).
+  - Its fields, all required: `name` (the rules of scene names), `assetManifest`, `startScene`, `worldSettings` (project-relative paths under ADR 0022's rules).
+  - The paths must differ (also in letter case only), must not lie inside one another, and must not be `project.json` or the journal's `project.saving.json`. No asset of the manifest may have one of them.
+  - A new project's defaults: `assets.json`, `scenes/main.scene.json` (a scene "Main"), `worlds/world.json` (the default settings, equal to `assets/worlds/default.json`). Asset folders are not created.
+- **Only the start scene** in version 1. A list of scenes comes with a later version and its migration.
+- **A missing world settings file is an error**, like any part: no silent defaults that the next save would write over the project's world.
+- **A new project never overwrites a file:** an existing project, save journal or default file is refused, naming it.
+- **Open:**
+  - all or nothing, and read-only;
+  - the order: journal, document, manifest, the scene checked against the manifest's registry, world settings;
+  - every error starts with the part's project-relative path, and warnings carry it too.
+- **Save:** consistent as a whole through a save journal; the details are in ADR 0028, point 5.
+  - The save first checks everything and turns every part into text, so it never writes a project that would not open.
+  - It finishes what an earlier save left.
+  - It writes every part to `<file>.saving-<id>`.
+  - The commit is the rename of the journal into place.
+  - Then the temporary files are renamed over the parts, and the journal is removed.
+  - An interrupted save after its commit opens as that save: a part whose temporary file is still there is read from it. Without a journal, temporary files are ignored and removed by the next save.
+- **Code:**
+  - The public API is `engine/include/engine/project/` (`ProjectDocument.hpp`, `Project.hpp`).
+  - The implementation is `engine/src/project/`. Every file operation goes through the internal `ProjectFiles`, which the tests replace to inject failures.
+  - The module uses core, assets, scene and worldgen only; a test checks its includes.
+- **Tests:** the failure injection makes every changing file operation of a save fail in turn: alone, and as a crash with a half-written file.
+  - The save from version 1 to 2 has 15 such operations.
+  - The save after a crash just past the commit is covered the same way.
+  - Breaking open's use of the journal on purpose made the test fail at once: the project opened as the wrong save, or not at all (a new manifest next to an old scene).
+- **Not covered:** a power loss (no `fsync`, as in ADR 0023); two programs saving the same project at once.
+
 ### M5.5 — Editor document, selection and undoable commands
 
 **Goal:** every change to the document is a command that can be undone and redone exactly.
@@ -581,7 +611,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 |---|---|---|
 | Raven packaging | M5.1 | pruned vendored source (decision 1): what is kept, options, notices, the update procedure |
 | Raven in the engine | M5.2 | public UI API, event order, frame order, ownership |
-| Project document | M5.4 | format, folder layout, paths, all-or-nothing open, a consistent save of several files |
+| Project document | M5.4 | format, folder layout, paths, all-or-nothing open, a consistent save of several files (ADR 0028) |
 | Editor document and commands | M5.5 | command model, undo, merging, dirty state |
 | Amendments | as needed | ADR 0019 (integration details), ADR 0018 if the debug UI's hook changes |
 

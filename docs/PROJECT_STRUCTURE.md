@@ -38,7 +38,8 @@ lowpoly-engine/
 │   │   ├── camera/           # Camera and camera-controller types
 │   │   ├── debug/            # On-screen diagnostics (pixel-font text, M1) and the Dear ImGui debug UI (DebugUi, M3.12, ADR 0018)
 │   │   ├── ui/               # Ui.hpp: the Raven UI an application turns on (ApplicationDesc::ui), no Raven/SDL/OpenGL type (M5.2, ADR 0027)
-│   │   └── world/            # The generated world on the GPU (WorldScene), the sky dome (Sky), its sunlight and overview camera (WorldView), moved from island-preview for it and the editor (M5.3)
+│   │   ├── world/            # The generated world on the GPU (WorldScene), the sky dome (Sky), its sunlight and overview camera (WorldView), moved from island-preview for it and the editor (M5.3)
+│   │   └── project/          # A project folder: ProjectDocument (project.json), Project with createProject/openProject/saveProject, saved as a whole (M5.4, ADR 0028); no editor, UI, window or renderer code
 │   └── src/
 │       ├── app/
 │       ├── core/
@@ -59,6 +60,7 @@ lowpoly-engine/
 │       ├── scripting/lua/
 │       ├── ui/               # RavenUi: the one owner of Raven's state (Rinit/Rshutdown, frame, checks), RavenHost interface (M5.2, ADR 0027)
 │       ├── world/            # WorldScene, Sky, WorldView (M5.3)
+│       ├── project/          # the project's open and save, the save journal, ProjectFiles (every file operation, replaced by tests to inject failures) (M5.4)
 │       └── camera/
 ├── editor/                   # lpe-editor on Raven (M5; ADR 0019, ADR 0027); "planned" folders come with later steps
 │   ├── CMakeLists.txt        # library `editor` (the editor's code, also linked by tests) and program `lpe-editor`
@@ -89,7 +91,8 @@ lowpoly-engine/
 │   │   ├── scripting/
 │   │   ├── editor/           # lpe-editor's options (M5.2); the viewport camera's input with Raven's null backend (M5.3)
 │   │   ├── ui/               # headless Raven: null backend, host platform, injected input (M5.1); the shell layout at several scales (M5.2)
-│   │   └── world/            # the sky and how the world is looked at (M5.3; the sky's tests moved from unit/sandbox/)
+│   │   ├── world/            # the sky and how the world is looked at (M5.3; the sky's tests moved from unit/sandbox/)
+│   │   └── project/          # the project document, open and save on disk, failures injected at every operation of a save, the module's dependencies (M5.4)
 │   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp), the Raven host bridge and UI lifetime on SDL's dummy driver (raven_ui_test.cpp, M5.2)
 │   └── rendering/            # Optional GPU-dependent tier
 ├── scripts/

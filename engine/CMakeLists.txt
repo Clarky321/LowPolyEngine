@@ -85,6 +85,10 @@ add_library(engine STATIC
     src/scene/PrefabDocument.cpp
     src/scene/Scene.cpp
     src/scene/SceneDocument.cpp
+    src/project/Project.cpp
+    src/project/ProjectDocument.cpp
+    src/project/ProjectFiles.cpp
+    src/project/SaveJournal.cpp
     src/scripting/lua/LuaVm.cpp
     src/scripting/lua/ScriptRuntime.cpp
     src/ui/RavenUi.cpp
@@ -105,12 +109,13 @@ target_compile_features(engine PUBLIC cxx_std_20)
 # src/render/opengl/, stb_image and stb_image_write only in src/core/Image.cpp,
 # nlohmann_json only in src/core/JsonSupport.hpp and the document sources that
 # include it (src/worldgen/SettingsFile.cpp, src/assets/AssetManifest.cpp,
-# src/scene/ComponentJson.cpp, SceneDocument.cpp and PrefabDocument.cpp), the Dear ImGui backends only in
+# src/scene/ComponentJson.cpp, SceneDocument.cpp and PrefabDocument.cpp,
+# src/project/ProjectDocument.cpp and SaveJournal.cpp), the Dear ImGui backends only in
 # src/platform/sdl3/Sdl3ImGui.cpp and src/render/opengl/GlImGui.cpp, EnTT only
 # in src/scene/, Lua only in src/scripting/lua/, Raven only in src/ui/ (its
 # owner), src/platform/sdl3/Sdl3RavenHost.cpp (the host bridge) and
 # src/render/opengl/GlRavenBackend.cpp (the backend) (ADR 0002, 0004, 0005,
-# 0006, 0008, 0018, 0021, 0022, 0023, 0024, 0027).
+# 0006, 0008, 0018, 0021, 0022, 0023, 0024, 0027, 0028).
 # Public headers include none of them; consumers only get them as link
 # dependencies.
 target_link_libraries(engine PRIVATE

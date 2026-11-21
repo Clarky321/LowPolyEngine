@@ -1,6 +1,6 @@
 # ADR 0004: Serialization format for world generation settings
 
-- **Status:** Accepted; amended for M3.11 (Amendment 1) and M4.4 (Amendment 2)
+- **Status:** Accepted; amended for M3.11 (Amendment 1), M4.4 (Amendment 2) and M5.4 (Amendment 3)
 - **Date:** 2026-11-09
 - **Related:** ADR 0003, `docs/ENGINE_PLAN.md` M3/M4
 
@@ -76,3 +76,8 @@ Rules:
 - **Migrations:** `engine/src/core/DocumentMigration.hpp` (internal) applies migrations `vN → vN+1` in order before the fields are read (rule 5); it is generic over the document type and tested with a test-only document. No format has a migration yet.
 - **Atomic writes:** `core::writeFileAtomically` writes to a temporary file in the target's folder and renames it over the target, so a failed save leaves an existing file as it was; scene documents use it (ADR 0023). The settings file and the asset manifest still write in place and create missing folders.
 - **Later in M4:** prefab documents (`lpe.prefab`, M4.6, ADR 0025) are a fourth kind; they use the same shared code and atomic writes, and share the JSON of their components with scene documents through the internal `engine/src/scene/ComponentJson.hpp`.
+
+## Amendment 3: the project document and the save journal (M5.4, 2026-11-21)
+
+- **Two more document kinds** (ADR 0028), with the same envelope and shared code: the project document (`lpe.project`, `project.json`, which names a project's manifest, start scene and world settings) and the save journal (`lpe.project.save`, `project.saving.json`, internal to a save of several files).
+- **A save of several files:** a project's parts are saved as a whole through the journal (ADR 0028, point 5). Each part keeps its own format and writer; the world settings file and the manifest are then written through the project's save, not in place.

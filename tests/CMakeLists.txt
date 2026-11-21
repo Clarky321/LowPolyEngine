@@ -32,6 +32,11 @@ add_executable(lpe_unit_tests
     unit/geometry/primitives_test.cpp
     unit/platform/input_state_test.cpp
     unit/platform/window_desc_test.cpp
+    unit/project/project_dependencies_test.cpp
+    unit/project/project_document_test.cpp
+    unit/project/project_save_failures_test.cpp
+    unit/project/project_test.cpp
+    unit/project/save_journal_test.cpp
     unit/render/handle_pool_test.cpp
     unit/render/light_test.cpp
     unit/render/material_test.cpp
@@ -72,15 +77,18 @@ add_executable(lpe_unit_tests
 # unit tests see Lua's headers; the engine's public headers never include them.
 find_package(lua REQUIRED CONFIG)
 target_link_libraries(lpe_unit_tests PRIVATE engine lua::lua Catch2::Catch2WithMain)
-# GPU-free internals of the engine (e.g. render/HandlePool.hpp) are tested directly.
+# GPU-free internals of the engine (e.g. render/HandlePool.hpp, the project's
+# file operations and save journal) are tested directly.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 # The WorldGen panel's state (M3.12) of island-preview is tested headless.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
 # The committed assets island-preview loads are checked headless too.
 target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets")
-# The public header check (M4.2) reads the engine's headers.
+# The public header check (M4.2) reads the engine's headers; the project
+# module's dependency check (M5.4) also its sources.
 target_compile_definitions(lpe_unit_tests PRIVATE
     LPE_ENGINE_INCLUDE_DIRECTORY="${PROJECT_SOURCE_DIR}/engine/include"
+    LPE_ENGINE_SOURCE_DIRECTORY="${PROJECT_SOURCE_DIR}/engine/src"
 )
 # Raven (M5.1, ADR 0026) runs headless in tests/unit/ui/: its null backend and
 # host platform, no window system, GPU or SDL. The tests check the pin of
