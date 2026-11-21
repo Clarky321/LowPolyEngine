@@ -104,7 +104,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.1 | Raven as a pinned dependency | done |
 | M5.2 | Raven in the engine loop and the editor shell | done |
 | M5.3 | The generated world in the viewport | done |
-| M5.4 | Project folder and project document | in progress |
+| M5.4 | Project folder and project document | done |
 | M5.5 | Editor document, selection and undoable commands | planned |
 | M5.6 | Scene entities in the viewport | planned |
 | M5.7 | Hierarchy and console panels | planned |
