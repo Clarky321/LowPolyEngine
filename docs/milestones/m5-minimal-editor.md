@@ -109,7 +109,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.5 | Editor document, selection and undoable commands | done |
 | M5.6 | Scene entities in the viewport | done |
 | M5.7 | Hierarchy and console panels | done |
-| M5.8 | Inspector | in progress |
+| M5.8 | Inspector | done |
 | M5.9 | Picking and selection in the viewport | planned |
 | M5.10 | WorldGen panel in Raven | planned |
 | M5.11 | Project workflow: new, open, save, close | planned |
