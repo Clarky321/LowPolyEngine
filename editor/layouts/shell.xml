@@ -2,9 +2,9 @@
 <!--
   The shell of lpe-editor (M5.2, ADR 0027): a toolbar above a DockArea with
   the viewport, the hierarchy, the inspector and the console. M5.3 filled the
-  viewport, M5.7 the hierarchy and the console; the inspector stays empty
-  until M5.8. The engine embeds this file at build time and gives Raven its
-  text (no live reload, no search places: ADR 0026).
+  viewport, M5.7 the hierarchy and the console, M5.8 the inspector. The engine
+  embeds this file at build time and gives Raven its text (no live reload, no
+  search places: ADR 0026).
 
   Sizes are fractions of the window (Slot.DockSize), so the panels follow the
   window and the display scale; the minimum sizes keep a small window usable
@@ -42,8 +42,154 @@
 				</Overlay>
 			</VBox>
 
+			<!--
+			  The inspector (M5.8, editor/src/panels/InspectorPanel): the selected
+			  entity's components, a section each, shown only when the entity has
+			  the component. Vectors are three spin boxes under their label, so
+			  that they fit the panel's width. The spin boxes have no range: the
+			  component's validate decides, and its message is shown under the
+			  section. Parent links and prefab instances are shown, not edited.
+			-->
 			<VBox Name="inspector" Slot.Title="Inspector" Slot.Dock="Right" Slot.DockSize="0.22"
-				Slot.Closable="false" MinWidth="140"/>
+				Slot.Closable="false" MinWidth="140">
+				<Label Name="inspector-empty" Text="Select an entity to see its components."
+					Wrap="true" Slot.Padding="8,8"/>
+				<ScrollBox Name="inspector-entity" Slot.Fill="1" Spacing="8" Visibility="Collapsed">
+					<Label Name="inspector-id" Text="" Selectable="true" Wrap="true" Slot.Padding="6,6,6,0"/>
+
+					<VBox Name="inspector-section-name" Spacing="4" Slot.Padding="6,0">
+						<HBox Spacing="4">
+							<Label Text="Name" Slot.Fill="1" Slot.VAlign="Center"/>
+							<Button Name="inspector-remove-name" Text="Remove" Style="Flat"/>
+						</HBox>
+						<TextInput Name="inspector-name" Placeholder="Name"/>
+						<Label Name="inspector-message-name" Wrap="true" Visibility="Collapsed"/>
+					</VBox>
+
+					<VBox Name="inspector-section-transform" Spacing="4" Slot.Padding="6,0">
+						<Separator/>
+						<HBox Spacing="4">
+							<Label Text="Transform" Slot.Fill="1" Slot.VAlign="Center"/>
+							<Button Name="inspector-remove-transform" Text="Remove" Style="Flat"/>
+						</HBox>
+						<Label Text="Position"/>
+						<HBox Spacing="4">
+							<SpinBox Name="inspector-position-x" Slot.Fill="1" Decimals="3" Step="0.1"/>
+							<SpinBox Name="inspector-position-y" Slot.Fill="1" Decimals="3" Step="0.1"/>
+							<SpinBox Name="inspector-position-z" Slot.Fill="1" Decimals="3" Step="0.1"/>
+						</HBox>
+						<Label Text="Rotation (degrees: pitch X, yaw Y, roll Z)" Wrap="true"/>
+						<HBox Spacing="4">
+							<SpinBox Name="inspector-rotation-x" Slot.Fill="1" Decimals="2" Step="1"/>
+							<SpinBox Name="inspector-rotation-y" Slot.Fill="1" Decimals="2" Step="1"/>
+							<SpinBox Name="inspector-rotation-z" Slot.Fill="1" Decimals="2" Step="1"/>
+						</HBox>
+						<Label Text="Scale"/>
+						<HBox Spacing="4">
+							<SpinBox Name="inspector-scale-x" Slot.Fill="1" Decimals="3" Step="0.1"/>
+							<SpinBox Name="inspector-scale-y" Slot.Fill="1" Decimals="3" Step="0.1"/>
+							<SpinBox Name="inspector-scale-z" Slot.Fill="1" Decimals="3" Step="0.1"/>
+						</HBox>
+						<Label Name="inspector-message-transform" Wrap="true" Visibility="Collapsed"/>
+					</VBox>
+
+					<VBox Name="inspector-section-camera" Spacing="4" Slot.Padding="6,0">
+						<Separator/>
+						<HBox Spacing="4">
+							<Label Text="Camera" Slot.Fill="1" Slot.VAlign="Center"/>
+							<Button Name="inspector-remove-camera" Text="Remove" Style="Flat"/>
+						</HBox>
+						<HBox Spacing="4">
+							<Label Text="Field of view" Width="90" Slot.VAlign="Center"/>
+							<SpinBox Name="inspector-fov" Slot.Fill="1" Decimals="1" Step="1"/>
+						</HBox>
+						<HBox Spacing="4">
+							<Label Text="Near plane" Width="90" Slot.VAlign="Center"/>
+							<SpinBox Name="inspector-near" Slot.Fill="1" Decimals="3" Step="0.01"/>
+						</HBox>
+						<HBox Spacing="4">
+							<Label Text="Far plane" Width="90" Slot.VAlign="Center"/>
+							<SpinBox Name="inspector-far" Slot.Fill="1" Decimals="1" Step="10"/>
+						</HBox>
+						<Label Name="inspector-message-camera" Wrap="true" Visibility="Collapsed"/>
+					</VBox>
+
+					<VBox Name="inspector-section-light" Spacing="4" Slot.Padding="6,0">
+						<Separator/>
+						<HBox Spacing="4">
+							<Label Text="Directional light" Slot.Fill="1" Slot.VAlign="Center"/>
+							<Button Name="inspector-remove-light" Text="Remove" Style="Flat"/>
+						</HBox>
+						<Label Text="Direction"/>
+						<HBox Spacing="4">
+							<SpinBox Name="inspector-direction-x" Slot.Fill="1" Decimals="3" Step="0.05"/>
+							<SpinBox Name="inspector-direction-y" Slot.Fill="1" Decimals="3" Step="0.05"/>
+							<SpinBox Name="inspector-direction-z" Slot.Fill="1" Decimals="3" Step="0.05"/>
+						</HBox>
+						<Label Text="Color (red, green, blue)"/>
+						<HBox Spacing="4">
+							<SpinBox Name="inspector-color-r" Slot.Fill="1" Decimals="3" Step="0.01"/>
+							<SpinBox Name="inspector-color-g" Slot.Fill="1" Decimals="3" Step="0.01"/>
+							<SpinBox Name="inspector-color-b" Slot.Fill="1" Decimals="3" Step="0.01"/>
+						</HBox>
+						<HBox Spacing="4">
+							<Label Text="Intensity" Width="90" Slot.VAlign="Center"/>
+							<SpinBox Name="inspector-intensity" Slot.Fill="1" Decimals="2" Step="0.1"/>
+						</HBox>
+						<Label Name="inspector-message-light" Wrap="true" Visibility="Collapsed"/>
+					</VBox>
+
+					<VBox Name="inspector-section-mesh" Spacing="4" Slot.Padding="6,0">
+						<Separator/>
+						<HBox Spacing="4">
+							<Label Text="Static mesh" Slot.Fill="1" Slot.VAlign="Center"/>
+							<Button Name="inspector-remove-mesh" Text="Remove" Style="Flat"/>
+						</HBox>
+						<HBox Spacing="4">
+							<Label Text="Mesh" Width="70" Slot.VAlign="Center"/>
+							<ComboBox Name="inspector-mesh" Slot.Fill="1"/>
+						</HBox>
+						<HBox Spacing="4">
+							<Label Text="Material" Width="70" Slot.VAlign="Center"/>
+							<ComboBox Name="inspector-material" Slot.Fill="1"/>
+						</HBox>
+						<Label Name="inspector-message-mesh" Wrap="true" Visibility="Collapsed"/>
+					</VBox>
+
+					<VBox Name="inspector-section-script" Spacing="4" Slot.Padding="6,0">
+						<Separator/>
+						<HBox Spacing="4">
+							<Label Text="Script" Slot.Fill="1" Slot.VAlign="Center"/>
+							<Button Name="inspector-remove-script" Text="Remove" Style="Flat"/>
+						</HBox>
+						<HBox Spacing="4">
+							<Label Text="Script" Width="70" Slot.VAlign="Center"/>
+							<ComboBox Name="inspector-script" Slot.Fill="1"/>
+						</HBox>
+						<Checkbox Name="inspector-script-enabled" Text="Enabled"/>
+						<Label Name="inspector-message-script" Wrap="true" Visibility="Collapsed"/>
+					</VBox>
+
+					<VBox Name="inspector-section-parent" Spacing="4" Slot.Padding="6,0">
+						<Separator/>
+						<Label Name="inspector-parent" Text="" Wrap="true"/>
+					</VBox>
+
+					<VBox Name="inspector-section-prefab" Spacing="4" Slot.Padding="6,0">
+						<Separator/>
+						<Label Name="inspector-prefab" Text="" Wrap="true"/>
+					</VBox>
+
+					<VBox Spacing="4" Slot.Padding="6,0,6,8">
+						<Separator/>
+						<HBox Spacing="4">
+							<ComboBox Name="inspector-add" Slot.Fill="1"/>
+							<Button Name="inspector-add-button" Text="Add"/>
+						</HBox>
+						<Label Name="inspector-message-add" Wrap="true" Visibility="Collapsed"/>
+					</VBox>
+				</ScrollBox>
+			</VBox>
 
 			<!--
 			  The console (M5.7, editor/src/panels/ConsolePanel): the engine's log,

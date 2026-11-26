@@ -66,6 +66,10 @@ std::optional<engine::core::Error> EditorShell::start(engine::app::AppContext& c
     if (auto error = hierarchy_.attach(window, document_.get())) {
         return error;
     }
+    if (auto error = inspector_.attach(window, document_.get())) {
+        detachPanels();
+        return error;
+    }
     if (auto error = console_.attach(window, consoleLog_)) {
         detachPanels();
         return error;
@@ -94,9 +98,11 @@ void EditorShell::update(engine::app::AppContext& context, const engine::core::F
         world_->update(time);
     }
     // After the document's changes of this frame's input, before Raven draws:
-    // the tree matches the scene in the frame drawn. The console last, with
-    // what the others logged in this update.
+    // the tree and the inspector match the scene in the frame drawn (the
+    // inspector after the hierarchy, whose clicks select). The console last,
+    // with what the others logged in this update.
     hierarchy_.update();
+    inspector_.update();
     consoleLog_.append(logInbox_.take());
     console_.update();
     recordAreas(context);
@@ -162,6 +168,7 @@ void EditorShell::stop(engine::app::AppContext& /*context*/)
 void EditorShell::detachPanels() noexcept
 {
     hierarchy_.detach();
+    inspector_.detach();
     console_.detach();
 }
 

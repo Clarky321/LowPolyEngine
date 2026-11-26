@@ -7,7 +7,8 @@
 #                M5.3: the world in the viewport and the camera's input;
 #                M5.5: the document, the selection and the undoable commands,
 #                UI-free, in include/editor/; M5.7: the hierarchy and console
-#                panels, their UI-free models in include/editor/panels/)
+#                panels, their UI-free models in include/editor/panels/; M5.8:
+#                the inspector, its Euler angles and fields UI-free)
 #   lpe-editor   the program (src/main.cpp)
 
 # The shell's layout, embedded: the editor reads no layout file at run time.
@@ -26,8 +27,11 @@ add_library(editor STATIC
     src/document/EditorDocument.cpp
     src/panels/ConsoleLog.cpp
     src/panels/ConsolePanel.cpp
+    src/panels/EulerAngles.cpp
     src/panels/HierarchyPanel.cpp
     src/panels/HierarchyRows.cpp
+    src/panels/InspectorFields.cpp
+    src/panels/InspectorPanel.cpp
     src/selection/Selection.cpp
     src/viewport/ViewportInput.cpp
     src/viewport/WorldViewport.cpp

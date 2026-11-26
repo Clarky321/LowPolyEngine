@@ -2,14 +2,15 @@
 
 // lpe-editor's application: the editor shell on Raven (M5.2) with the
 // generated world in its viewport (M5.3), given a project folder the
-// project's document with its scene's entities in the viewport (M5.6), and the
-// hierarchy and console panels (M5.7). The engine runs Raven with the shell's
-// layout (ApplicationDesc::ui, ADR 0027); the shell checks that the layout has
-// its five areas, opens the project, shows the archipelago of the project's
-// world settings (the default ones without a project) in the viewport, the
-// scene's entities in the hierarchy and the engine's log in the console, saves
-// a requested screenshot on the last frame, and records where the areas are
-// for the checks. The inspector stays empty until M5.8.
+// project's document with its scene's entities in the viewport (M5.6), the
+// hierarchy and console panels (M5.7) and the inspector (M5.8). The engine
+// runs Raven with the shell's layout (ApplicationDesc::ui, ADR 0027); the
+// shell checks that the layout has its five areas, opens the project, shows
+// the archipelago of the project's world settings (the default ones without a
+// project) in the viewport, the scene's entities in the hierarchy, the
+// selected entity's components in the inspector and the engine's log in the
+// console, saves a requested screenshot on the last frame, and records where
+// the areas are for the checks.
 //
 // The console's inbox listens to the engine's log from the shell's
 // construction, before the engine starts, so the console shows the run's log
@@ -20,6 +21,7 @@
 #include "editor/panels/ConsoleLog.hpp"
 #include "panels/ConsolePanel.hpp"
 #include "panels/HierarchyPanel.hpp"
+#include "panels/InspectorPanel.hpp"
 #include "viewport/WorldViewport.hpp"
 
 #include "engine/app/Application.hpp"
@@ -73,6 +75,7 @@ public:
 
     // The panels, attached from start() to stop().
     [[nodiscard]] const HierarchyPanel& hierarchy() const noexcept { return hierarchy_; }
+    [[nodiscard]] const InspectorPanel& inspector() const noexcept { return inspector_; }
     [[nodiscard]] const ConsolePanel& console() const noexcept { return console_; }
     // The console's lines (they stay after stop()).
     [[nodiscard]] const ConsoleLog& consoleLog() const noexcept { return consoleLog_; }
@@ -91,6 +94,7 @@ private:
     std::unique_ptr<EditorDocument> document_;
     std::unique_ptr<WorldViewport> world_;
     HierarchyPanel hierarchy_;
+    InspectorPanel inspector_;
     ConsolePanel console_;
 };
 

@@ -109,7 +109,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.5 | Editor document, selection and undoable commands | done |
 | M5.6 | Scene entities in the viewport | done |
 | M5.7 | Hierarchy and console panels | done |
-| M5.8 | Inspector | planned |
+| M5.8 | Inspector | in progress |
 | M5.9 | Picking and selection in the viewport | planned |
 | M5.10 | WorldGen panel in Raven | planned |
 | M5.11 | Project workflow: new, open, save, close | planned |
@@ -607,6 +607,42 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 **GPU tier:** the inspector drawn for a test entity.
 
 **Visual check:** `005-inspector.png`.
+
+**Decisions made in M5.8:**
+- **The Euler convention** (`editor/include/editor/panels/EulerAngles.hpp`):
+  - rotation = Ry(yaw) * Rx(pitch) * Rz(roll), in degrees, with the engine's column vectors: a roll about Z first, then a pitch about X, then a yaw about Y, each about the world's axis, as the camera turns;
+  - the fields read pitch X, yaw Y, roll Z;
+  - shown: X in [-90, 90], Y and Z in (-180, 180]; a quaternion and its negation show the same angles; values within 0.0001 degrees of 0 show as 0, and of +-180 as 180;
+  - at a pitch of +-90 degrees (gimbal lock) the roll shows as 0 and the yaw holds both;
+  - an edited angle makes a new rotation from the three angles in the fields; every other stored value keeps its bits.
+- **The rounding shown:** positions, scales, near plane, directions and colors with 3 decimals; angles with 2; field of view and far plane with 1; intensity with 2. The spin boxes hold the full value; only the display is rounded.
+- **The widgets:**
+  - spin boxes for every number, with no range of their own, so that the component's `validate` is the only judge;
+  - a text field for the name;
+  - combo boxes for the assets: the registry's assets of the type in path order, the material list starting with "default" (no material);
+  - a checkbox for a script's enabled state;
+  - a Remove button per section, and an Add list with its button;
+  - all in a scroll box. A vector's three fields sit under their label, so that they fit the panel's width.
+- **The sections:**
+  - name, transform, camera, directional light, static mesh and script are edited, added and removed;
+  - the parent link and the prefab instance are shown only: the hierarchy sets parents (M5.7), and prefabs are M6's;
+  - an added component starts at its defaults: a name "Entity"; a static mesh with the first mesh asset and the default material; a script with the first script asset, enabled. A static mesh or a script without an asset of its type cannot be added, and the message says why.
+- **What an edit replaces:** only its group (a vector's three values or one value) in the component as stored (`InspectorFields.hpp`). Editing a position never re-rounds the stored rotation.
+- **One undo step per gesture:** the changes of one gesture on a spin box carry one merge key:
+  - a drag from press to release, a held arrow key, a held step button: one step;
+  - each press, Enter, wheel notch, or arrival of the keyboard starts a new gesture;
+  - the name and the lists are one step per change.
+- **A refused value:** the document refuses it (the component's `validate`, the scene's rules) and nothing changes. The field shows the stored value again, and the component's message is shown under its section in the console's error color, until the next accepted change of that component or until another entity is shown.
+- **Refreshing the fields:** the inspector follows the document's version and the selection once per frame, after the hierarchy (whose clicks select).
+  - The vector whose spin box has the keyboard is not overwritten until the keyboard leaves it; nor is a name being typed.
+  - Otherwise a rotation dragged through 90 degrees would jump to its other angles under the user's hands. Once the keyboard leaves, the same rotation is shown in its ranges.
+- **The entity's ID** is shown above the sections.
+- **Tests:**
+  - unit: the Euler conversion (the convention, 2000 round trips, 2000 random rotations in range, gimbal lock at +-90 degrees, the rotations M4 stores, -0 and -180, broken quaternions); the field groups read and written back with the other values' bits; the asset lists; the addable components and their defaults;
+  - headless Raven: every section shown for its component; every one of the 19 spin boxes, typed, reaching the scene through one command; a drag and a held key as one step, each press another; refused values (a zero scale, a position beyond the world, a far plane before the near plane, a negative intensity) with their messages; the rotation not rewritten while it is edited; the name with Enter, Escape, a refused empty name and a click elsewhere; the asset lists and the script's checkbox; adding and removing components; undo back to the exact stored values;
+  - GPU tier: the inspector of the test project's floating lighthouse (its rotation shown as 25 degrees about Z, its sections, a change of the document in its frame), drawn as text in the inspector's area;
+  - a real click with Windows input on a hierarchy row selected the entity, and the inspector showed it (the screenshot);
+  - breaking it on purpose made the tests fail: an edit of the position rewriting the stored rotation through its angles; no merge key, so a drag became many steps; the fields being edited overwritten from the scene.
 
 ### M5.9 — Picking and selection in the viewport
 

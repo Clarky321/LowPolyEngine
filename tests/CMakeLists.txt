@@ -31,8 +31,11 @@ add_executable(lpe_unit_tests
     unit/editor/document_dependencies_test.cpp
     unit/editor/document_history_test.cpp
     unit/editor/editor_options_test.cpp
+    unit/editor/euler_angles_test.cpp
     unit/editor/hierarchy_panel_test.cpp
     unit/editor/hierarchy_rows_test.cpp
+    unit/editor/inspector_fields_test.cpp
+    unit/editor/inspector_panel_test.cpp
     unit/editor/selection_test.cpp
     unit/editor/viewport_input_test.cpp
     unit/geometry/face_normal_test.cpp
