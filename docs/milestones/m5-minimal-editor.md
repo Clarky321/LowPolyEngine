@@ -107,7 +107,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.3 | The generated world in the viewport | done |
 | M5.4 | Project folder and project document | done |
 | M5.5 | Editor document, selection and undoable commands | done |
-| M5.6 | Scene entities in the viewport | in progress |
+| M5.6 | Scene entities in the viewport | done |
 | M5.7 | Hierarchy and console panels | planned |
 | M5.8 | Inspector | planned |
 | M5.9 | Picking and selection in the viewport | planned |
