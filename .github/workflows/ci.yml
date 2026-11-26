@@ -163,12 +163,14 @@ jobs:
           grep -q "scale 1.50" gpu-logs/editor-150.log
           xrdb -nocpp -remove
 
-      # The committed test project (M5.6): its five lighthouses in the viewport.
+      # The committed test project (M5.6): its five lighthouses in the viewport;
+      # its seven entities in the hierarchy (M5.7).
       - name: Editor with the test project (software OpenGL)
         shell: bash
         run: |
           "build/$PRESET/bin/lpe-editor" tests/projects/lighthouses --frames 60 --screenshot gpu-logs/editor-lighthouses.png 2>&1 | tee gpu-logs/editor-lighthouses.log
           grep -q "mesh entities drawn: 5 of 5" gpu-logs/editor-lighthouses.log
+          grep -q "hierarchy: rows: 7, rebuilds: 1, relabels: 0" gpu-logs/editor-lighthouses.log
 
       - name: Keep the GPU tier's logs and screenshots
         if: always()

@@ -1,17 +1,25 @@
 #pragma once
 
 // lpe-editor's application: the editor shell on Raven (M5.2) with the
-// generated world in its viewport (M5.3) and, given a project folder, the
-// project's document with its scene's entities in the viewport (M5.6). The
-// engine runs Raven with the shell's layout (ApplicationDesc::ui, ADR 0027);
-// the shell checks that the layout has its five areas, opens the project,
-// shows the archipelago of the project's world settings (the default ones
-// without a project) in the viewport, saves a requested screenshot on the last
-// frame, and records where the areas are for the checks. The other areas are
-// empty until later steps fill them.
+// generated world in its viewport (M5.3), given a project folder the
+// project's document with its scene's entities in the viewport (M5.6), and the
+// hierarchy and console panels (M5.7). The engine runs Raven with the shell's
+// layout (ApplicationDesc::ui, ADR 0027); the shell checks that the layout has
+// its five areas, opens the project, shows the archipelago of the project's
+// world settings (the default ones without a project) in the viewport, the
+// scene's entities in the hierarchy and the engine's log in the console, saves
+// a requested screenshot on the last frame, and records where the areas are
+// for the checks. The inspector stays empty until M5.8.
+//
+// The console's inbox listens to the engine's log from the shell's
+// construction, before the engine starts, so the console shows the run's log
+// from its first line; it stops listening in stop().
 
 #include "EditorOptions.hpp"
 #include "editor/document/EditorDocument.hpp"
+#include "editor/panels/ConsoleLog.hpp"
+#include "panels/ConsolePanel.hpp"
+#include "panels/HierarchyPanel.hpp"
 #include "viewport/WorldViewport.hpp"
 
 #include "engine/app/Application.hpp"
@@ -63,15 +71,27 @@ public:
     [[nodiscard]] EditorDocument* document() noexcept { return document_.get(); }
     [[nodiscard]] const EditorDocument* document() const noexcept { return document_.get(); }
 
+    // The panels, attached from start() to stop().
+    [[nodiscard]] const HierarchyPanel& hierarchy() const noexcept { return hierarchy_; }
+    [[nodiscard]] const ConsolePanel& console() const noexcept { return console_; }
+    // The console's lines (they stay after stop()).
+    [[nodiscard]] const ConsoleLog& consoleLog() const noexcept { return consoleLog_; }
+
 private:
     void recordAreas(engine::app::AppContext& context);
+    void detachPanels() noexcept;
 
     EditorOptions options_;
     std::array<std::uint32_t, kShellAreas.size()> widgets_{};
     std::vector<ShellArea> areas_;
-    // Before the viewport, which refers to it.
+    // Before the console's panel, which shows them.
+    LogInbox logInbox_;
+    ConsoleLog consoleLog_;
+    // Before the viewport and the hierarchy, which refer to it.
     std::unique_ptr<EditorDocument> document_;
     std::unique_ptr<WorldViewport> world_;
+    HierarchyPanel hierarchy_;
+    ConsolePanel console_;
 };
 
 } // namespace editor

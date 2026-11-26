@@ -37,7 +37,9 @@
 
 using engine::render::opengl::GlStateGroups;
 using engine::render::opengl::sameGlStateAround;
+using lpe_gpu_test::brightPixels;
 using lpe_gpu_test::centerOf;
+using lpe_gpu_test::dominantColor;
 using lpe_gpu_test::luminance;
 using lpe_gpu_test::near;
 using lpe_gpu_test::pixelAt;
@@ -183,18 +185,28 @@ TEST_CASE("The editor shell is drawn by Raven over the whole window", "[editor][
     CHECK(magenta == 0);
 
     // The viewport shows the world (M5.3), not its empty black; the empty
-    // panels share the theme's panel colour, which is not black; the toolbar
-    // is drawn too.
+    // inspector has the theme's panel colour, which is not black; the toolbar
+    // is drawn too. The hierarchy's tree (empty without a project) and the
+    // console's list (M5.7) share the theme's list background, also not
+    // black; the console shows the run's log in light text, the empty tree
+    // none.
     const Rgb viewport = centerOf(frame, area(shell, "viewport"));
-    const Rgb hierarchy = centerOf(frame, area(shell, "hierarchy"));
     const Rgb inspector = centerOf(frame, area(shell, "inspector"));
-    const Rgb console = centerOf(frame, area(shell, "console"));
+    const Rgb hierarchy = dominantColor(frame, area(shell, "hierarchy"));
+    const Rgb console = dominantColor(frame, area(shell, "console"));
     const Rgb toolbar = centerOf(frame, area(shell, "toolbar"));
     CHECK(luminance(viewport) > 25);
-    CHECK(luminance(hierarchy) > 20);
-    CHECK(near(hierarchy, inspector, 3));
+    CHECK(luminance(inspector) > 20);
+    CHECK(luminance(hierarchy) > 10);
     CHECK(near(hierarchy, console, 3));
     CHECK(luminance(toolbar) > 15);
+    const editor::ShellArea& consoleArea = area(shell, "console");
+    const editor::ShellArea& hierarchyArea = area(shell, "hierarchy");
+    // Below the console's checkboxes, and below the hierarchy's buttons.
+    CHECK(brightPixels(frame, consoleArea.x, consoleArea.y + 40, consoleArea.width,
+                       consoleArea.height - 40, 150) > 100);
+    CHECK(brightPixels(frame, hierarchyArea.x + 4, hierarchyArea.y + 50, hierarchyArea.width - 8,
+                       hierarchyArea.height - 60, 150) == 0);
 
     // Each docked area has its titled tab above it.
     for (const std::string_view name : {"viewport", "hierarchy", "inspector", "console"}) {

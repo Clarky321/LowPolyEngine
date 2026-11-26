@@ -172,6 +172,9 @@
         "staticMesh": {
           "mesh": "e0d26ee4-76e9-4be9-83b8-db3ead871652",
           "material": null
+        },
+        "parent": {
+          "entity": "be6bcaf9-8946-4563-9f97-469e25204287"
         }
       }
     },
@@ -203,6 +206,9 @@
           "verticalFovRadians": 1.0471976,
           "nearPlane": 0.1,
           "farPlane": 1000.0
+        },
+        "parent": {
+          "entity": "a6456451-af37-4e1c-907f-0af2cbe31975"
         }
       }
     }

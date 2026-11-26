@@ -1,7 +1,7 @@
 #pragma once
 
-// Pixel helpers for the editor's GPU tests (M5.2, M5.3): colours of a frame
-// read back as PNG, and the shell's areas in it.
+// Pixel helpers for the editor's GPU tests (M5.2, M5.3, M5.7): colours of a
+// frame read back as PNG, and the shell's areas in it.
 
 #include "application/EditorShell.hpp"
 
@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
+#include <map>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace lpe_gpu_test {
@@ -60,6 +62,38 @@ inline const editor::ShellArea& area(const std::vector<editor::ShellArea>& areas
 inline Rgb centerOf(const engine::core::Image& image, const editor::ShellArea& a)
 {
     return pixelAt(image, a.x + a.width / 2, a.y + a.height / 2);
+}
+
+// The colour most pixels of an area have: a panel's background, whatever text
+// or widgets lie on it.
+inline Rgb dominantColor(const engine::core::Image& image, const editor::ShellArea& a)
+{
+    std::map<std::tuple<int, int, int>, int> counts;
+    for (int y = a.y; y < a.y + a.height; ++y) {
+        for (int x = a.x; x < a.x + a.width; ++x) {
+            const Rgb c = pixelAt(image, x, y);
+            ++counts[{c.r, c.g, c.b}];
+        }
+    }
+    const auto most =
+        std::max_element(counts.begin(), counts.end(),
+                         [](const auto& l, const auto& r) { return l.second < r.second; });
+    REQUIRE(most != counts.end());
+    return {std::get<0>(most->first), std::get<1>(most->first), std::get<2>(most->first)};
+}
+
+// The pixels of a rectangle brighter than `threshold`: light text on the dark
+// theme.
+inline int brightPixels(const engine::core::Image& image, int x0, int y0, int width, int height,
+                        int threshold)
+{
+    int count = 0;
+    for (int y = std::max(y0, 0); y < std::min(y0 + height, image.height); ++y) {
+        for (int x = std::max(x0, 0); x < std::min(x0 + width, image.width); ++x) {
+            count += luminance(pixelAt(image, x, y)) > threshold ? 1 : 0;
+        }
+    }
+    return count;
 }
 
 } // namespace lpe_gpu_test

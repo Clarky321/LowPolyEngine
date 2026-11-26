@@ -6,7 +6,8 @@
 #                as the program (M5.2: the shell application and its options;
 #                M5.3: the world in the viewport and the camera's input;
 #                M5.5: the document, the selection and the undoable commands,
-#                UI-free, in include/editor/)
+#                UI-free, in include/editor/; M5.7: the hierarchy and console
+#                panels, their UI-free models in include/editor/panels/)
 #   lpe-editor   the program (src/main.cpp)
 
 # The shell's layout, embedded: the editor reads no layout file at run time.
@@ -23,13 +24,18 @@ add_library(editor STATIC
     src/commands/WorldCommands.cpp
     src/document/ComponentValue.cpp
     src/document/EditorDocument.cpp
+    src/panels/ConsoleLog.cpp
+    src/panels/ConsolePanel.cpp
+    src/panels/HierarchyPanel.cpp
+    src/panels/HierarchyRows.cpp
     src/selection/Selection.cpp
     src/viewport/ViewportInput.cpp
     src/viewport/WorldViewport.cpp
     ${editor_layouts}
 )
-# include/editor/: the document, commands and selection (UI-free, ADR 0029);
-# src/: the application, the viewport and other Raven code.
+# include/editor/: the document, commands and selection (UI-free, ADR 0029)
+# and the panels' models; src/: the application, the viewport, the panels and
+# other Raven code.
 target_include_directories(editor PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"

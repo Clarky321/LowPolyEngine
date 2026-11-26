@@ -16,6 +16,9 @@ namespace editor {
 EditorShell::EditorShell(EditorOptions options) : options_(std::move(options))
 {
     widgets_.fill(R_INVALID_ID);
+    // Before the engine starts: the console shows the run's log from its
+    // first line (ADR 0030).
+    logInbox_.listen();
 }
 
 std::optional<engine::core::Error> EditorShell::start(engine::app::AppContext& context)
@@ -57,6 +60,17 @@ std::optional<engine::core::Error> EditorShell::start(engine::app::AppContext& c
                               document_->scene().entityCount(), document_->assets().size());
     }
 
+    // The panels (M5.7): the scene's entities, and the log received so far.
+    logInbox_.listen();
+    consoleLog_.append(logInbox_.take());
+    if (auto error = hierarchy_.attach(window, document_.get())) {
+        return error;
+    }
+    if (auto error = console_.attach(window, consoleLog_)) {
+        detachPanels();
+        return error;
+    }
+
     // Last, so that nothing fails after it: stop() is not called after a
     // failed start(). The project's world settings, or the default ones.
     const Rid viewport = widgets_[kViewportArea];
@@ -65,6 +79,7 @@ std::optional<engine::core::Error> EditorShell::start(engine::app::AppContext& c
                                                  : engine::worldgen::WorldGenSettings{},
                                        document_.get());
     if (!world) {
+        detachPanels();
         return world.error();
     }
     world_ = std::move(world).value();
@@ -78,6 +93,12 @@ void EditorShell::update(engine::app::AppContext& context, const engine::core::F
     if (world_) {
         world_->update(time);
     }
+    // After the document's changes of this frame's input, before Raven draws:
+    // the tree matches the scene in the frame drawn. The console last, with
+    // what the others logged in this update.
+    hierarchy_.update();
+    consoleLog_.append(logInbox_.take());
+    console_.update();
     recordAreas(context);
     // The last frame of a --screenshot run is saved, by the editor itself.
     if (options_.screenshotPath && options_.maxFrames &&
@@ -114,10 +135,34 @@ void EditorShell::stop(engine::app::AppContext& /*context*/)
         world_->release();
         world_.reset();
     }
+    if (hierarchy_.attached()) {
+        engine::core::logInfo("editor", "hierarchy: rows: {}, rebuilds: {}, relabels: {}",
+                              hierarchy_.rows().size(), hierarchy_.rebuildCount(),
+                              hierarchy_.relabelCount());
+    }
+    if (console_.attached()) {
+        using engine::core::LogLevel;
+        engine::core::logInfo("editor",
+                              "console: lines: {} (errors: {}, warnings: {}, info: {}, debug: "
+                              "{}), shown: {}",
+                              consoleLog_.lines().size(), consoleLog_.count(LogLevel::Error),
+                              consoleLog_.count(LogLevel::Warning),
+                              consoleLog_.count(LogLevel::Info), consoleLog_.count(LogLevel::Debug),
+                              console_.rowCount());
+    }
+    detachPanels();
+    // What is logged from now on reaches no panel.
+    logInbox_.stopListening();
     for (const ShellArea& area : areas_) {
         engine::core::logInfo("editor", "area {}: {}x{} at ({}, {})", area.name, area.width,
                               area.height, area.x, area.y);
     }
+}
+
+void EditorShell::detachPanels() noexcept
+{
+    hierarchy_.detach();
+    console_.detach();
 }
 
 void EditorShell::recordAreas(engine::app::AppContext& context)

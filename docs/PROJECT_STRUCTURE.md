@@ -27,7 +27,7 @@ lowpoly-engine/
 │   ├── CMakeLists.txt
 │   ├── include/engine/
 │   │   ├── app/              # Application lifecycle and frame loop (M1)
-│   │   ├── core/             # Clock, Log, Result, files, images, math aliases, persistent UUIDs (ADR 0020), UTF-8 checks
+│   │   ├── core/             # Clock, Log (with listeners, ADR 0030, M5.7), Result, files, images, math aliases, persistent UUIDs (ADR 0020), UTF-8 checks
 │   │   ├── platform/         # Engine-facing window/input interfaces
 │   │   ├── geometry/         # CPU MeshData, primitive builders (M1, ADR 0007), OBJ subset import (M2.9, ADR 0012)
 │   │   ├── render/           # RHI-facing types and renderer interfaces
@@ -65,12 +65,13 @@ lowpoly-engine/
 ├── editor/                   # lpe-editor on Raven (M5; ADR 0019, ADR 0027); "planned" folders come with later steps
 │   ├── CMakeLists.txt        # library `editor` (the editor's code, also linked by tests) and program `lpe-editor`
 │   ├── layouts/              # Raven XML, embedded at build time: shell.xml, the shell (M5.2)
-│   ├── include/editor/       # UI-free (ADR 0029): document/ (EditorDocument: project, history, dirty state; Command; ComponentValue), commands/ (entity, component and world commands), selection/ (M5.5); panels/ planned (M5.7–M5.11)
+│   ├── include/editor/       # UI-free (ADR 0029): document/ (EditorDocument: project, history, dirty state; Command; ComponentValue), commands/ (entity, component and world commands), selection/ (M5.5); panels/ (M5.7: HierarchyRows, the scene's entities as rows of a tree; ConsoleLog, the console's lines and the inbox that receives the log on any thread)
 │   └── src/
 │       ├── main.cpp          # lpe-editor's entry point: --frames, --screenshot, --size (M5.2); a project folder opened at start (M5.6)
 │       ├── application/      # EditorShell (the shell application), EditorOptions, ShellLayout (M5.2)
 │       ├── document/, commands/, selection/  # the sources of include/editor/ (M5.5)
 │       ├── viewport/         # WorldViewport: the generated world drawn from the viewport's draw callback (M5.3), with the document's scene entities, read again when the document's version changes (M5.6); ViewportInput: the editor camera's input (M5.3)
+│       ├── panels/           # HierarchyPanel: the scene's entities in Raven's TreeView, create, delete, rename in place, reparent by dragging; ConsolePanel: the log's lines in Raven's ListView with a filter per level (M5.7); the sources of include/editor/panels/
 │       ├── panels/           # planned (M5.7–M5.10)
 │       └── project/          # planned (M5.11)
 ├── sandbox/
@@ -90,13 +91,13 @@ lowpoly-engine/
 │   │   ├── scene/
 │   │   ├── assets/
 │   │   ├── scripting/
-│   │   ├── editor/           # lpe-editor's options (M5.2; the project folder, M5.6); the viewport camera's input with Raven's null backend (M5.3); the document, its commands, history and selection (M5.5); the document's version (M5.6)
+│   │   ├── editor/           # lpe-editor's options (M5.2; the project folder, M5.6); the viewport camera's input with Raven's null backend (M5.3); the document, its commands, history and selection (M5.5); the document's version (M5.6); the hierarchy's rows and panel, the console's lines and panel, the panels with Raven's null backend (M5.7)
 │   │   ├── ui/               # headless Raven: null backend, host platform, injected input (M5.1); the shell layout at several scales (M5.2)
 │   │   ├── world/            # the sky and how the world is looked at (M5.3; the sky's tests moved from unit/sandbox/); which scene entities are drawn with which matrices and light, mesh assets read once (M5.6)
 │   │   └── project/          # the project document, open and save on disk, failures injected at every operation of a save, the module's dependencies (M5.4); the committed test projects (M5.6)
 │   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp), the Raven host bridge and UI lifetime on SDL's dummy driver (raven_ui_test.cpp, M5.2)
 │   ├── rendering/            # Optional GPU-dependent tier
-│   └── projects/             # committed test projects, opened by lpe-editor in the GPU tier, in CI and for screenshots: lighthouses/ (M5.6), written by the engine's project code
+│   └── projects/             # committed test projects, opened by lpe-editor in the GPU tier, in CI and for screenshots: lighthouses/ (M5.6, written by the engine's project code; two parent links added in M5.7, in the engine's format, which a test checks by saving it again)
 ├── scripts/
 │   ├── python/
 │   └── windows/

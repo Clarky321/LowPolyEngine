@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The empty shell of lpe-editor (M5.2, ADR 0027): a toolbar above a DockArea
-  with the viewport, the hierarchy, the inspector and the console. The areas
-  are empty; later steps fill them (M5.3 the viewport, M5.7 hierarchy and
-  console, M5.8 the inspector). The engine embeds this file at build time and
-  gives Raven its text (no live reload, no search places: ADR 0026).
+  The shell of lpe-editor (M5.2, ADR 0027): a toolbar above a DockArea with
+  the viewport, the hierarchy, the inspector and the console. M5.3 filled the
+  viewport, M5.7 the hierarchy and the console; the inspector stays empty
+  until M5.8. The engine embeds this file at build time and gives Raven its
+  text (no live reload, no search places: ADR 0026).
 
   Sizes are fractions of the window (Slot.DockSize), so the panels follow the
   window and the display scale; the minimum sizes keep a small window usable
@@ -19,14 +19,46 @@
 		<DockArea Name="dock" Slot.Fill="1">
 			<Viewport Name="viewport" Slot.Title="Viewport" Slot.Closable="false"/>
 
+			<!--
+			  The hierarchy (M5.7, editor/src/panels/HierarchyPanel): Create and
+			  Delete, and the scene's entities as a tree. The text field for
+			  renaming in place lies in a canvas over the tree, which lets the
+			  pointer through; it is shown over a row while that row is renamed.
+			  The buttons are enabled once a project is open.
+			-->
 			<VBox Name="hierarchy" Slot.Title="Hierarchy" Slot.Dock="Left" Slot.DockSize="0.2"
-				Slot.Closable="false" MinWidth="120"/>
+				Slot.Closable="false" MinWidth="120">
+				<HBox Name="hierarchy-tools" Spacing="4" Slot.Padding="4,4">
+					<Button Name="hierarchy-create" Text="Create" Enabled="false"
+						Tooltip="A new entity at the top level"/>
+					<Button Name="hierarchy-delete" Text="Delete" Enabled="false"
+						Tooltip="Deletes the selected entity (Delete)"/>
+				</HBox>
+				<Overlay Slot.Fill="1">
+					<TreeView Name="hierarchy-tree"/>
+					<Canvas Name="hierarchy-rename-layer" HitTestable="false">
+						<TextInput Name="hierarchy-rename" Visibility="Collapsed" Placeholder="Name"/>
+					</Canvas>
+				</Overlay>
+			</VBox>
 
 			<VBox Name="inspector" Slot.Title="Inspector" Slot.Dock="Right" Slot.DockSize="0.22"
 				Slot.Closable="false" MinWidth="140"/>
 
+			<!--
+			  The console (M5.7, editor/src/panels/ConsolePanel): the engine's log,
+			  a checkbox per level to show or hide its lines.
+			-->
 			<VBox Name="console" Slot.Title="Console" Slot.Dock="Bottom" Slot.DockTo="viewport"
-				Slot.DockSize="0.26" Slot.Closable="false" MinHeight="60"/>
+				Slot.DockSize="0.26" Slot.Closable="false" MinHeight="60">
+				<HBox Name="console-tools" Spacing="12" Slot.Padding="6,2">
+					<Checkbox Name="console-errors" Text="Errors" Checked="true"/>
+					<Checkbox Name="console-warnings" Text="Warnings" Checked="true"/>
+					<Checkbox Name="console-info" Text="Info" Checked="true"/>
+					<Checkbox Name="console-debug" Text="Debug" Checked="true"/>
+				</HBox>
+				<ListView Name="console-lines" Slot.Fill="1"/>
+			</VBox>
 		</DockArea>
 	</VBox>
 </Window>

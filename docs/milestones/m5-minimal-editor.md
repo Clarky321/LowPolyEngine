@@ -108,7 +108,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.4 | Project folder and project document | done |
 | M5.5 | Editor document, selection and undoable commands | done |
 | M5.6 | Scene entities in the viewport | done |
-| M5.7 | Hierarchy and console panels | planned |
+| M5.7 | Hierarchy and console panels | in progress |
 | M5.8 | Inspector | planned |
 | M5.9 | Picking and selection in the viewport | planned |
 | M5.10 | WorldGen panel in Raven | planned |
@@ -126,7 +126,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - Every panel gets headless Raven tests (null backend, input through the host platform).
   - Every step that draws gets a GPU-tier check.
 - **Visible steps get a screenshot** in `docs/screenshots/m5/` with its command in the README there (`docs/DEVELOPMENT_WORKFLOW.md` §6), taken by the editor itself (`--screenshot`). No UI is added just for screenshots.
-- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging), M5.2 0027 (Raven in the engine), M5.4 0028 (project document), M5.5 0029 (editor document and commands); M5.6 amended 0027 and 0029. The next free number is 0030.
+- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging), M5.2 0027 (Raven in the engine), M5.4 0028 (project document), M5.5 0029 (editor document and commands); M5.6 amended 0027 and 0029; M5.7 took 0030 (log listeners). The next free number is 0031.
 - **Out of scope stays out:** gizmos, play mode, the asset browser and import, materials and prefab authoring (M6) stay out, even where Raven makes them easy.
 - **The checks of `docs/TESTING_AND_CI.md` §8 for the kind of change.** The GPU tier runs from M5.2 on, since every later step touches the window, the loop or drawing.
 - **Two kinds of OpenGL runs, never mixed up** (decisions 2 and 3).
@@ -544,6 +544,41 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Visual check:** `004-hierarchy-console.png`.
 
+**Decisions made in M5.7** (ADR 0030):
+- **The log listener** (`engine/core/Log.hpp`, ADR 0030): `addLogListener(listener)` returns a `LogSubscription`, which removes the listener when reset or destroyed; the listener gets a `LogRecord` (level, category, message).
+  - A listener receives each line after it went to stderr, on the thread that wrote it, while the log holds its lock: one line at a time, given to the listeners in the order they were added.
+  - When a removal returns, the listener is not called again; inside a listener a removal takes effect at once.
+  - A line logged inside a listener goes to stderr only; an exception from a listener is dropped.
+- **The console's lines** (`editor/include/editor/panels/ConsoleLog.hpp`):
+  - `LogInbox` receives the log on any thread under its own lock. The shell listens from its construction, before the engine starts, so the console shows the run's log from its first line, until `stop()`.
+  - `ConsoleLog` takes the lines once per frame in the shell's update, on the main thread. It keeps the newest 10 000 (`kConsoleLineLimit`), counts them by level and lists those the filter shows.
+  - A line logged in a frame's update is in the console at the end of that update; one logged while Raven draws, in the next frame.
+- **The console panel:**
+  - Raven's ListView in virtual mode;
+  - a checkbox per level that shows or hides its lines and gives their count, e.g. "Warnings (2)";
+  - errors red, warnings amber, debug lines dimmed, info lines in the theme's color;
+  - it follows the newest line unless the user selected one; changing the filter clears the selection.
+- **The hierarchy's rows** (`hierarchyRows`, UI-free): depth first, the top-level entities and each entity's children in creation order. An entity is shown by its name, or by its ID without one.
+- **How the tree keeps in step with the document:** the document's version (ADR 0029 Amendment 1), compared once per frame in the shell's update, after the frame's input and before Raven draws.
+  - The same shape (entities, parents, order): only the labels that changed are set, and Raven's items stay (a rename).
+  - Another shape: the items are built anew. Branches the user closed stay closed, also for an entity that an undo brings back; a rename in progress ends.
+  - The tree shows the document's primary selection, and a click in the tree selects in the document: one entity at a time.
+- **The actions,** each one command and so one undo step:
+  - **Create** (button): a top-level entity named "Entity" with a transform at the defaults, then selected.
+  - **Delete** (button, or the Delete key in the tree): the selected entity; its children move to the top level.
+  - **Rename in place** (F2, Enter or a double click in the tree): a text field over the row, the name selected. Enter or leaving the field renames; Escape cancels; an unchanged name is no step. Raven's TreeView edits no text itself, so the field lies in a canvas over the tree that lets the pointer through, and is placed over the row's rectangle.
+  - **Reparent:** dragging onto an entity makes it its child; onto the empty space below the rows, top level. A drop onto the dragged entity itself is refused at once (a short drag ends there by accident), and one where the entity already is changes nothing.
+  - A command the document refuses (an empty name, a parent link that closes a cycle) changes nothing. Its message goes to the log as a warning, e.g. "[editor] hierarchy: cannot set the parent of 'Tower': ...", and so to the console.
+  - Commands run in Raven's callbacks, and the tree follows in the shell's update of the same frame. A rename starts there too, outside the tree's own handling of the click.
+- **Without a project:** the tree is empty and the buttons are disabled.
+- **The test project** gains two parent links, in the engine's format (the save test writes the same bytes): the floating lighthouse under the lighthouse on the high island, the camera under the one on the near island. Nothing moves in the viewport, since transforms are not inherited.
+- **Tests:**
+  - unit: the log listener (order, levels, listeners that log, throw, remove themselves or add others, four threads, removal while another thread logs without pause); the rows; the console's lines, limit, filter and inbox;
+  - headless Raven: the hierarchy through injected clicks, keys, text and drags (create, delete, rename by Enter, Escape and a click elsewhere, refused names, reparent, cycles, the shared selection, closed branches, 240 mixed actions with undo and redo), Raven's items checked against the scene's rows after every action; the console (lines within a frame, the checkboxes);
+  - GPU tier: the editor with the test project shows the seven rows, the children indented, and an empty tree without a project; the tree equals the scene at the end of every frame through a rename, a delete and their undo; a warning is in the console in its frame and drawn in amber; a CTest run of `lpe-editor` with the project checks the hierarchy's and the console's summary lines;
+  - the shell's earlier pixel checks now expect the filled hierarchy and console.
+  - Breaking it on purpose made the tests fail: the hierarchy reading the scene only once; a listener removed inside a listener still called for the rest of the line; the tree rebuilt for every change.
+
 ### M5.8 — Inspector
 
 **Goal:** the selected entity's components shown and edited.
@@ -670,6 +705,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 | Raven in the engine | M5.2 | public UI API, event order, frame order, ownership |
 | Project document | M5.4 | format, folder layout, paths, all-or-nothing open, a consistent save of several files (ADR 0028) |
 | Editor document and commands | M5.5 | command model, undo, merging, dirty state (ADR 0029) |
+| Log listeners | M5.7 | the console's access to the engine's log: API, threads, removal (ADR 0030) |
 | Amendments | as needed | ADR 0019 (integration details), ADR 0018 if the debug UI's hook changes |
 
 ## Out of scope for M5

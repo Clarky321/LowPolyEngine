@@ -8,10 +8,12 @@ set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
 
 # Engine-level GPU tests (Catch2): application loop, renderer, frame capture,
 # the generated world on the GPU (engine/world, M3.12, M5.3) with the debug UI,
-# and a scene's entities on the GPU (engine/world's SceneView, M5.6).
+# a scene's entities on the GPU (engine/world's SceneView, M5.6), and the
+# editor's hierarchy and console (M5.7).
 add_executable(lpe_gpu_tests
     application_gpu_test.cpp
     editor_gpu_test.cpp
+    editor_panels_gpu_test.cpp
     editor_scene_gpu_test.cpp
     editor_viewport_gpu_test.cpp
     renderer_gpu_test.cpp
@@ -22,7 +24,7 @@ add_executable(lpe_gpu_tests
 # glad: the texture tests inspect OpenGL objects directly (handles, row order,
 # sampling state). The renderer loads the function pointers.
 target_link_libraries(lpe_gpu_tests PRIVATE engine glad Catch2::Catch2WithMain)
-# The editor on Raven (M5.2, M5.3, M5.6): the editor's code, Raven's API, the
+# The editor on Raven (M5.2, M5.3, M5.6, M5.7): the editor's code, Raven's API, the
 # engine's OpenGL state comparison (engine/src/render/opengl/GlRavenBackend.hpp)
 # and the native window, which the viewport test resizes.
 find_package(SDL3 REQUIRED CONFIG)
@@ -225,6 +227,15 @@ set_tests_properties(lpe_editor_not_a_project PROPERTIES
     PASS_REGULAR_EXPRESSION "cannot open the project in '[^']*broken-model': [^\n]*'project\\.json' is missing")
 lpe_add_gpu_test(lpe_editor_not_a_project_exit lpe-editor "${fixtures}/broken-model" --frames 5)
 set_tests_properties(lpe_editor_not_a_project_exit PROPERTIES WILL_FAIL TRUE)
+
+# The hierarchy (M5.7) holds the project's seven entities, built once and
+# never rebuilt or relabelled without a change; the console received the run's
+# log without an error (a platform's warning, such as no vsync under Xvfb, may
+# be among its lines).
+lpe_add_gpu_test(lpe_editor_panels lpe-editor tests/projects/lighthouses --frames 30)
+set_tests_properties(lpe_editor_panels PROPERTIES
+    PASS_REGULAR_EXPRESSION "hierarchy: rows: 7, rebuilds: 1, relabels: 0\n[^\n]*console: lines: [0-9]+ \\(errors: 0, "
+    FAIL_REGULAR_EXPRESSION "${lpe_editor_problems}")
 
 # --screenshot saves the frame made by the editor itself, at the --size given.
 lpe_add_gpu_test(lpe_editor_screenshot

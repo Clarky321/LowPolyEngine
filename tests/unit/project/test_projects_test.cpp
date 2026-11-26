@@ -1,14 +1,17 @@
-// The committed test project tests/projects/lighthouses (M5.6): the project
-// lpe-editor opens in the GPU tier, in CI and for docs/screenshots/m5. It opens
-// without a warning, holds what the tests expect, its lighthouse and world
-// settings are the engine's committed ones, and it is saved exactly as the
-// engine saves it (a save of a copy writes the same bytes). Headless.
+// The committed test project tests/projects/lighthouses (M5.6; two parent
+// links since M5.7): the project lpe-editor opens in the GPU tier, in CI and
+// for docs/screenshots/m5. It opens without a warning, holds what the tests
+// expect, its lighthouse and world settings are the engine's committed ones,
+// and it is saved exactly as the engine saves it (a save of a copy writes the
+// same bytes). Headless.
 
 #include "ProjectTestSupport.hpp"
 
 #include "engine/core/FileSystem.hpp"
 #include "engine/core/Uuid.hpp"
 #include "engine/project/Project.hpp"
+#include "engine/scene/NameComponent.hpp"
+#include "engine/scene/ParentComponent.hpp"
 #include "engine/scene/Scene.hpp"
 #include "engine/world/SceneDraws.hpp"
 #include "engine/worldgen/SettingsFile.hpp"
@@ -18,6 +21,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -73,6 +77,26 @@ TEST_CASE("The lighthouses test project opens without a warning and holds its sc
         CHECK(draw.mesh == assets[0].id);
         CHECK(scene.hasComponent<engine::scene::TransformComponent>(draw.entity));
     }
+    // Two parent links (M5.7), for the hierarchy: the floating lighthouse
+    // under the one on the high island, the camera under the one on the near
+    // island. They move nothing: transforms are not inherited.
+    const auto named = [&scene](std::string_view name) {
+        for (const auto entity : scene.entityIds()) {
+            const auto component = scene.component<engine::scene::NameComponent>(entity);
+            if (component && component.value().value == name) {
+                return entity;
+            }
+        }
+        return engine::scene::EntityId{};
+    };
+    const auto parentOf = [&scene](engine::scene::EntityId entity) {
+        const auto link = scene.component<engine::scene::ParentComponent>(entity);
+        return link ? link.value().entity : engine::scene::EntityId{};
+    };
+    CHECK(scene.entitiesWith<engine::scene::ParentComponent>().size() == 2);
+    CHECK(parentOf(named("Floating lighthouse")) == named("Lighthouse on the high island"));
+    CHECK(parentOf(named("Harbour camera")) == named("Lighthouse on the near island"));
+    CHECK_FALSE(named("Lighthouse on the high island").isNull());
 }
 
 TEST_CASE("The lighthouses test project is saved exactly as the engine saves it",

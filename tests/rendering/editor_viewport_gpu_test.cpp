@@ -325,13 +325,18 @@ TEST_CASE("The viewport shows the world inside its rectangle and nowhere else",
     CHECK(inside.sky > inside.total / 4);
     CHECK(inside.world > inside.total / 20);
 
-    // Outside: the frame is the empty shell's, pixel for pixel.
+    // Outside: the frame is the empty shell's, pixel for pixel, but for the
+    // console (M5.7), which shows the editor's log in one run and nothing in
+    // the other.
     const Rect beyond = viewport.grown(2);
+    const editor::ShellArea& consoleArea = lpe_gpu_test::area(editor.areas(), "console");
+    const Rect console =
+        Rect{consoleArea.x, consoleArea.y, consoleArea.width, consoleArea.height}.grown(2);
     std::size_t outside = 0;
     std::size_t changed = 0;
     for (int y = 0; y < withWorld.height; ++y) {
         for (int x = 0; x < withWorld.width; ++x) {
-            if (beyond.contains(x, y)) {
+            if (beyond.contains(x, y) || console.contains(x, y)) {
                 continue;
             }
             ++outside;

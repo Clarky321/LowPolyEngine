@@ -17,6 +17,7 @@ add_executable(lpe_unit_tests
     unit/core/filesystem_test.cpp
     unit/core/frame_clock_test.cpp
     unit/core/image_test.cpp
+    unit/core/log_listener_test.cpp
     unit/core/log_test.cpp
     unit/core/png_decode_test.cpp
     unit/core/result_test.cpp
@@ -24,10 +25,14 @@ add_executable(lpe_unit_tests
     unit/core/utf8_test.cpp
     unit/core/uuid_test.cpp
     unit/debug/text_mesh_test.cpp
+    unit/editor/console_log_test.cpp
+    unit/editor/console_panel_test.cpp
     unit/editor/document_commands_test.cpp
     unit/editor/document_dependencies_test.cpp
     unit/editor/document_history_test.cpp
     unit/editor/editor_options_test.cpp
+    unit/editor/hierarchy_panel_test.cpp
+    unit/editor/hierarchy_rows_test.cpp
     unit/editor/selection_test.cpp
     unit/editor/viewport_input_test.cpp
     unit/geometry/face_normal_test.cpp
