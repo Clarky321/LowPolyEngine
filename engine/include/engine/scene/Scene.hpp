@@ -32,6 +32,7 @@
 
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -60,6 +61,16 @@ concept SceneComponent =
     std::same_as<T, StaticMeshComponent> || std::same_as<T, CameraComponent> ||
     std::same_as<T, DirectionalLightComponent> || std::same_as<T, ScriptComponent> ||
     std::same_as<T, ParentComponent> || std::same_as<T, PrefabInstanceComponent>;
+
+// An entity's place in the creation order of one scene (M5.5): an undo gives
+// a destroyed entity its place back, so the scene's entities and its document
+// list it where they did. Only meaningful for the scene it came from, until
+// that scene is cleared.
+struct EntityPlace {
+    std::uint64_t sequence = 0;
+
+    friend bool operator==(const EntityPlace&, const EntityPlace&) = default;
+};
 
 class Scene {
 public:
@@ -90,6 +101,16 @@ public:
     // already contains.
     [[nodiscard]] core::Result<EntityId> createEntity(EntityId entity);
 
+    // The entity's place in the creation order. Fails for an ID the scene does
+    // not contain.
+    [[nodiscard]] core::Result<EntityPlace> placeOf(EntityId entity) const;
+    // Creates an entity, without components, with the given ID at a free
+    // place the scene gave out before: the place it had before it was
+    // destroyed (an undo of its deletion, a redo of its creation). Fails for
+    // the null ID, an ID the scene contains, and a place the scene never gave
+    // out or another entity holds.
+    [[nodiscard]] core::Result<EntityId> restoreEntity(EntityId entity, EntityPlace place);
+
     // Destroys the entity together with its components. Its children are
     // detached (their ParentComponent removed), not destroyed. Fails for an ID
     // the scene does not contain.
@@ -101,7 +122,8 @@ public:
     [[nodiscard]] std::optional<core::Error> findEntity(EntityId entity) const;
 
     // The IDs of all entities in the order they were created (a destroyed
-    // entity leaves its place; one created again with its ID goes to the end).
+    // entity leaves its place; one created again with its ID goes to the end,
+    // one restored with restoreEntity to its old place).
     [[nodiscard]] std::vector<EntityId> entityIds() const;
     [[nodiscard]] std::size_t entityCount() const noexcept;
 
@@ -163,7 +185,7 @@ private:
     // Nothing if `parent` may become the parent of `child`.
     [[nodiscard]] std::optional<core::Error> checkParent(EntityId child, EntityId parent) const;
     [[nodiscard]] Storage& storage();
-    void insert(EntityId entity);
+    void insert(EntityId entity, std::uint64_t sequence);
 
     // The entities having a component of type T, in creation order.
     template <SceneComponent T>

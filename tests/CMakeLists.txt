@@ -24,7 +24,11 @@ add_executable(lpe_unit_tests
     unit/core/utf8_test.cpp
     unit/core/uuid_test.cpp
     unit/debug/text_mesh_test.cpp
+    unit/editor/document_commands_test.cpp
+    unit/editor/document_dependencies_test.cpp
+    unit/editor/document_history_test.cpp
     unit/editor/editor_options_test.cpp
+    unit/editor/selection_test.cpp
     unit/editor/viewport_input_test.cpp
     unit/geometry/face_normal_test.cpp
     unit/geometry/mesh_data_test.cpp
@@ -89,13 +93,15 @@ target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT
 target_compile_definitions(lpe_unit_tests PRIVATE
     LPE_ENGINE_INCLUDE_DIRECTORY="${PROJECT_SOURCE_DIR}/engine/include"
     LPE_ENGINE_SOURCE_DIRECTORY="${PROJECT_SOURCE_DIR}/engine/src"
+    LPE_EDITOR_SOURCE_DIRECTORY="${PROJECT_SOURCE_DIR}/editor"
 )
 # Raven (M5.1, ADR 0026) runs headless in tests/unit/ui/: its null backend and
 # host platform, no window system, GPU or SDL. The tests check the pin of
 # cmake/RavenDependency.cmake against Raven and against the vendored README.
 target_link_libraries(lpe_unit_tests PRIVATE raven)
-# The editor's code (M5.2, M5.3): its options, the shell's layout and the
-# viewport camera's input, headless.
+# The editor's code (M5.2, M5.3, M5.5): its options, the shell's layout, the
+# viewport camera's input, the document, the commands and the selection,
+# headless.
 target_link_libraries(lpe_unit_tests PRIVATE editor)
 target_compile_definitions(lpe_unit_tests PRIVATE
     LPE_RAVEN_VERSION="${LPE_RAVEN_VERSION}"

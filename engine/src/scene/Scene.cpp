@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <format>
 #include <map>
+#include <set>
 #include <type_traits>
 #include <utility>
 
@@ -110,6 +111,8 @@ struct Scene::Storage {
     entt::registry registry;
     // Persistent ID -> EnTT entity. The EnTT handle never leaves this file.
     std::map<EntityId, entt::entity> handles;
+    // The places in the creation order the entities hold now.
+    std::set<std::uint64_t> places;
     std::uint64_t nextSequence = 0;
 
     [[nodiscard]] const entt::entity* find(EntityId entity) const noexcept
@@ -199,12 +202,13 @@ Scene::Storage& Scene::storage()
     return *storage_;
 }
 
-void Scene::insert(EntityId entity)
+void Scene::insert(EntityId entity, std::uint64_t sequence)
 {
     Storage& store = storage();
     const entt::entity handle = store.registry.create();
-    store.registry.emplace<EntityRecord>(handle, entity, store.nextSequence++);
+    store.registry.emplace<EntityRecord>(handle, entity, sequence);
     store.handles.emplace(entity, handle);
+    store.places.insert(sequence);
 }
 
 core::Result<EntityId> Scene::createEntity()
@@ -212,7 +216,7 @@ core::Result<EntityId> Scene::createEntity()
     for (int attempt = 0; attempt < kMaxIdAttempts; ++attempt) {
         const EntityId candidate{generator_.next()};
         if (!candidate.isNull() && !contains(candidate)) {
-            insert(candidate);
+            insert(candidate, storage().nextSequence++);
             return candidate;
         }
     }
@@ -228,7 +232,38 @@ core::Result<EntityId> Scene::createEntity(EntityId entity)
     if (contains(entity)) {
         return core::Error{describe(entity) + ": already exists"};
     }
-    insert(entity);
+    insert(entity, storage().nextSequence++);
+    return entity;
+}
+
+core::Result<EntityPlace> Scene::placeOf(EntityId entity) const
+{
+    const Storage* const store = storage_.get();
+    const entt::entity* const handle = store != nullptr ? store->find(entity) : nullptr;
+    if (handle == nullptr) {
+        return entityError(entity);
+    }
+    return EntityPlace{store->registry.get<EntityRecord>(*handle).sequence};
+}
+
+core::Result<EntityId> Scene::restoreEntity(EntityId entity, EntityPlace place)
+{
+    if (entity.isNull()) {
+        return core::Error{std::format("scene '{}': the null entity ID is not an identity", name_)};
+    }
+    if (contains(entity)) {
+        return core::Error{describe(entity) + ": already exists"};
+    }
+    const Storage* const store = storage_.get();
+    if (store == nullptr || place.sequence >= store->nextSequence) {
+        return core::Error{std::format("{}: place {} was never an entity's place in this scene",
+                                       describe(entity), place.sequence)};
+    }
+    if (store->places.contains(place.sequence)) {
+        return core::Error{std::format("{}: place {} is held by another entity", describe(entity),
+                                       place.sequence)};
+    }
+    insert(entity, place.sequence);
     return entity;
 }
 
@@ -253,7 +288,9 @@ std::optional<core::Error> Scene::destroyEntity(EntityId entity)
     for (const entt::entity child : children) {
         (void)store->registry.remove<ParentComponent>(child);
     }
-    // Destroying the EnTT entity removes all of its components.
+    // Destroying the EnTT entity removes all of its components; its place in
+    // the creation order stays free for restoreEntity.
+    store->places.erase(store->registry.get<EntityRecord>(found->second).sequence);
     (void)store->registry.destroy(found->second);
     store->handles.erase(found);
     return std::nullopt;

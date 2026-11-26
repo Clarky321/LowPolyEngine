@@ -105,7 +105,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.2 | Raven in the engine loop and the editor shell | done |
 | M5.3 | The generated world in the viewport | done |
 | M5.4 | Project folder and project document | done |
-| M5.5 | Editor document, selection and undoable commands | planned |
+| M5.5 | Editor document, selection and undoable commands | in progress |
 | M5.6 | Scene entities in the viewport | planned |
 | M5.7 | Hierarchy and console panels | planned |
 | M5.8 | Inspector | planned |
@@ -125,7 +125,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - Every panel gets headless Raven tests (null backend, input through the host platform).
   - Every step that draws gets a GPU-tier check.
 - **Visible steps get a screenshot** in `docs/screenshots/m5/` with its command in the README there (`docs/DEVELOPMENT_WORKFLOW.md` §6), taken by the editor itself (`--screenshot`). No UI is added just for screenshots.
-- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging), M5.2 0027 (Raven in the engine), M5.4 0028 (project document); the next free number is 0029.
+- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging), M5.2 0027 (Raven in the engine), M5.4 0028 (project document), M5.5 0029 (editor document and commands); the next free number is 0030.
 - **Out of scope stays out:** gizmos, play mode, the asset browser and import, materials and prefab authoring (M6) stay out, even where Raven makes them easy.
 - **The checks of `docs/TESTING_AND_CI.md` §8 for the kind of change.** The GPU tier runs from M5.2 on, since every later step touches the window, the loop or drawing.
 - **Two kinds of OpenGL runs, never mixed up** (decisions 2 and 3).
@@ -427,6 +427,27 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 
 **Visual check:** none.
 
+**Decisions made in M5.5** (ADR 0029; ADR 0021 Amendment 1):
+- **The document** `EditorDocument` (`editor/include/editor/document/`) owns the open project (ADR 0028). It is read through const accessors and changed only through `execute`, `undo` and `redo`; `save()` saves the project and marks it saved. UI-free; a test checks the includes.
+- **The command interface:**
+  - `name`, `apply`, `revert` (strictly alternating, each on the state the other left), `absorb` (merging);
+  - `DocumentContent` gives the scene and the world settings to change, and the registry to read.
+  - A command checks everything first (`validate`, assets with their types, the entities it needs), so a refused one changes nothing.
+- **What a command stores:** its input and what it replaced (an old value, a deleted entity's place, components and children), never a snapshot of the document.
+- **IDs and order through undo:** two new scene functions, `Scene::placeOf` and `Scene::restoreEntity` (ADR 0021 Amendment 1).
+  - A deleted entity comes back with its ID at its place, then its components, then its children's links.
+  - A redone creation gets its first ID and place.
+- **The commands:** `CreateEntity` (with components), `DeleteEntity` (children stay, unlinked), `RenameEntity`, `AddComponent`, `ReplaceComponent`, `RemoveComponent` (any type, through `ComponentValue`), `SetParent` (set, change, clear), `SetWorldSettings`.
+- **Merging:**
+  - Steps of one continuous edit carry the same `MergeKey`, and the command absorbs the next one: `ReplaceComponent` for the same entity and type, `RenameEntity` for the same entity, `SetWorldSettings`.
+  - Never across a save, never after an undo, never for adding or removing.
+- **The limit:** 1000 steps by default (`kDefaultHistoryLimit`), oldest first.
+- **Dirty state:** a clean marker in the history. Undo past a save makes the document dirty, and redoing to the save makes it clean again. A saved state that left the history (the limit, a new command after undo) stays dirty until the next save.
+- **The selection:** entity IDs, the last one primary, not an undo step.
+  - Entities that leave the scene leave the selection.
+  - An entity that undo or redo brings back is selected again if it was selected when it left.
+- **Tests:** each command applied, undone and redone byte for byte; 10 000 mixed commands over a scene with entities of its own, with checkpoints every 500 steps. Breaking the delete's undo on purpose (the entity back at the end) made the tests fail.
+
 ### M5.6 — Scene entities in the viewport
 
 **Goal:** the scene's entities with a static mesh appear in the viewport where their transforms put them.
@@ -612,7 +633,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 | Raven packaging | M5.1 | pruned vendored source (decision 1): what is kept, options, notices, the update procedure |
 | Raven in the engine | M5.2 | public UI API, event order, frame order, ownership |
 | Project document | M5.4 | format, folder layout, paths, all-or-nothing open, a consistent save of several files (ADR 0028) |
-| Editor document and commands | M5.5 | command model, undo, merging, dirty state |
+| Editor document and commands | M5.5 | command model, undo, merging, dirty state (ADR 0029) |
 | Amendments | as needed | ADR 0019 (integration details), ADR 0018 if the debug UI's hook changes |
 
 ## Out of scope for M5

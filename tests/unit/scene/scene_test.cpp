@@ -237,6 +237,69 @@ TEST_CASE("Entity IDs are listed in creation order", "[scene]")
     CHECK(scene.entityIds() == std::vector<EntityId>{created[0], created[2], created[4], late});
 }
 
+TEST_CASE("A destroyed entity is restored at its place in the creation order", "[scene]")
+{
+    Scene scene = makeScene();
+    std::vector<EntityId> created;
+    for (int i = 0; i < 4; ++i) {
+        created.push_back(makeEntity(scene));
+    }
+    const auto place = scene.placeOf(created[1]);
+    REQUIRE(place);
+    CHECK(scene.placeOf(created[2]).value() != place.value());
+    REQUIRE_FALSE(scene.destroyEntity(created[1]).has_value());
+    CHECK_FALSE(scene.placeOf(created[1]).hasValue());
+    const EntityId late = makeEntity(scene);
+
+    // Back with the same ID at the same place, before the entities created
+    // after it.
+    REQUIRE(scene.restoreEntity(created[1], place.value()));
+    CHECK(scene.entityIds() ==
+          std::vector<EntityId>{created[0], created[1], created[2], created[3], late});
+    CHECK(scene.placeOf(created[1]).value() == place.value());
+
+    // Destroyed and restored again and again, it keeps its place.
+    for (int round = 0; round < 3; ++round) {
+        REQUIRE_FALSE(scene.destroyEntity(created[1]).has_value());
+        REQUIRE(scene.restoreEntity(created[1], place.value()));
+    }
+    CHECK(scene.entityIds() ==
+          std::vector<EntityId>{created[0], created[1], created[2], created[3], late});
+}
+
+TEST_CASE("Only a free place the scene gave out can be restored", "[scene]")
+{
+    Scene scene = makeScene();
+    const EntityId a = makeEntity(scene);
+    const EntityId b = makeEntity(scene);
+    const auto placeOfA = scene.placeOf(a);
+    REQUIRE(placeOfA);
+    REQUIRE_FALSE(scene.destroyEntity(a).has_value());
+
+    // Another entity's place, a place never given out, the null ID, an ID the
+    // scene has: refused, nothing created.
+    const auto taken = scene.restoreEntity(a, scene.placeOf(b).value());
+    REQUIRE_FALSE(taken);
+    CHECK(taken.error().message.find("is held by another entity") != std::string::npos);
+    const auto never = scene.restoreEntity(a, engine::scene::EntityPlace{1000});
+    REQUIRE_FALSE(never);
+    CHECK(never.error().message.find("was never an entity's place") != std::string::npos);
+    CHECK_FALSE(scene.restoreEntity(EntityId{}, placeOfA.value()));
+    CHECK_FALSE(scene.restoreEntity(b, placeOfA.value()));
+    CHECK(scene.entityIds() == std::vector<EntityId>{b});
+
+    // Another ID may take the free place.
+    const EntityId other{Uuid{0x1111111111114111ULL, 0x8111111111111111ULL}};
+    REQUIRE(scene.restoreEntity(other, placeOfA.value()));
+    CHECK(scene.entityIds() == std::vector<EntityId>{other, b});
+    CHECK_FALSE(scene.restoreEntity(a, placeOfA.value()));
+
+    // A cleared scene gives out its places anew.
+    scene.clear();
+    CHECK_FALSE(scene.restoreEntity(a, placeOfA.value()));
+    CHECK_FALSE(scene.placeOf(b).hasValue());
+}
+
 TEST_CASE("Clearing a scene keeps its ID and name", "[scene]")
 {
     Scene scene = makeScene();

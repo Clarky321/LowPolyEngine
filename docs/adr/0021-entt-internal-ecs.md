@@ -1,6 +1,6 @@
 # ADR 0021: EnTT as the internal ECS
 
-- **Status:** Accepted
+- **Status:** Accepted; amended for M5.5 (Amendment 1)
 - **Date:** 2026-11-14
 - **Related:** ADR 0001 (EnTT as a candidate), ADR 0020 (persistent identifiers), ADR 0004 (private dependencies, no library types in public headers), ADR 0011 (one directional light), AGENTS.md §3 (EnTT handles are not identity), `docs/milestones/m4-scene-data-model.md` M4.2
 
@@ -61,3 +61,12 @@ M4.2 gives the entities of a `scene::Scene` components: a name, a transform, a c
 - Systems need EnTT views or groups for speed: they stay inside `engine/src/scene/` behind scene functions.
 - A component refers to other entities (M4.6 `ParentComponent`): its rules are checked by the scene, not by the component.
 - A scene is used from several threads.
+
+## Amendment 1: an entity's place in the creation order (M5.5, 2026-11-26)
+
+- The scene keeps every entity's place in the creation order (a sequence number that is never given out twice), which `entityIds()` and the scene document follow (ADR 0023).
+- **New functions:**
+  - `Scene::placeOf(entity)` returns that place as an `EntityPlace`;
+  - `Scene::restoreEntity(id, place)` creates an entity with the given ID at a free place the scene gave out before: the place it had before it was destroyed. It fails for a place the scene never gave out or another entity holds.
+- **Why:** the editor's undo of a delete (ADR 0029) must put the entity back where it was, or the scene document's bytes would change. `createEntity(id)` still puts a re-created entity at the end.
+- A place is only meaningful for the scene that gave it out; clearing the scene starts the places over.

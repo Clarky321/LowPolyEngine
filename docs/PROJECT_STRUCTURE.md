@@ -65,10 +65,11 @@ lowpoly-engine/
 ├── editor/                   # lpe-editor on Raven (M5; ADR 0019, ADR 0027); "planned" folders come with later steps
 │   ├── CMakeLists.txt        # library `editor` (the editor's code, also linked by tests) and program `lpe-editor`
 │   ├── layouts/              # Raven XML, embedded at build time: shell.xml, the shell (M5.2)
-│   ├── include/editor/       # planned: document/, commands/, selection/ (M5.5), panels/ (M5.7–M5.11)
+│   ├── include/editor/       # UI-free (ADR 0029): document/ (EditorDocument: project, history, dirty state; Command; ComponentValue), commands/ (entity, component and world commands), selection/ (M5.5); panels/ planned (M5.7–M5.11)
 │   └── src/
 │       ├── main.cpp          # lpe-editor's entry point: --frames, --screenshot, --size (M5.2)
 │       ├── application/      # EditorShell (the shell application), EditorOptions, ShellLayout (M5.2)
+│       ├── document/, commands/, selection/  # the sources of include/editor/ (M5.5)
 │       ├── viewport/         # WorldViewport: the generated world drawn from the viewport's draw callback; ViewportInput: the editor camera's input (M5.3)
 │       ├── panels/           # planned (M5.7–M5.10)
 │       └── project/          # planned (M5.11)
@@ -89,7 +90,7 @@ lowpoly-engine/
 │   │   ├── scene/
 │   │   ├── assets/
 │   │   ├── scripting/
-│   │   ├── editor/           # lpe-editor's options (M5.2); the viewport camera's input with Raven's null backend (M5.3)
+│   │   ├── editor/           # lpe-editor's options (M5.2); the viewport camera's input with Raven's null backend (M5.3); the document, its commands, history and selection (M5.5)
 │   │   ├── ui/               # headless Raven: null backend, host platform, injected input (M5.1); the shell layout at several scales (M5.2)
 │   │   ├── world/            # the sky and how the world is looked at (M5.3; the sky's tests moved from unit/sandbox/)
 │   │   └── project/          # the project document, open and save on disk, failures injected at every operation of a save, the module's dependencies (M5.4)

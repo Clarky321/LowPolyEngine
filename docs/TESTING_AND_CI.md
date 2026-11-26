@@ -43,6 +43,14 @@ Initial high-value test groups:
 
     The same for every operation of the save that follows a crash right after a commit. Also: an interrupted save opened as saved, with a warning, while the parts on disk still hold the old data; temporary files of a save that failed before its commit ignored, then removed, while similar names that are not a save's are kept; the journal's text, temporary names, and journals that are broken or name other files refused.
   - **Dependencies:** the module's headers and sources include only the standard library and the engine's core, assets, scene, worldgen and project.
+- Editor document and commands (M5.5, ADR 0029, `tests/unit/editor/document_*_test.cpp`, `selection_test.cpp`):
+  - every command (create with and without each component type, delete, rename, add, replace and remove a component, set, change and clear a parent, world settings) applied, undone and redone twice, with the scene document and the world settings byte for byte as before and after;
+  - a deleted entity back at its place in the creation order; a deleted parent back with its own parent and its children's links; entity IDs unchanged over repeated undo and redo;
+  - refused commands (two components of a type, an unknown or wrongly typed asset, a missing parent, a cycle, invalid names and settings, nothing to clear, replace or remove) changing neither the content nor the history nor the redo steps;
+  - continuous edits merged into one step only with the same key and the same value, never across a save or after an undo; the size limit; the dirty state through undo, redo, saves and a saved state dropped from the history; a real save; the selection across deletes, undo and redo.
+  - **10 000 mixed commands** over a scene with 40 entities of its own: undone to byte for byte the start, redone to byte for byte the end, checked at checkpoints every 500 steps on both ways. Breaking the delete's undo on purpose (the entity back at the end) made it fail.
+  - The scene's `placeOf` and `restoreEntity` (`tests/unit/scene/scene_test.cpp`).
+  - The document's includes: no UI code.
 - Editor viewport camera (M5.3, `tests/unit/editor/viewport_input_test.cpp`), headless with Raven's null backend and host platform, input injected as the SDL3 host injects it: W/A/S/D, E, Q and either Shift only while the viewport has the keyboard; keys typed into a text field never move the camera (the text arrives in the field); held keys and looking end when the viewport loses the keyboard; the right button looks around, also with the pointer over another widget or outside the window, and only while held; pointer movement in pixels at 100 %, 150 % and 200 %; the wheel only over the viewport; a detached input hears nothing; in the editor shell a click gives the viewport the keyboard back.
 
 ### Integration tests — headless where possible

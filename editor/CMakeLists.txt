@@ -4,7 +4,9 @@
 #
 #   editor       the editor's code as a library, so tests link the same code
 #                as the program (M5.2: the shell application and its options;
-#                M5.3: the world in the viewport and the camera's input)
+#                M5.3: the world in the viewport and the camera's input;
+#                M5.5: the document, the selection and the undoable commands,
+#                UI-free, in include/editor/)
 #   lpe-editor   the program (src/main.cpp)
 
 # The shell's layout, embedded: the editor reads no layout file at run time.
@@ -16,11 +18,22 @@ lpe_embed_files("${editor_layouts}" editor::layouts
 add_library(editor STATIC
     src/application/EditorOptions.cpp
     src/application/EditorShell.cpp
+    src/commands/ComponentCommands.cpp
+    src/commands/EntityCommands.cpp
+    src/commands/WorldCommands.cpp
+    src/document/ComponentValue.cpp
+    src/document/EditorDocument.cpp
+    src/selection/Selection.cpp
     src/viewport/ViewportInput.cpp
     src/viewport/WorldViewport.cpp
     ${editor_layouts}
 )
-target_include_directories(editor PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+# include/editor/: the document, commands and selection (UI-free, ADR 0029);
+# src/: the application, the viewport and other Raven code.
+target_include_directories(editor PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
 # Raven's C API is used directly by the editor's interface code (ADR 0027),
 # and the editor's own headers name Raven's types (widget IDs, events): PUBLIC.
 # The engine's headers name no Raven type.
