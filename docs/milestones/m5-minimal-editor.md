@@ -107,7 +107,7 @@ scene, assets, scripting, worldgen, core: unchanged; none uses ui, world, projec
 | M5.3 | The generated world in the viewport | done |
 | M5.4 | Project folder and project document | done |
 | M5.5 | Editor document, selection and undoable commands | done |
-| M5.6 | Scene entities in the viewport | planned |
+| M5.6 | Scene entities in the viewport | in progress |
 | M5.7 | Hierarchy and console panels | planned |
 | M5.8 | Inspector | planned |
 | M5.9 | Picking and selection in the viewport | planned |
@@ -126,7 +126,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - Every panel gets headless Raven tests (null backend, input through the host platform).
   - Every step that draws gets a GPU-tier check.
 - **Visible steps get a screenshot** in `docs/screenshots/m5/` with its command in the README there (`docs/DEVELOPMENT_WORKFLOW.md` §6), taken by the editor itself (`--screenshot`). No UI is added just for screenshots.
-- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging), M5.2 0027 (Raven in the engine), M5.4 0028 (project document), M5.5 0029 (editor document and commands); the next free number is 0030.
+- **ADRs:** decisions on dependencies, public APIs, document formats and module boundaries get an ADR in the step that makes them. M5.1 took 0026 (Raven packaging), M5.2 0027 (Raven in the engine), M5.4 0028 (project document), M5.5 0029 (editor document and commands); M5.6 amended 0027 and 0029. The next free number is 0030.
 - **Out of scope stays out:** gizmos, play mode, the asset browser and import, materials and prefab authoring (M6) stay out, even where Raven makes them easy.
 - **The checks of `docs/TESTING_AND_CI.md` §8 for the kind of change.** The GPU tier runs from M5.2 on, since every later step touches the window, the loop or drawing.
 - **Two kinds of OpenGL runs, never mixed up** (decisions 2 and 3).
@@ -488,6 +488,33 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Resource counts after edits and undo.
 
 **Visual check:** `003-scene-entities.png`.
+
+**Decisions made in M5.6** (ADR 0027 Amendment 2, ADR 0029 Amendment 1):
+- **Opening a project at start** (moved here from M5.11, *Changes to the plan*):
+  - `lpe-editor [PROJECT_FOLDER] [--frames N] [--screenshot FILE] [--size WxH]`: an argument without `--` is the folder, before or after the options; a second one, or an empty one, is a usage error.
+  - The shell opens the project before the viewport (ADR 0028, all or nothing), logs its warnings, and owns the `EditorDocument`.
+  - A project that does not open ends the start with "cannot open the project in '<folder>': …", exit code 1.
+  - Without a folder there is no document, and the viewport shows the default world as in M5.3.
+- **The test project** `tests/projects/lighthouses/` ("Lighthouses"):
+  - the default world settings, the engine's lighthouse mesh, and a scene "Main" with an evening sun (a directional light), four lighthouses on the tops of islands of the default world, one floating, tilted and stretched, and a camera;
+  - written by the engine's own project code (`createProject`, scene functions, `saveProject`) with fixed seeds, so its files are exactly what the engine saves. A unit test checks that a save of a copy writes the same bytes, that it opens without warnings, and that its lighthouse and world files equal `assets/`.
+- **The scene view** in `engine/world/` (three headers, ADR 0027 Amendment 2):
+  - `SceneDraws.hpp`: which entities are drawn (those with a static mesh, in creation order), their model matrix (T * R * S; an entity without a transform at the defaults; no inheritance), and the light.
+  - `MeshAssets.hpp`: a CPU cache by asset ID. Each asset is read once; a failure is kept and reported once.
+  - `SceneView.hpp`: each mesh asset uploaded once and kept until the view is released, so edits and undo upload nothing again; one default material.
+- **The default material:** white and lit, so the meshes' vertex colors show, shaded by the scene's light. Material references are not used until M6.
+- **The scene's light:** the first directional light in creation order (direction, color * intensity) with the world sun's ambient, since the component has none; the world's sun without one. It lights the scene's entities only: the islands and clouds keep the archipelago's sun, so the generated world looks the same with any scene.
+- **How changes reach the view:** a version counter, `EditorDocument::version()` (ADR 0029 Amendment 1), not notifications.
+  - It changes with every executed (also merged) command, undo and redo, and with nothing else.
+  - The viewport compares it once per frame, in `update()` outside Raven's frame, and reads the scene again only when it changed.
+- **No placeholder for missing meshes:** a mesh that cannot be read (not registered, another type, no file, a broken file) or uploaded is logged once as a warning (`[editor] viewport: …; its entities are not drawn`), and its entities are skipped.
+- **Draw order in the viewport:** sky, islands and clouds, the scene's entities, then the translucent water.
+- **Tests:**
+  - unit: model matrices (golden), which entities, the light, every kind of broken asset, the cache across changes and for another project, the document's version, the command line, the test project;
+  - GPU tier: the scene view on its own with exact pixel positions (rotation, scale, the scene's light against the world's sun, skipped meshes, no OpenGL error) and level resources;
+  - GPU tier, the editor with the test project, with the simulation time held at zero so that two runs draw the same world: the frame differs from one without the project only inside the five lighthouses' projected boxes, and inside each; a delete, a create, and their undo and redo reach the viewport in the same frame; the scene is read once per change; resources are level throughout; after undoing everything the frame is the unedited one;
+  - CTest runs of `lpe-editor` with the project, with a folder that is not a project, and with two folders.
+  - Breaking it on purpose made the tests fail: the viewport reading the scene only once; uploading the meshes again on every update; the matrix's order.
 
 ### M5.7 — Hierarchy and console panels
 

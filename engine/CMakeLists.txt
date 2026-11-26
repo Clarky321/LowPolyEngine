@@ -92,6 +92,9 @@ add_library(engine STATIC
     src/scripting/lua/LuaVm.cpp
     src/scripting/lua/ScriptRuntime.cpp
     src/ui/RavenUi.cpp
+    src/world/MeshAssets.cpp
+    src/world/SceneDraws.cpp
+    src/world/SceneView.cpp
     src/world/Sky.cpp
     src/world/WorldScene.cpp
     src/world/WorldView.cpp

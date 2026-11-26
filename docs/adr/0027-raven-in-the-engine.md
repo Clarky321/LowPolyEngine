@@ -1,6 +1,6 @@
 # ADR 0027: Raven in the engine
 
-- **Status:** Accepted (2026-11-15, M5.2). The plan asked M5.2 to decide this ADR (`docs/milestones/m5-minimal-editor.md`, M5.2, "Decisions to make"); the decisions follow ADR 0019's integration architecture and were taken under `docs/DEVELOPMENT_WORKFLOW.md` §4. Amendment 1 (2026-11-20, M5.3): the viewport's drawing and input, as used by the editor.
+- **Status:** Accepted (2026-11-15, M5.2). The plan asked M5.2 to decide this ADR (`docs/milestones/m5-minimal-editor.md`, M5.2, "Decisions to make"); the decisions follow ADR 0019's integration architecture and were taken under `docs/DEVELOPMENT_WORKFLOW.md` §4. Amendment 1 (2026-11-20, M5.3): the viewport's drawing and input, as used by the editor. Amendment 2 (2026-11-26, M5.6): the scene's entities in the viewport.
 - **Related:**
   - ADR 0019 (Raven for the editor: its integration architecture, conditions and validated fixes);
   - ADR 0026 (Raven packaging: the vendored copy, live reload and auto-loading off);
@@ -112,3 +112,23 @@ M5.3 puts the generated world into the editor's viewport. It uses points 5 and 6
    - A right-button press is passed on to the widget, which then keeps the pointer while the button is held.
    - Looking uses the pointer movement in Raven's events (logical units times the scale), not SDL's relative mouse mode: the host bridge passes Raven positions (`Rhost_inject_mouse_move`), so looking stops at the edge of the screen. A relative pointer path in the bridge would lift that; the minimal editor does not need it.
 3. **The editor's headers name Raven's types** (widget IDs, events): the `editor` library links `raven` publicly. The engine's public headers still name none (the header check of `tests/unit/scene/public_headers_test.cpp`).
+
+## Amendment 2 (2026-11-26, M5.6): the scene's entities in the viewport
+
+M5.6 draws a project's scene in the viewport, inside the generated world. This records the public API it adds to `engine/world/` and how the editor uses it.
+
+1. **Three headers in `engine/world/`**, with no Raven, SDL or OpenGL type (the public header check covers them):
+   - `SceneDraws.hpp`: pure functions of a scene, tested headless.
+     - `modelMatrix(transform)` is T * R * S.
+     - `meshDraws(scene)` lists the entities with a `StaticMeshComponent` in creation order, each with its model matrix. An entity without a transform is drawn at the transform's defaults. Parent links do not move children: no transform inheritance (M4).
+     - `sceneLight(scene, worldSun)`: the first entity with a `DirectionalLightComponent` gives the direction and color * intensity, with the sun's ambient, since the component has none; without one, the world's sun.
+   - `MeshAssets.hpp`: a CPU cache by asset ID. Each mesh asset is resolved through the registry and read by `geometry::readObj` once; a failure is kept with its message, so it is reported once. It belongs to one project's registry and is cleared for another.
+   - `SceneView.hpp`: the meshes on the GPU and the draw.
+     - Each mesh asset is uploaded once and stays until `release()`, also when no entity uses it any more. Adding, removing, undoing and redoing entities therefore read and upload nothing again; the renderer's resources grow only with the distinct mesh assets used, plus one material.
+     - Every mesh is drawn with `defaultSceneMaterial()`: white, lit by the scene's light. Material files come in M6.
+     - A mesh that cannot be read or uploaded is returned once as a problem by `update()`, and its entities are skipped: no placeholder.
+     - The view does not follow the scene by itself: its owner calls `update()` when the scene changed.
+2. **The scene's light lights the scene's entities only.** The islands and clouds keep the archipelago's sun (Amendment 1), so a scene's light never changes the generated world's look.
+3. **In the editor**, the viewport draws the scene after the islands and clouds and before the translucent water.
+   - It reads the scene again when the document's version (ADR 0029 Amendment 1) differs from the one it last read. The check runs once per frame in `update()`, outside Raven's frame, so no renderer resource is made inside the draw callback.
+   - The editor opens a project given on the command line (`lpe-editor <folder>`, moved from M5.11 to M5.6 by the plan); the viewport then shows the project's world settings and its scene.

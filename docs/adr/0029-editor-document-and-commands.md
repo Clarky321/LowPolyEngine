@@ -1,6 +1,6 @@
 # ADR 0029: Editor document and commands
 
-- **Status:** Accepted (2026-11-26, M5.5). The plan asked M5.5 to decide this ADR (`docs/milestones/m5-minimal-editor.md`, M5.5, "Decisions to make"); the decisions were taken under `docs/DEVELOPMENT_WORKFLOW.md` §4.
+- **Status:** Accepted (2026-11-26, M5.5). The plan asked M5.5 to decide this ADR (`docs/milestones/m5-minimal-editor.md`, M5.5, "Decisions to make"); the decisions were taken under `docs/DEVELOPMENT_WORKFLOW.md` §4. Amendment 1 (2026-11-26, M5.6): the document's version.
 - **Date:** 2026-11-26
 - **Related:** ADR 0028 (the project the document holds), ADR 0021 (the scene; Amendment 1: an entity's place), ADR 0023 (scene documents, written in creation order), ADR 0020 (persistent IDs), M5 plan "Architecture principles" (the editor changes data only through commands)
 
@@ -60,3 +60,15 @@ A scene document lists entities in creation order (ADR 0023). `Scene::createEnti
   - Several scenes in one document.
   - Changes of the asset registry (asset import is M6).
   - Undoing a save itself (the files stay as saved; undo changes the content, which then differs from them).
+
+## Amendment 1 (2026-11-26, M5.6): the document's version
+
+Views of the document's content (the viewport's scene, M5.6; the panels later) must learn of changes without rebuilding every frame.
+
+- **Decision:** `EditorDocument::version()`, a counter rather than change notifications.
+  - It changes with every change of the content: each executed command (a merged one too), each undo and each redo.
+  - A refused command, a failed undo or redo, a save and the selection leave it as it is.
+  - It starts at 0 and never repeats within a document.
+  - A view keeps the version it last read and reads the content again when it differs.
+- **Why a counter:** a view polls it once per frame at no cost. There are no callbacks to register and unregister, so no lifetime rule ties a view to the document's, and no view runs in the middle of a command.
+- **Not covered:** what changed. A view reads the whole content again; the scene view does that cheaply, since it reads and uploads no mesh it has already met.

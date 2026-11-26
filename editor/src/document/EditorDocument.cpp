@@ -31,6 +31,7 @@ std::optional<engine::core::Error> EditorDocument::execute(std::unique_ptr<Comma
     if (auto error = command->apply(target)) {
         return error;
     }
+    ++version_;
     std::vector<engine::scene::EntityId> deselected = selection_.prune(project_.startScene);
 
     // The next step of the last step's continuous edit: one undo step. Not
@@ -93,6 +94,7 @@ std::optional<engine::core::Error> EditorDocument::undo()
         return engine::core::Error{"cannot undo '" + step.command->name() + "': " + error->message};
     }
     --current_;
+    ++version_;
     step.deselectedByRevert = selection_.prune(project_.startScene);
     selection_.restore(step.deselectedByApply, project_.startScene);
     return std::nullopt;
@@ -109,6 +111,7 @@ std::optional<engine::core::Error> EditorDocument::redo()
         return engine::core::Error{"cannot redo '" + step.command->name() + "': " + error->message};
     }
     ++current_;
+    ++version_;
     step.deselectedByApply = selection_.prune(project_.startScene);
     selection_.restore(step.deselectedByRevert, project_.startScene);
     return std::nullopt;

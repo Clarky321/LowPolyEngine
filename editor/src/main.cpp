@@ -1,11 +1,17 @@
 // lpe-editor (M5): the LowPolyEngine editor on Raven (ADR 0019, ADR 0027).
 // M5.2: the shell (toolbar, viewport, hierarchy, inspector, console); M5.3:
-// the generated world in the viewport with a free-fly camera.
+// the generated world in the viewport with a free-fly camera; M5.6: a project
+// folder opened at start, its world and its scene's entities in the viewport.
 //
-//   lpe-editor [--frames N] [--screenshot FILE.png] [--size WIDTHxHEIGHT]
+//   lpe-editor [PROJECT_FOLDER] [--frames N] [--screenshot FILE.png]
+//              [--size WIDTHxHEIGHT]
 //
 // Run it from the repository root: the renderer reads its shaders from
 // assets/shaders. Without --frames the window stays open until it is closed.
+// Without a project folder the viewport shows the default world; a project
+// that does not open stops the editor with the error (exit code 1), e.g.
+//
+//   lpe-editor tests/projects/lighthouses
 //
 // In the viewport (click it to give it the keyboard; it has it at the start):
 // hold the right mouse button to look around, W/A/S/D to fly, E up, Q down,

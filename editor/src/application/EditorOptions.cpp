@@ -35,6 +35,18 @@ engine::core::Result<EditorOptions> parseEditorOptions(std::span<const std::stri
     EditorOptions options;
     for (std::size_t i = 0; i < arguments.size(); ++i) {
         const std::string_view argument = arguments[i];
+        if (!argument.starts_with("--")) {
+            if (argument.empty()) {
+                return engine::core::Error{"the project folder is empty"};
+            }
+            if (options.project) {
+                return engine::core::Error{"more than one project folder: '" +
+                                           options.project->string() + "' and '" +
+                                           std::string(argument) + "'"};
+            }
+            options.project = std::filesystem::path(argument);
+            continue;
+        }
         const bool takesValue =
             argument == "--frames" || argument == "--screenshot" || argument == "--size";
         if (!takesValue) {

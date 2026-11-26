@@ -38,7 +38,7 @@ lowpoly-engine/
 │   │   ├── camera/           # Camera and camera-controller types
 │   │   ├── debug/            # On-screen diagnostics (pixel-font text, M1) and the Dear ImGui debug UI (DebugUi, M3.12, ADR 0018)
 │   │   ├── ui/               # Ui.hpp: the Raven UI an application turns on (ApplicationDesc::ui), no Raven/SDL/OpenGL type (M5.2, ADR 0027)
-│   │   ├── world/            # The generated world on the GPU (WorldScene), the sky dome (Sky), its sunlight and overview camera (WorldView), moved from island-preview for it and the editor (M5.3)
+│   │   ├── world/            # The generated world on the GPU (WorldScene), the sky dome (Sky), its sunlight and overview camera (WorldView), moved from island-preview for it and the editor (M5.3); a scene's entities for the renderer: SceneDraws (which entities, matrices, light), MeshAssets (mesh assets read once), SceneView (uploaded once, drawn) (M5.6)
 │   │   └── project/          # A project folder: ProjectDocument (project.json), Project with createProject/openProject/saveProject, saved as a whole (M5.4, ADR 0028); no editor, UI, window or renderer code
 │   └── src/
 │       ├── app/
@@ -59,7 +59,7 @@ lowpoly-engine/
 │       │   └── clouds/
 │       ├── scripting/lua/
 │       ├── ui/               # RavenUi: the one owner of Raven's state (Rinit/Rshutdown, frame, checks), RavenHost interface (M5.2, ADR 0027)
-│       ├── world/            # WorldScene, Sky, WorldView (M5.3)
+│       ├── world/            # WorldScene, Sky, WorldView (M5.3); SceneDraws, MeshAssets, SceneView (M5.6)
 │       ├── project/          # the project's open and save, the save journal, ProjectFiles (every file operation, replaced by tests to inject failures) (M5.4)
 │       └── camera/
 ├── editor/                   # lpe-editor on Raven (M5; ADR 0019, ADR 0027); "planned" folders come with later steps
@@ -67,10 +67,10 @@ lowpoly-engine/
 │   ├── layouts/              # Raven XML, embedded at build time: shell.xml, the shell (M5.2)
 │   ├── include/editor/       # UI-free (ADR 0029): document/ (EditorDocument: project, history, dirty state; Command; ComponentValue), commands/ (entity, component and world commands), selection/ (M5.5); panels/ planned (M5.7–M5.11)
 │   └── src/
-│       ├── main.cpp          # lpe-editor's entry point: --frames, --screenshot, --size (M5.2)
+│       ├── main.cpp          # lpe-editor's entry point: --frames, --screenshot, --size (M5.2); a project folder opened at start (M5.6)
 │       ├── application/      # EditorShell (the shell application), EditorOptions, ShellLayout (M5.2)
 │       ├── document/, commands/, selection/  # the sources of include/editor/ (M5.5)
-│       ├── viewport/         # WorldViewport: the generated world drawn from the viewport's draw callback; ViewportInput: the editor camera's input (M5.3)
+│       ├── viewport/         # WorldViewport: the generated world drawn from the viewport's draw callback (M5.3), with the document's scene entities, read again when the document's version changes (M5.6); ViewportInput: the editor camera's input (M5.3)
 │       ├── panels/           # planned (M5.7–M5.10)
 │       └── project/          # planned (M5.11)
 ├── sandbox/
@@ -90,12 +90,13 @@ lowpoly-engine/
 │   │   ├── scene/
 │   │   ├── assets/
 │   │   ├── scripting/
-│   │   ├── editor/           # lpe-editor's options (M5.2); the viewport camera's input with Raven's null backend (M5.3); the document, its commands, history and selection (M5.5)
+│   │   ├── editor/           # lpe-editor's options (M5.2; the project folder, M5.6); the viewport camera's input with Raven's null backend (M5.3); the document, its commands, history and selection (M5.5); the document's version (M5.6)
 │   │   ├── ui/               # headless Raven: null backend, host platform, injected input (M5.1); the shell layout at several scales (M5.2)
-│   │   ├── world/            # the sky and how the world is looked at (M5.3; the sky's tests moved from unit/sandbox/)
-│   │   └── project/          # the project document, open and save on disk, failures injected at every operation of a save, the module's dependencies (M5.4)
+│   │   ├── world/            # the sky and how the world is looked at (M5.3; the sky's tests moved from unit/sandbox/); which scene entities are drawn with which matrices and light, mesh assets read once (M5.6)
+│   │   └── project/          # the project document, open and save on disk, failures injected at every operation of a save, the module's dependencies (M5.4); the committed test projects (M5.6)
 │   ├── integration/          # headless subsystem tests, the M4 data model end to end (scene_data_model_test.cpp), the Raven host bridge and UI lifetime on SDL's dummy driver (raven_ui_test.cpp, M5.2)
-│   └── rendering/            # Optional GPU-dependent tier
+│   ├── rendering/            # Optional GPU-dependent tier
+│   └── projects/             # committed test projects, opened by lpe-editor in the GPU tier, in CI and for screenshots: lighthouses/ (M5.6), written by the engine's project code
 ├── scripts/
 │   ├── python/
 │   └── windows/

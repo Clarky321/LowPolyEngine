@@ -7,19 +7,22 @@ set(fixtures "${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 set(gpu_output "${CMAKE_BINARY_DIR}/gpu-test-output")
 
 # Engine-level GPU tests (Catch2): application loop, renderer, frame capture,
-# and the generated world on the GPU (engine/world, M3.12, M5.3) with the debug UI.
+# the generated world on the GPU (engine/world, M3.12, M5.3) with the debug UI,
+# and a scene's entities on the GPU (engine/world's SceneView, M5.6).
 add_executable(lpe_gpu_tests
     application_gpu_test.cpp
     editor_gpu_test.cpp
+    editor_scene_gpu_test.cpp
     editor_viewport_gpu_test.cpp
     renderer_gpu_test.cpp
+    scene_view_gpu_test.cpp
     texture_gpu_test.cpp
     world_scene_gpu_test.cpp
 )
 # glad: the texture tests inspect OpenGL objects directly (handles, row order,
 # sampling state). The renderer loads the function pointers.
 target_link_libraries(lpe_gpu_tests PRIVATE engine glad Catch2::Catch2WithMain)
-# The editor on Raven (M5.2, M5.3): the editor's code, Raven's API, the
+# The editor on Raven (M5.2, M5.3, M5.6): the editor's code, Raven's API, the
 # engine's OpenGL state comparison (engine/src/render/opengl/GlRavenBackend.hpp)
 # and the native window, which the viewport test resizes.
 find_package(SDL3 REQUIRED CONFIG)
@@ -209,6 +212,19 @@ lpe_add_gpu_test(lpe_editor_world_log lpe-editor --frames 5)
 set_tests_properties(lpe_editor_world_log PROPERTIES
     PASS_REGULAR_EXPRESSION "viewport: archipelago of seed 1, 12 of 12 islands"
     FAIL_REGULAR_EXPRESSION "${lpe_editor_problems}")
+
+# A project folder (M5.6): the committed test project opens, and the viewport
+# draws its five lighthouses; a folder that is not a project stops the editor
+# with the error, naming the folder.
+lpe_add_gpu_test(lpe_editor_project lpe-editor tests/projects/lighthouses --frames 30)
+set_tests_properties(lpe_editor_project PROPERTIES
+    PASS_REGULAR_EXPRESSION "viewport: scene 'Main', mesh entities drawn: 5 of 5, meshes uploaded: 1"
+    FAIL_REGULAR_EXPRESSION "${lpe_editor_problems}")
+lpe_add_gpu_test(lpe_editor_not_a_project lpe-editor "${fixtures}/broken-model" --frames 5)
+set_tests_properties(lpe_editor_not_a_project PROPERTIES
+    PASS_REGULAR_EXPRESSION "cannot open the project in '[^']*broken-model': [^\n]*'project\\.json' is missing")
+lpe_add_gpu_test(lpe_editor_not_a_project_exit lpe-editor "${fixtures}/broken-model" --frames 5)
+set_tests_properties(lpe_editor_not_a_project_exit PROPERTIES WILL_FAIL TRUE)
 
 # --screenshot saves the frame made by the editor itself, at the --size given.
 lpe_add_gpu_test(lpe_editor_screenshot

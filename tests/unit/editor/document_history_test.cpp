@@ -217,6 +217,51 @@ TEST_CASE("Saving the document writes its content and makes it clean",
     CHECK_FALSE(document.isDirty());
 }
 
+TEST_CASE("The document's version changes with its content and with nothing else",
+          "[editor][document][history]")
+{
+    const lpe_test::TempProject folder("lpe_editor_document_version");
+    auto created =
+        engine::project::createProject(folder.root(), "Versions", engine::core::UuidGenerator{1});
+    REQUIRE(created.hasValue());
+    EditorDocument document(std::move(created).value());
+    CHECK(document.version() == 0);
+
+    // Every applied command, undo and redo: a new number.
+    std::vector<std::uint64_t> seen{document.version()};
+    const auto changed = [&] {
+        CHECK(std::find(seen.begin(), seen.end(), document.version()) == seen.end());
+        seen.push_back(document.version());
+    };
+    const EntityId tower = create(document, {name("Tower"), at(0.0F)});
+    changed();
+    drag(document, tower, 1.0F, 7U);
+    changed();
+    // Merged into the last step: still a change of the content.
+    drag(document, tower, 2.0F, 7U);
+    changed();
+    CHECK(document.undoCount() == 2);
+    REQUIRE_FALSE(document.undo().has_value());
+    changed();
+    REQUIRE_FALSE(document.redo().has_value());
+    changed();
+
+    // Nothing that leaves the content as it was changes it.
+    const std::uint64_t before = document.version();
+    CHECK(document.execute(std::make_unique<RenameEntity>(EntityId{}, "Nobody")).has_value());
+    CHECK(document.execute(nullptr).has_value());
+    CHECK(document.redo().has_value());
+    document.selection().select(tower);
+    document.selection().clear();
+    REQUIRE(document.save().hasValue());
+    document.markSaved();
+    CHECK(document.version() == before);
+    REQUIRE_FALSE(document.undo().has_value());
+    REQUIRE_FALSE(document.undo().has_value());
+    CHECK(document.undo().has_value());
+    CHECK(document.version() == before + 2);
+}
+
 TEST_CASE("The selection stays valid across deletes, undo and redo",
           "[editor][document][selection]")
 {

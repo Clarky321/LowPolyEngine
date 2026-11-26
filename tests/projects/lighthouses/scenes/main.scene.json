@@ -1,0 +1,210 @@
+{
+  "format": "lpe.scene",
+  "formatVersion": 1,
+  "id": "bb217b1b-1950-4720-8d04-dd8bceddb504",
+  "name": "Main",
+  "entities": [
+    {
+      "id": "d18eeb01-fcb2-46aa-910d-23965382e20d",
+      "components": {
+        "name": {
+          "value": "Evening sun"
+        },
+        "directionalLight": {
+          "direction": {
+            "x": -0.35054377,
+            "y": -0.70108753,
+            "z": -0.6209633
+          },
+          "color": {
+            "r": 1.0,
+            "g": 0.86,
+            "b": 0.7
+          },
+          "intensity": 0.6
+        }
+      }
+    },
+    {
+      "id": "a6456451-af37-4e1c-907f-0af2cbe31975",
+      "components": {
+        "name": {
+          "value": "Lighthouse on the near island"
+        },
+        "transform": {
+          "position": {
+            "x": 195.39,
+            "y": 64.94,
+            "z": 93.4
+          },
+          "rotation": {
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "scale": {
+            "x": 4.0,
+            "y": 4.0,
+            "z": 4.0
+          }
+        },
+        "staticMesh": {
+          "mesh": "e0d26ee4-76e9-4be9-83b8-db3ead871652",
+          "material": null
+        }
+      }
+    },
+    {
+      "id": "be6bcaf9-8946-4563-9f97-469e25204287",
+      "components": {
+        "name": {
+          "value": "Lighthouse on the high island"
+        },
+        "transform": {
+          "position": {
+            "x": -85.65,
+            "y": 92.87,
+            "z": 35.87
+          },
+          "rotation": {
+            "w": 0.9238795,
+            "x": 0.0,
+            "y": 0.38268346,
+            "z": 0.0
+          },
+          "scale": {
+            "x": 4.0,
+            "y": 4.0,
+            "z": 4.0
+          }
+        },
+        "staticMesh": {
+          "mesh": "e0d26ee4-76e9-4be9-83b8-db3ead871652",
+          "material": null
+        }
+      }
+    },
+    {
+      "id": "79bf32fb-6246-42c7-81be-1a0ea7964942",
+      "components": {
+        "name": {
+          "value": "Lighthouse on the far island"
+        },
+        "transform": {
+          "position": {
+            "x": 92.99,
+            "y": 9.95,
+            "z": -138.55
+          },
+          "rotation": {
+            "w": 0.9848077,
+            "x": 0.0,
+            "y": 0.17364818,
+            "z": 0.0
+          },
+          "scale": {
+            "x": 5.0,
+            "y": 5.0,
+            "z": 5.0
+          }
+        },
+        "staticMesh": {
+          "mesh": "e0d26ee4-76e9-4be9-83b8-db3ead871652",
+          "material": null
+        }
+      }
+    },
+    {
+      "id": "d2a7acc1-7014-4d77-8488-1abb43cf0b5a",
+      "components": {
+        "name": {
+          "value": "Lighthouse on the west island"
+        },
+        "transform": {
+          "position": {
+            "x": -169.14,
+            "y": 37.97,
+            "z": 113.22
+          },
+          "rotation": {
+            "w": 0.9659258,
+            "x": 0.0,
+            "y": -0.25881904,
+            "z": 0.0
+          },
+          "scale": {
+            "x": 4.0,
+            "y": 4.0,
+            "z": 4.0
+          }
+        },
+        "staticMesh": {
+          "mesh": "e0d26ee4-76e9-4be9-83b8-db3ead871652",
+          "material": null
+        }
+      }
+    },
+    {
+      "id": "ca1d1502-72a1-463c-8602-a5a52ae926bd",
+      "components": {
+        "name": {
+          "value": "Floating lighthouse"
+        },
+        "transform": {
+          "position": {
+            "x": 60.0,
+            "y": 60.0,
+            "z": 70.0
+          },
+          "rotation": {
+            "w": 0.976296,
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.21643962
+          },
+          "scale": {
+            "x": 3.0,
+            "y": 6.0,
+            "z": 3.0
+          }
+        },
+        "staticMesh": {
+          "mesh": "e0d26ee4-76e9-4be9-83b8-db3ead871652",
+          "material": null
+        }
+      }
+    },
+    {
+      "id": "8828f369-46ac-4966-9938-1dc3ed5ef199",
+      "components": {
+        "name": {
+          "value": "Harbour camera"
+        },
+        "transform": {
+          "position": {
+            "x": 150.0,
+            "y": 90.0,
+            "z": 150.0
+          },
+          "rotation": {
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+          }
+        },
+        "camera": {
+          "verticalFovRadians": 1.0471976,
+          "nearPlane": 0.1,
+          "farPlane": 1000.0
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,5 @@
-// lpe-editor's command line (M5.2): --frames, --screenshot, --size, and every
-// way they can be wrong.
+// lpe-editor's command line: --frames, --screenshot, --size (M5.2), the
+// project folder (M5.6), and every way they can be wrong.
 
 #include "application/EditorOptions.hpp"
 
@@ -31,6 +31,7 @@ TEST_CASE("Without arguments the editor runs until closed in a 1280x760 window",
 {
     const auto options = parse({});
     REQUIRE(options.hasValue());
+    CHECK_FALSE(options.value().project.has_value());
     CHECK_FALSE(options.value().maxFrames.has_value());
     CHECK_FALSE(options.value().screenshotPath.has_value());
     CHECK(options.value().width == 1280);
@@ -61,10 +62,46 @@ TEST_CASE("The editor reads its options --frames, --screenshot and --size", "[ed
     CHECK(smallest.value().height == 1);
 }
 
+TEST_CASE("An argument without -- is the project folder, before or after the options",
+          "[editor][options]")
+{
+    const auto alone = parse({"tests/projects/lighthouses"});
+    REQUIRE(alone.hasValue());
+    CHECK(alone.value().project == std::filesystem::path("tests/projects/lighthouses"));
+    CHECK_FALSE(alone.value().maxFrames.has_value());
+
+    const auto first = parse({"my project", "--frames", "5", "--size", "800x600"});
+    REQUIRE(first.hasValue());
+    CHECK(first.value().project == std::filesystem::path("my project"));
+    CHECK(first.value().maxFrames == 5U);
+    CHECK(first.value().width == 800);
+
+    const auto last = parse({"--screenshot", "shot.png", R"(C:\Projects\Harbour)"});
+    REQUIRE(last.hasValue());
+    CHECK(last.value().project == std::filesystem::path(R"(C:\Projects\Harbour)"));
+    CHECK(last.value().screenshotPath == std::filesystem::path("shot.png"));
+
+    // An option's value is never taken for the folder, even without --.
+    const auto value = parse({"--screenshot", "harbour"});
+    REQUIRE(value.hasValue());
+    CHECK_FALSE(value.value().project.has_value());
+}
+
+TEST_CASE("Two project folders and an empty one are refused", "[editor][options]")
+{
+    CHECK(fails({"harbour", "lighthouses"},
+                "more than one project folder: 'harbour' and 'lighthouses'"));
+    CHECK(fails({"harbour", "--frames", "5", "harbour"}, "more than one project folder"));
+    CHECK(fails({""}, "the project folder is empty"));
+}
+
 TEST_CASE("Unknown arguments and missing values are refused with their name", "[editor][options]")
 {
     CHECK(fails({"--fullscreen"}, "unknown argument '--fullscreen'"));
-    CHECK(fails({"frames", "60"}, "unknown argument 'frames'"));
+    CHECK(fails({"harbour", "--project"}, "unknown argument '--project'"));
+    // A misspelt option without its dashes reads as a folder; its value then
+    // as a second one.
+    CHECK(fails({"frames", "60"}, "more than one project folder: 'frames' and '60'"));
     CHECK(fails({"--frames"}, "--frames needs a value"));
     CHECK(fails({"--size"}, "--size needs a value"));
     CHECK(fails({"--screenshot"}, "--screenshot needs a value"));

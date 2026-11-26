@@ -41,6 +41,7 @@ add_executable(lpe_unit_tests
     unit/project/project_save_failures_test.cpp
     unit/project/project_test.cpp
     unit/project/save_journal_test.cpp
+    unit/project/test_projects_test.cpp
     unit/render/handle_pool_test.cpp
     unit/render/light_test.cpp
     unit/render/material_test.cpp
@@ -61,6 +62,8 @@ add_executable(lpe_unit_tests
     unit/ui/raven_configuration_test.cpp
     unit/ui/raven_null_backend_test.cpp
     unit/ui/shell_layout_test.cpp
+    unit/world/mesh_assets_test.cpp
+    unit/world/scene_draws_test.cpp
     unit/world/sky_test.cpp
     unit/world/world_view_test.cpp
     unit/worldgen/archipelago_test.cpp
@@ -86,8 +89,12 @@ target_link_libraries(lpe_unit_tests PRIVATE engine lua::lua Catch2::Catch2WithM
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/engine/src")
 # The WorldGen panel's state (M3.12) of island-preview is tested headless.
 target_include_directories(lpe_unit_tests PRIVATE "${PROJECT_SOURCE_DIR}/sandbox/island-preview")
-# The committed assets island-preview loads are checked headless too.
-target_compile_definitions(lpe_unit_tests PRIVATE LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets")
+# The committed assets island-preview loads are checked headless too, and the
+# committed test projects (tests/projects/, M5.6).
+target_compile_definitions(lpe_unit_tests PRIVATE
+    LPE_ASSET_DIRECTORY="${PROJECT_SOURCE_DIR}/assets"
+    LPE_TEST_PROJECTS_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/projects"
+)
 # The public header check (M4.2) reads the engine's headers; the project
 # module's dependency check (M5.4) also its sources.
 target_compile_definitions(lpe_unit_tests PRIVATE
@@ -99,8 +106,8 @@ target_compile_definitions(lpe_unit_tests PRIVATE
 # host platform, no window system, GPU or SDL. The tests check the pin of
 # cmake/RavenDependency.cmake against Raven and against the vendored README.
 target_link_libraries(lpe_unit_tests PRIVATE raven)
-# The editor's code (M5.2, M5.3, M5.5): its options, the shell's layout, the
-# viewport camera's input, the document, the commands and the selection,
+# The editor's code (M5.2, M5.3, M5.5, M5.6): its options, the shell's layout,
+# the viewport camera's input, the document, the commands and the selection,
 # headless.
 target_link_libraries(lpe_unit_tests PRIVATE editor)
 target_compile_definitions(lpe_unit_tests PRIVATE
@@ -153,5 +160,6 @@ lpe_add_editor_usage_test(lpe_editor_unknown_argument --bogus)
 lpe_add_editor_usage_test(lpe_editor_bad_size --size 0x10)
 lpe_add_editor_usage_test(lpe_editor_bad_frames --frames 0)
 lpe_add_editor_usage_test(lpe_editor_missing_value --size)
+lpe_add_editor_usage_test(lpe_editor_two_projects first-project second-project)
 
 add_subdirectory(rendering)

@@ -1,0 +1,11 @@
+{
+  "format": "lpe.assets.manifest",
+  "formatVersion": 1,
+  "assets": [
+    {
+      "id": "e0d26ee4-76e9-4be9-83b8-db3ead871652",
+      "type": "mesh",
+      "path": "models/lighthouse.obj"
+    }
+  ]
+}

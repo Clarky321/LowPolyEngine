@@ -1,6 +1,8 @@
 #include "EditorShell.hpp"
 
 #include "engine/core/Log.hpp"
+#include "engine/core/Uuid.hpp"
+#include "engine/project/Project.hpp"
 #include "engine/worldgen/WorldGenSettings.hpp"
 
 #include <Raven.h>
@@ -33,11 +35,35 @@ std::optional<engine::core::Error> EditorShell::start(engine::app::AppContext& c
     engine::core::logInfo("editor", "editor shell: toolbar, viewport, hierarchy, inspector and "
                                     "console");
 
+    // The project given on the command line (M5.6): all or nothing (ADR 0028),
+    // so a project that does not open leaves no document, and the editor
+    // stops with the error.
+    if (options_.project) {
+        const std::string folder = options_.project->string();
+        auto opened = engine::project::openProject(*options_.project,
+                                                   engine::core::UuidGenerator::fromEntropy());
+        if (!opened) {
+            return engine::core::Error{"cannot open the project in '" + folder +
+                                       "': " + opened.error().message};
+        }
+        for (const std::string& warning : opened.value().warnings) {
+            engine::core::logWarning("editor", "project: {}", warning);
+        }
+        document_ = std::make_unique<EditorDocument>(std::move(opened).value().project);
+        engine::core::logInfo("editor",
+                              "project '{}' opened from '{}': scene '{}', entities: {}, assets: "
+                              "{}",
+                              document_->project().document.name, folder, document_->scene().name(),
+                              document_->scene().entityCount(), document_->assets().size());
+    }
+
     // Last, so that nothing fails after it: stop() is not called after a
-    // failed start(). The default world settings until projects (M5.4).
+    // failed start(). The project's world settings, or the default ones.
     const Rid viewport = widgets_[kViewportArea];
-    auto world =
-        WorldViewport::create(context.renderer(), viewport, engine::worldgen::WorldGenSettings{});
+    auto world = WorldViewport::create(context.renderer(), viewport,
+                                       document_ ? document_->worldSettings()
+                                                 : engine::worldgen::WorldGenSettings{},
+                                       document_.get());
     if (!world) {
         return world.error();
     }
@@ -77,6 +103,14 @@ void EditorShell::stop(engine::app::AppContext& /*context*/)
                               camera.position.x, camera.position.y, camera.position.z,
                               camera.yawRadians, camera.pitchRadians, world_->moveSpeed(),
                               world_->drawnFrames());
+        if (document_) {
+            const engine::world::SceneView& scene = world_->scene();
+            engine::core::logInfo("editor",
+                                  "viewport scene: mesh entities drawn: {} of {}, meshes "
+                                  "uploaded: {}, scene reads: {}, document version: {}",
+                                  scene.drawnCount(), scene.draws().size(), scene.meshCount(),
+                                  world_->sceneUpdates(), document_->version());
+        }
         world_->release();
         world_.reset();
     }

@@ -13,6 +13,7 @@
 #include "engine/project/Project.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -77,6 +78,14 @@ public:
     [[nodiscard]] bool isDirty() const noexcept { return !clean_ || *clean_ != current_; }
     // Records that the content now equals the project's files.
     void markSaved() noexcept { clean_ = current_; }
+
+    // A number that changes with every change of the content (M5.6): each
+    // executed command, merged ones included, each undo and each redo. A
+    // refused command, a failed undo or redo, a save and the selection leave
+    // it as it is. Views of the content (the viewport) read the content again
+    // only when it differs from the one they last read; it starts at 0 and
+    // never repeats within a document.
+    [[nodiscard]] std::uint64_t version() const noexcept { return version_; }
     // Saves the project (engine::project::saveProject); on success marks the
     // document saved. On failure the document stays as it was.
     [[nodiscard]] engine::core::Result<engine::project::SaveReport> save();
@@ -105,6 +114,7 @@ private:
     // The number of applied steps when the content equalled the files; empty
     // when that state is no longer in the history.
     std::optional<std::size_t> clean_ = 0;
+    std::uint64_t version_ = 0;
     Selection selection_;
 };
 

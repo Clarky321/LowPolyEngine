@@ -7,6 +7,8 @@
 
 #include <chrono>
 #include <exception>
+#include <string>
+#include <vector>
 
 namespace editor {
 
@@ -19,7 +21,8 @@ constexpr float kMoveSpeed = 30.0F;
 
 engine::core::Result<std::unique_ptr<WorldViewport>>
 WorldViewport::create(engine::render::Renderer& renderer, Rid viewport,
-                      const engine::worldgen::WorldGenSettings& settings)
+                      const engine::worldgen::WorldGenSettings& settings,
+                      const EditorDocument* document)
 {
     if (Rwidget_is_valid(viewport) == R_FALSE) {
         return engine::core::Error{"the viewport widget does not exist"};
@@ -53,6 +56,10 @@ WorldViewport::create(engine::render::Renderer& renderer, Rid viewport,
     result->sky_ = sky.value();
     result->light_ = engine::world::archipelagoSunlight();
     result->camera_ = engine::world::overviewCamera(archipelago);
+    // A mesh that cannot be shown is reported, not an error: the rest of the
+    // scene and the world are still shown.
+    result->document_ = document;
+    result->followDocument();
 
     Rviewport_set_draw_callback(viewport, &WorldViewport::onDraw, result.get());
     result->input_.attach(viewport);
@@ -62,6 +69,14 @@ WorldViewport::create(engine::render::Renderer& renderer, Rid viewport,
                           settings.seed, archipelago.islands.size(),
                           archipelago.layout.requestedCount, archipelago.triangleCount(),
                           archipelago.clouds.clusters.size(), milliseconds);
+    if (document != nullptr) {
+        const engine::world::SceneView& scene = result->scene_;
+        engine::core::logInfo("editor",
+                              "viewport: scene '{}', mesh entities drawn: {} of {}, meshes "
+                              "uploaded: {}",
+                              document->scene().name(), scene.drawnCount(), scene.draws().size(),
+                              scene.meshCount());
+    }
     engine::core::logInfo("editor", "in the viewport: hold the right mouse button to look "
                                     "around, W/A/S/D to fly, E and Q up and down, Shift faster, "
                                     "the mouse wheel to change speed");
@@ -82,6 +97,23 @@ void WorldViewport::update(const engine::core::FrameTime& time)
 {
     seconds_ = time.elapsedSeconds;
     controller_.update(camera_, input_.take(), static_cast<float>(time.deltaSeconds));
+    followDocument();
+}
+
+void WorldViewport::followDocument()
+{
+    if (document_ == nullptr || renderer_ == nullptr ||
+        (sceneRead_ && sceneVersion_ == document_->version())) {
+        return;
+    }
+    const std::vector<std::string> problems =
+        scene_.update(*renderer_, document_->scene(), document_->assets(), light_);
+    for (const std::string& problem : problems) {
+        engine::core::logWarning("editor", "viewport: {}; its entities are not drawn", problem);
+    }
+    sceneVersion_ = document_->version();
+    sceneRead_ = true;
+    ++sceneUpdates_;
 }
 
 void WorldViewport::release() noexcept
@@ -92,6 +124,8 @@ void WorldViewport::release() noexcept
     }
     viewport_ = R_INVALID_ID;
     if (renderer_ != nullptr) {
+        scene_.release(*renderer_);
+        sceneRead_ = false;
         world_.release(*renderer_);
         renderer_->destroyMesh(sky_);
         sky_ = {};
@@ -138,6 +172,8 @@ void WorldViewport::draw(const RViewportDrawInfo& info)
     renderer.setView({.view = view, .projection = projection});
     renderer.setLight(light_);
     world_.drawOpaque(renderer, seconds_);
+    // The scene's entities in the scene's light, before the translucent water.
+    scene_.draw(renderer);
     world_.drawWater(renderer, view, projection, camera_.position);
 }
 

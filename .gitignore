@@ -9,6 +9,7 @@
 # Wavefront OBJ models are source assets (ADR 0012), not compiled objects.
 !assets/**/*.obj
 !tests/**/fixtures/**/*.obj
+!tests/projects/**/*.obj
 
 # Precompiled Headers
 *.gch

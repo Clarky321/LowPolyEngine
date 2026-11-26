@@ -1,14 +1,17 @@
 #pragma once
 
 // lpe-editor's application: the editor shell on Raven (M5.2) with the
-// generated world in its viewport (M5.3). The engine runs Raven with the
-// shell's layout (ApplicationDesc::ui, ADR 0027); the shell checks that the
-// layout has its five areas, shows the archipelago of the default world
-// settings in the viewport, saves a requested screenshot on the last frame,
-// and records where the areas are for the checks. The other areas are empty
-// until later steps fill them.
+// generated world in its viewport (M5.3) and, given a project folder, the
+// project's document with its scene's entities in the viewport (M5.6). The
+// engine runs Raven with the shell's layout (ApplicationDesc::ui, ADR 0027);
+// the shell checks that the layout has its five areas, opens the project,
+// shows the archipelago of the project's world settings (the default ones
+// without a project) in the viewport, saves a requested screenshot on the last
+// frame, and records where the areas are for the checks. The other areas are
+// empty until later steps fill them.
 
 #include "EditorOptions.hpp"
+#include "editor/document/EditorDocument.hpp"
 #include "viewport/WorldViewport.hpp"
 
 #include "engine/app/Application.hpp"
@@ -55,12 +58,19 @@ public:
     // The world in the viewport, from start() to stop(); null otherwise.
     [[nodiscard]] const WorldViewport* world() const noexcept { return world_.get(); }
 
+    // The open project's document, from start() on (it stays after stop());
+    // null without a project.
+    [[nodiscard]] EditorDocument* document() noexcept { return document_.get(); }
+    [[nodiscard]] const EditorDocument* document() const noexcept { return document_.get(); }
+
 private:
     void recordAreas(engine::app::AppContext& context);
 
     EditorOptions options_;
     std::array<std::uint32_t, kShellAreas.size()> widgets_{};
     std::vector<ShellArea> areas_;
+    // Before the viewport, which refers to it.
+    std::unique_ptr<EditorDocument> document_;
     std::unique_ptr<WorldViewport> world_;
 };
 
