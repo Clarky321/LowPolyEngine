@@ -243,7 +243,13 @@ core::Result<EntityPlace> Scene::placeOf(EntityId entity) const
     if (handle == nullptr) {
         return entityError(entity);
     }
-    return EntityPlace{store->registry.get<EntityRecord>(*handle).sequence};
+    // Through the checked pool, not the const registry's get(): GCC 13 at -O3
+    // reports a null dereference inside EnTT's const lookup otherwise.
+    const auto* const records = store->registry.storage<EntityRecord>();
+    if (records == nullptr) {
+        return entityError(entity);
+    }
+    return EntityPlace{records->get(*handle).sequence};
 }
 
 core::Result<EntityId> Scene::restoreEntity(EntityId entity, EntityPlace place)
