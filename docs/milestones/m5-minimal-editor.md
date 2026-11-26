@@ -5,6 +5,7 @@
 - **UI decision:** ADR 0019 (accepted 2026-11-15): Raven is the editor's interface; Dear ImGui stays the engine's debug UI (ADR 0018) and the fallback. The evidence is in `docs/experiments/raven-ui-evaluation.md` and `docs/experiments/raven-final-validation.md`, both brought to this branch with the plan; the prototype's code stays on `experiment/raven-final-validation`.
 - **Workflow:** `docs/DEVELOPMENT_WORKFLOW.md`. One task implements exactly one sub-milestone below, then stops and reports.
 - **Status of this plan:** approved by the user on 2026-11-15, with the answers to the open questions and two additions (*Decisions on the open questions*). M5.1 is a task of its own.
+- **Changed on 2026-11-26** with the user's approval: opening a project given on the command line at start moved from M5.11 to M5.6, because the viewport can show a scene's entities only once the editor has a project (*Changes to the plan*).
 
 ## Goal and exit criterion
 
@@ -453,6 +454,12 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 **Goal:** the scene's entities with a static mesh appear in the viewport where their transforms put them.
 
 **Scope:**
+- **Opening a project at start** (moved from M5.11 on 2026-11-26):
+  - `lpe-editor <project folder>` opens the project (M5.4) into the editor's document (M5.5);
+  - the viewport shows the project's world settings and its scene's entities;
+  - without a folder the editor shows the default world as in M5.3;
+  - a project that does not open stops the editor with the error.
+- **A committed test project** with the lighthouse mesh and a scene of mesh entities, for the GPU tier and the screenshot.
 - An `engine/world/` view of a scene for the renderer:
   - each mesh asset resolved through the registry, read by the OBJ loader and uploaded once (a cache by asset ID, released with the document);
   - entities drawn with their own transform (no transform inheritance, as in M4);
@@ -466,6 +473,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 **Out of scope:** picking (M5.9), materials, prefab instances shown differently, transform inheritance.
 
 **Acceptance criteria:**
+- `lpe-editor <test project>` opens the project and shows its world and its entities.
 - A scene with mesh entities draws at the right places with the world around it.
 - Renderer resources stay level while entities are added and removed.
 
@@ -473,6 +481,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
 - Which entities are drawn, with which model matrices.
 - Missing, unregistered and wrongly typed assets.
 - The cache across changes and a new document.
+- The command line with a project folder; a folder that is not a project.
 
 **GPU tier:**
 - A test scene with the lighthouse mesh: pixel checks at the expected places.
@@ -592,7 +601,7 @@ Status values: `planned`; `in progress` (set when work starts and committed with
   - If it fails on a platform, the step uses a fallback and records it. Candidates: SDL3's native folder dialog (`SDL_ShowOpenFolderDialog`), or a path field with the project's checks.
 - A prompt about unsaved changes before close, open or new.
 - The window title shows the project and the unsaved state.
-- `lpe-editor <project folder>` opens a project at start.
+- (`lpe-editor <project folder>` opening a project at start moved to M5.6.)
 
 **Out of scope:** recent projects, autosave, several windows.
 
@@ -702,6 +711,13 @@ The user approved the plan with the recommended answers, the requirements below,
 
 1. **M5.11 checks Raven's folder dialog** on Windows and Linux: opening, navigation, choosing a folder, cancel. These were not tested in the Raven validation. If it has problems, the step uses an alternative way to choose a folder.
 2. **M5.4 decides in its ADR how a save of several project files stays consistent.** Writing each file atomically is not the same as saving the whole project atomically. Tests inject write failures, so that a failed save never leaves the project as a mixture of old and new data.
+
+## Changes to the plan
+
+- **2026-11-26, before M5.6 (approved by the user):**
+  - **What:** `lpe-editor <project folder>` opening a project at start moved from M5.11 to M5.6, together with a committed test project.
+  - **Why:** M5.6 shows the scene's entities in the viewport and records them in a screenshot taken by `lpe-editor --screenshot`, but before this change the editor could not open a project until M5.11.
+  - **What stays in M5.11:** new, open, save and close in the editor, the folder dialog, the prompts about unsaved changes and the window title.
 
 ## Risks
 
